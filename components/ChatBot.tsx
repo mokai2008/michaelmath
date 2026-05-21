@@ -4,11 +4,17 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { MessageSquare, X, Send, Paperclip, Minimize2, Sparkles, User, BrainCircuit } from "lucide-react";
 
+interface Message {
+  role: string;
+  content: string;
+  image?: string | null;
+}
+
 export function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [session, setSession] = useState<any>(null);
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hi! I am the Michael Gad Math AI Assistant. How can I help you with your studies today?' }
   ]);
   const [input, setInput] = useState("");
