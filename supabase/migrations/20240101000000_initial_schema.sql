@@ -228,6 +228,7 @@ CREATE POLICY "Students can view quizzes." ON public.quizzes FOR SELECT USING (t
 CREATE POLICY "Users can view own quiz submissions." ON public.quiz_submissions FOR SELECT USING (auth.uid() = student_id);
 CREATE POLICY "Users can insert own quiz submissions." ON public.quiz_submissions FOR INSERT WITH CHECK (auth.uid() = student_id);
 CREATE POLICY "Users can view own enrollments." ON public.enrollments FOR SELECT USING (auth.uid() = student_id);
+CREATE POLICY "Users can enroll themselves." ON public.enrollments FOR INSERT WITH CHECK (auth.uid() = student_id);
 CREATE POLICY "Users can view own purchases." ON public.section_purchases FOR SELECT USING (auth.uid() = student_id);
 CREATE POLICY "Users can view own wallet transactions." ON public.wallet_transactions FOR SELECT USING (auth.uid() = student_id);
 CREATE POLICY "Users can view own live session enrollments." ON public.live_session_enrollments FOR SELECT USING (auth.uid() = student_id);

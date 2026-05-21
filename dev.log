@@ -1,0 +1,203 @@
+
+> website@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.1s
+ ○ Compiling /api/grade-pdf ...
+ ✓ Compiled /api/grade-pdf in 821ms (203 modules)
+Warning: Setting up fake worker.
+Warning: Setting up fake worker.
+(while reading XRef): Error: Invalid XRef stream header
+Error: Error: Error: Invalid XRef stream header
+    at ne (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:23669)
+    at e.parse (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:73723)
+    at e.ensure (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:453553)
+    at e.ensureModel (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:452677)
+    at Object.eval [as onResolve] (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:389730)
+    at Object.runHandlers (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:31343)
+    at listOnTimeout (node:internal/timers:594:17)
+    at process.processTimers (node:internal/timers:529:7)
+Error: Error: Invalid XRef stream header
+PDF Parsing Error: Error: Error: Invalid XRef stream header
+ POST /api/grade-pdf 400 in 1439ms
+Warning: Setting up fake worker.
+Warning: Setting up fake worker.
+(while reading XRef): Error: Command token too long: 128
+Error: Error: Error: Command token too long: 128
+    at ne (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:23669)
+    at e.parse (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:73723)
+    at e.ensure (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:453553)
+    at e.ensureModel (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:452677)
+    at Object.eval [as onResolve] (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:389730)
+    at Object.runHandlers (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:31343)
+    at listOnTimeout (node:internal/timers:594:17)
+    at process.processTimers (node:internal/timers:529:7)
+Error: Error: Command token too long: 128
+PDF Parsing Error: Error: Error: Command token too long: 128
+ POST /api/grade-pdf 400 in 464ms
+ ✓ Compiled in 105ms (203 modules)
+(node:37595) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ○ Compiling /dashboard/courses/[courseId] ...
+ ✓ Compiled /dashboard/courses/[courseId] in 3.2s (681 modules)
+ ✓ Compiled in 91ms (343 modules)
+ GET /dashboard/courses/81302d2f-a6e2-4c59-ac55-2438e5a2ef81 200 in 3742ms
+ ✓ Compiled /api/grade-pdf in 167ms (506 modules)
+Warning: Setting up fake worker.
+Warning: Ignoring invalid character "33" in hex string
+Warning: Ignoring invalid character "79" in hex string
+Warning: Ignoring invalid character "84" in hex string
+Warning: Ignoring invalid character "89" in hex string
+Warning: Ignoring invalid character "80" in hex string
+Warning: Ignoring invalid character "104" in hex string
+Warning: Ignoring invalid character "116" in hex string
+Warning: Ignoring invalid character "109" in hex string
+Warning: Ignoring invalid character "108" in hex string
+Warning: Ignoring invalid character "104" in hex string
+Warning: Ignoring invalid character "116" in hex string
+Warning: Ignoring invalid character "109" in hex string
+Warning: Ignoring invalid character "108" in hex string
+Warning: Ignoring invalid character "105" in hex string
+Warning: Ignoring invalid character "114" in hex string
+Warning: Ignoring invalid character "61" in hex string
+Warning: Ignoring invalid character "34" in hex string
+Warning: Ignoring invalid character "114" in hex string
+Warning: Ignoring invalid character "116" in hex string
+Warning: Ignoring invalid character "108" in hex string
+Warning: Ignoring invalid character "34" in hex string
+Warning: Ignoring invalid character "104" in hex string
+Warning: Ignoring invalid character "115" in hex string
+Warning: Ignoring invalid character "114" in hex string
+Warning: Ignoring invalid character "105" in hex string
+Warning: Ignoring invalid character "112" in hex string
+Warning: Ignoring invalid character "116" in hex string
+Warning: Ignoring invalid character "110" in hex string
+Warning: Ignoring invalid character "111" in hex string
+Warning: Ignoring invalid character "110" in hex string
+Warning: Ignoring invalid character "61" in hex string
+Warning: Ignoring invalid character "34" in hex string
+Warning: Ignoring invalid character "84" in hex string
+Warning: Ignoring invalid character "87" in hex string
+Warning: Ignoring invalid character "78" in hex string
+Warning: Ignoring invalid character "72" in hex string
+Warning: Ignoring invalid character "113" in hex string
+Warning: Ignoring invalid character "79" in hex string
+Warning: Ignoring invalid character "87" in hex string
+Warning: Ignoring invalid character "72" in hex string
+Warning: Ignoring invalid character "87" in hex string
+Warning: Ignoring invalid character "112" in hex string
+Warning: Ignoring invalid character "114" in hex string
+Warning: Ignoring invalid character "119" in hex string
+Warning: Ignoring invalid character "103" in hex string
+Warning: Ignoring invalid character "34" in hex string
+Warning: Ignoring invalid character "33" in hex string
+Warning: Ignoring invalid character "79" in hex string
+Warning: Ignoring invalid character "84" in hex string
+Warning: Ignoring invalid character "89" in hex string
+Warning: Ignoring invalid character "80" in hex string
+Warning: Ignoring invalid character "104" in hex string
+Warning: Ignoring invalid character "116" in hex string
+Warning: Ignoring invalid character "109" in hex string
+Warning: Ignoring invalid character "108" in hex string
+Warning: Ignoring invalid character "104" in hex string
+Warning: Ignoring invalid character "116" in hex string
+Warning: Ignoring invalid character "109" in hex string
+Warning: Ignoring invalid character "108" in hex string
+Warning: Ignoring invalid character "105" in hex string
+Warning: Ignoring invalid character "114" in hex string
+Warning: Ignoring invalid character "61" in hex string
+Warning: Ignoring invalid character "34" in hex string
+Warning: Ignoring invalid character "114" in hex string
+Warning: Ignoring invalid character "116" in hex string
+Warning: Ignoring invalid character "108" in hex string
+Warning: Ignoring invalid character "34" in hex string
+Warning: Ignoring invalid character "104" in hex string
+(while reading XRef): Error: Invalid XRef stream header
+Error: Error: Error: Invalid XRef stream header
+    at ne (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:23669)
+    at e.parse (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:73723)
+    at e.ensure (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:453553)
+    at e.ensureModel (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:452677)
+    at Object.eval [as onResolve] (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:389730)
+    at Object.runHandlers (webpack-internal:///(rsc)/./node_modules/pdf2json/dist/pdfparser.js:12:31343)
+    at listOnTimeout (node:internal/timers:594:17)
+    at process.processTimers (node:internal/timers:529:7)
+Error: Error: Invalid XRef stream header
+PDF Parsing Error: Error: Error: Invalid XRef stream header
+ POST /api/grade-pdf 400 in 1085ms
+ ✓ Compiled in 439ms (672 modules)
+ GET /dashboard/courses/81302d2f-a6e2-4c59-ac55-2438e5a2ef81 200 in 124ms
+ ✓ Compiled /api/grade-pdf in 207ms (498 modules)
+Error grading PDF: BadRequestError: 400 Invalid MIME type. Only image types are supported.
+    at APIError.generate (webpack-internal:///(rsc)/./node_modules/openai/core/error.mjs:63:20)
+    at OpenAI.makeStatusError (webpack-internal:///(rsc)/./node_modules/openai/client.mjs:301:71)
+    at OpenAI.makeRequest (webpack-internal:///(rsc)/./node_modules/openai/client.mjs:492:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async POST (webpack-internal:///(rsc)/./app/api/grade-pdf/route.ts:44:26)
+    at async /Users/michaelgad/Desktop/coding/website/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/base-server.js:1588:28)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/michaelgad/Desktop/coding/website/node_modules/next/dist/server/lib/start-server.js:141:13) {
+  status: 400,
+  headers: Headers {
+    date: 'Tue, 12 May 2026 13:44:33 GMT',
+    'content-type': 'application/json',
+    'content-length': '180',
+    connection: 'keep-alive',
+    'cf-ray': '9fa9dbc6999b9e89-PMO',
+    'cf-cache-status': 'DYNAMIC',
+    server: 'cloudflare',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+    'x-content-type-options': 'nosniff',
+    'access-control-expose-headers': 'X-Request-ID, CF-Ray, CF-Ray',
+    'openai-organization': 'user-8lnfhdggnj36dgewzmocnxak',
+    'openai-processing-ms': '22',
+    'openai-project': 'proj_uCeqF4stpDB1rvA6l8IiSwlP',
+    'openai-version': '2020-10-01',
+    'x-openai-proxy-wasm': 'v0.1',
+    'x-ratelimit-limit-input-images': '50000',
+    'x-ratelimit-limit-requests': '500',
+    'x-ratelimit-limit-tokens': '30000',
+    'x-ratelimit-remaining-input-images': '49997',
+    'x-ratelimit-remaining-requests': '499',
+    'x-ratelimit-remaining-tokens': '28160',
+    'x-ratelimit-reset-input-images': '2ms',
+    'x-ratelimit-reset-requests': '120ms',
+    'x-ratelimit-reset-tokens': '3.68s',
+    'x-request-id': 'req_96b44d00a8f5492d9384c4a6d5170519',
+    'set-cookie': '__cf_bm=jHaDnF8jiGkW9NLvuGJxxhmww2fKt5jWD0t2RW9BWYA-1778593470.4975185-1.0.1.1-qEywXIr1uTGbxQ5Pxyt6JsR5x5iwaGsgdtK61kbQW5Fq5JCzkoOiIW4c4y766Tq8B6Q8Viz2iDYf_yE_KbwYeP.LJAIM.Y0k.5uSdwSHQyAu5i7uCyfRfKxT3srCv49V; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Tue, 12 May 2026 14:14:33 GMT',
+    'alt-svc': 'h3=":443"; ma=86400'
+  },
+  requestID: 'req_96b44d00a8f5492d9384c4a6d5170519',
+  error: {
+    message: 'Invalid MIME type. Only image types are supported.',
+    type: 'invalid_request_error',
+    param: null,
+    code: 'invalid_image_format'
+  },
+  code: 'invalid_image_format',
+  param: null,
+  type: 'invalid_request_error'
+}
+ POST /api/grade-pdf 500 in 5010ms
+ ✓ Compiled in 374ms (672 modules)
+[?25h
