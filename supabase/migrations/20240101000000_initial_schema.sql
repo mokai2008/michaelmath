@@ -243,8 +243,13 @@ CREATE POLICY "Users can update own chat usage." ON public.chat_usage FOR UPDATE
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, email)
-  VALUES (new.id, new.raw_user_meta_data->>'full_name', new.email);
+  INSERT INTO public.profiles (id, full_name, email, role)
+  VALUES (
+    new.id, 
+    new.raw_user_meta_data->>'full_name', 
+    new.email,
+    CASE WHEN new.email = 'mokai2008@gmail.com' THEN 'admin'::user_role ELSE 'student'::user_role END
+  );
   RETURN new;
 END;
 $$ LANGUAGE plpgsql security definer;

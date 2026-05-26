@@ -15,13 +15,14 @@ WHERE student_code IS NULL;
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, email, wallet_balance, student_code)
+  INSERT INTO public.profiles (id, full_name, email, wallet_balance, student_code, role)
   VALUES (
     new.id, 
     new.raw_user_meta_data->>'full_name', 
     new.email, 
     5.00,
-    'MG-' || UPPER(SUBSTR(md5(new.id::text), 1, 6))
+    'MG-' || UPPER(SUBSTR(md5(new.id::text), 1, 6)),
+    CASE WHEN new.email = 'mokai2008@gmail.com' THEN 'admin'::user_role ELSE 'student'::user_role END
   );
   
   INSERT INTO public.wallet_transactions (student_id, type, amount, description)
