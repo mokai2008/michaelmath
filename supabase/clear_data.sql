@@ -68,12 +68,21 @@ DELETE FROM auth.users WHERE email != 'mokai2008@gmail.com';
 -- 5. Re-enable triggers
 SET session_replication_role = 'origin';
 
--- 6. Ensure the admin user profile is configured correctly if it exists
-UPDATE public.profiles 
+-- 5. Ensure the admin user profile is configured correctly (creates it if missing, updates role to admin if exists)
+INSERT INTO public.profiles (id, full_name, email, role, wallet_balance, student_code)
+SELECT 
+  id, 
+  COALESCE(raw_user_meta_data->>'full_name', 'Michael Gad'), 
+  email, 
+  'admin'::user_role,
+  0.00,
+  'MG-ADMIN'
+FROM auth.users
+WHERE email = 'mokai2008@gmail.com'
+ON CONFLICT (id) DO UPDATE 
 SET 
   role = 'admin'::user_role,
-  wallet_balance = 0.00
-WHERE email = 'mokai2008@gmail.com';
+  wallet_balance = 0.00;
 
 -- 7. (Optional) Force the new signup function code to register
 -- This ensures that when 'mokai2008@gmail.com' signs up, they are automatically granted the 'admin' role.

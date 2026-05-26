@@ -28,6 +28,15 @@ function SignupForm() {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg("");
+
+    // Validate that student and parent WhatsApp numbers are different
+    const normalizedStudent = studentWhatsapp.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+    const normalizedParent = parentWhatsapp.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+    if (normalizedParent && normalizedStudent === normalizedParent) {
+      setErrorMsg("Student's WhatsApp number and Parent's WhatsApp number cannot be the same.");
+      setIsLoading(false);
+      return;
+    }
     
     try {
       const { data, error } = await supabase.auth.signUp({
