@@ -6,23 +6,61 @@
 -- 1. Disable triggers temporarily to prevent side-effects during deletion
 SET session_replication_role = 'replica';
 
--- 2. Clear all course-related and academic tables
--- (Cascade will handle sections, topics, pdfs, quizzes, quiz_submissions, enrollments, section_purchases, earnings, etc.)
-DELETE FROM public.courses;
+-- 2. Clear all tables safely, checking if they exist first
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'courses') THEN
+    DELETE FROM public.courses;
+  END IF;
 
--- 3. Clear other app data tables
-DELETE FROM public.wallet_transactions;
-DELETE FROM public.live_session_enrollments;
-DELETE FROM public.live_sessions;
-DELETE FROM public.admin_availability_slots;
-DELETE FROM public.booking_requests;
-DELETE FROM public.worksheet_submissions;
-DELETE FROM public.manual_submissions;
-DELETE FROM public.reminders;
-DELETE FROM public.notifications;
-DELETE FROM public.chat_logs;
-DELETE FROM public.chat_usage;
-DELETE FROM public.parent_reports;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'wallet_transactions') THEN
+    DELETE FROM public.wallet_transactions;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'live_session_enrollments') THEN
+    DELETE FROM public.live_session_enrollments;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'live_sessions') THEN
+    DELETE FROM public.live_sessions;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'admin_availability_slots') THEN
+    DELETE FROM public.admin_availability_slots;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'booking_requests') THEN
+    DELETE FROM public.booking_requests;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'worksheet_submissions') THEN
+    DELETE FROM public.worksheet_submissions;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'manual_submissions') THEN
+    DELETE FROM public.manual_submissions;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'reminders') THEN
+    DELETE FROM public.reminders;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'notifications') THEN
+    DELETE FROM public.notifications;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'chat_logs') THEN
+    DELETE FROM public.chat_logs;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'chat_usage') THEN
+    DELETE FROM public.chat_usage;
+  END IF;
+
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'parent_reports') THEN
+    DELETE FROM public.parent_reports;
+  END IF;
+END $$;
 
 -- 4. Delete all auth users EXCEPT the admin email
 DELETE FROM auth.users WHERE email != 'mokai2008@gmail.com';

@@ -9,7 +9,8 @@ import {
   Clock, 
   User, 
   LogOut,
-  Leaf
+  Leaf,
+  Home
 } from "lucide-react";
 
 import { ChatBot } from "@/components/ChatBot";
@@ -58,6 +59,10 @@ export default function StudentLayout({
         </div>
         
         <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
+          <Link href="/" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text/70 hover:bg-gray-100 hover:text-text font-medium transition-colors">
+            <Home className="w-5 h-5" />
+            Back to Website
+          </Link>
           <Link href="/dashboard/courses" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text/70 hover:bg-gray-100 hover:text-text font-medium transition-colors">
             <BookOpen className="w-5 h-5" />
             My Courses

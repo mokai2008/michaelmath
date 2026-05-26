@@ -99,4 +99,3 @@ All tables are secured with strict **Row Level Security (RLS)** policies ensurin
 - Only authenticated admins have write/edit access to course builders, slots availability, and overall settings.
 - Backend processes authenticate securely via the `SUPABASE_SERVICE_ROLE_KEY`.
 
----
