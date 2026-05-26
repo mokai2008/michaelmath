@@ -100,15 +100,3 @@ All tables are secured with strict **Row Level Security (RLS)** policies ensurin
 - Backend processes authenticate securely via the `SUPABASE_SERVICE_ROLE_KEY`.
 
 ---
-
-## ☁️ Deployment on Vercel
-
-The easiest way to deploy this app is using the Vercel Platform:
-
-1. Push your repository to **GitHub / GitLab / Bitbucket**.
-2. Import the project on [Vercel](https://vercel.com/new).
-3. Under **Settings > Environment Variables**, add all environment variables listed in your `.env.local` configuration.
-4. Click **Deploy**.
-
-> [!WARNING]
-> **Production Settings Configuration**: Do not attempt to update API keys through the Admin Settings UI when deployed on Vercel. Because Vercel uses a read-only serverless filesystem, updating values in `.env.local` at runtime is disabled. Always update your keys directly in the **Vercel Dashboard**.
