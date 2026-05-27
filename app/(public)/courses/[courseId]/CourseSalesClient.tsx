@@ -85,6 +85,7 @@ export default function CourseSalesClient({ course }: { course: any }) {
             id: user.id,
             email: user.email || '',
             full_name: user.user_metadata?.full_name || '',
+            role: user.email === 'mokai2008@gmail.com' ? 'admin' : 'student',
           });
         }
       }
