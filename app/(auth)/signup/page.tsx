@@ -44,7 +44,10 @@ function SignupForm() {
         password,
         options: {
           data: {
-            full_name: fullName
+            full_name: fullName,
+            student_whatsapp: studentWhatsapp,
+            parent_email: parentEmail,
+            parent_whatsapp: parentWhatsapp
           }
         }
       });
@@ -52,20 +55,24 @@ function SignupForm() {
       if (error) throw error;
 
       // Automatically log the user in or wait for email confirmation
-      // If auto-login succeeded (meaning email confirmations are disabled):
       if (data.session && data.user) {
         // Update the newly created profile with the parent info and student whatsapp
-        await supabase.from('profiles').update({
-          student_whatsapp: studentWhatsapp,
-          parent_email: parentEmail,
-          parent_whatsapp: parentWhatsapp
-        }).eq('id', data.user.id);
+        try {
+          await supabase.from('profiles').update({
+            student_whatsapp: studentWhatsapp,
+            parent_email: parentEmail,
+            parent_whatsapp: parentWhatsapp
+          }).eq('id', data.user.id);
+        } catch (profileErr) {
+          console.error("Profile update error (non-critical):", profileErr);
+        }
         
         router.push(redirectTo || "/dashboard");
       } else {
         setIsSuccess(true);
       }
     } catch (err: any) {
+      console.error("Signup error:", err);
       setErrorMsg(err.message || "An error occurred during signup.");
     } finally {
       setIsLoading(false);

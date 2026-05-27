@@ -56,12 +56,12 @@ export default function AboutPage() {
                 </div>
               </div>
               {/* Decorative elements */}
-              <div className="absolute -bottom-8 -left-8 bg-white p-6 rounded-2xl shadow-xl flex items-center gap-4">
-                <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center">
-                  <Award className="w-8 h-8 text-accent" />
+              <div className="mt-4 lg:mt-0 lg:absolute lg:-bottom-8 lg:-left-8 bg-white p-4 lg:p-6 rounded-2xl shadow-xl flex items-center gap-4 w-fit">
+                <div className="w-12 lg:w-16 h-12 lg:h-16 bg-accent/10 rounded-full flex items-center justify-center">
+                  <Award className="w-6 lg:w-8 h-6 lg:h-8 text-accent" />
                 </div>
                 <div>
-                  <div className="font-bold text-lg text-text">Certified</div>
+                  <div className="font-bold text-base lg:text-lg text-text">Certified</div>
                   <div className="text-sm text-text/70">Expert Tutor</div>
                 </div>
               </div>

@@ -71,16 +71,16 @@ export default function Home() {
               <motion.p variants={fadeInUp} className="text-lg text-text/70 max-w-lg leading-relaxed">
                 Master mathematics with expert guidance from Michael Gad. High-quality video courses, comprehensive notes, and interactive quizzes designed for your success.
               </motion.p>
-              <motion.div variants={fadeInUp} className="flex flex-wrap items-center gap-4">
+              <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                 <Link 
                   href="/courses" 
-                  className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-full font-bold text-lg transition-all hover:shadow-lg hover:-translate-y-1"
+                  className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-full font-bold text-lg transition-all hover:shadow-lg hover:-translate-y-1 text-center"
                 >
                   Book Online
                 </Link>
                 <Link 
                   href="#video" 
-                  className="border-2 border-primary text-primary hover:bg-primary/5 px-8 py-4 rounded-full font-bold text-lg flex items-center gap-2 transition-all"
+                  className="border-2 border-primary text-primary hover:bg-primary/5 px-8 py-4 rounded-full font-bold text-lg flex items-center justify-center gap-2 transition-all"
                 >
                   <PlayCircle className="w-5 h-5" />
                   Watch Video

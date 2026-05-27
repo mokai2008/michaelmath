@@ -55,7 +55,10 @@ function LoginForm() {
   };
 
   return (
-    <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+    <div>
+      <h2 className="text-2xl font-bold text-text text-center mb-1">Welcome Back</h2>
+      <p className="text-sm text-text/60 text-center mb-6">Sign in to your account</p>
+      <form className="space-y-6" onSubmit={handleLogin}>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1">Email Address</label>
@@ -125,6 +128,7 @@ function LoginForm() {
         </Link>
       </div>
     </form>
+    </div>
   );
 }
 

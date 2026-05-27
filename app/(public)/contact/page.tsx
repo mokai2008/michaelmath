@@ -74,7 +74,7 @@ export default function ContactPage() {
             >
               <h3 className="text-2xl font-bold text-text mb-6">Send a Message</h3>
               <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-text mb-2">First Name</label>
                     <input type="text" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all" placeholder="John" />
