@@ -7,15 +7,30 @@ import { supabase } from "@/lib/supabase";
 
 export function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async (session: any) => {
       setIsLoggedIn(!!session);
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        setIsAdmin(profile?.role === 'admin');
+      } else {
+        setIsAdmin(false);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      checkSession(session);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsLoggedIn(!!session);
+      checkSession(session);
     });
 
     return () => subscription.unsubscribe();
@@ -65,7 +80,7 @@ export function Navbar() {
           <div className="flex items-center gap-3">
             {isLoggedIn ? (
               <Link 
-                href="/dashboard" 
+                href={isAdmin ? "/admin/courses" : "/dashboard"} 
                 className="bg-primary text-white px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold hover:bg-primary/90 transition-all hover:shadow-md hover:-translate-y-0.5 text-sm md:text-base"
               >
                 Dashboard

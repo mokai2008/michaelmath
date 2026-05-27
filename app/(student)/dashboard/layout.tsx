@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   BookOpen, 
   Wallet, 
@@ -23,12 +24,25 @@ export default function StudentLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    const fetchUnreadCount = async () => {
+    const checkRoleAndFetch = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
+
+      // If admin, redirect to admin dashboard
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profile?.role === 'admin') {
+        router.push('/admin/courses');
+        return;
+      }
 
       const { count } = await supabase
         .from('notifications')
@@ -39,12 +53,20 @@ export default function StudentLayout({
       setUnreadCount(count || 0);
     };
 
-    fetchUnreadCount();
+    checkRoleAndFetch();
 
-    // Optionally, set up an interval or real-time listener here
-    const interval = setInterval(fetchUnreadCount, 30000); // Check every 30s
+    const interval = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('student_id', session.user.id)
+        .eq('is_read', false);
+      setUnreadCount(count || 0);
+    }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [router]);
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
