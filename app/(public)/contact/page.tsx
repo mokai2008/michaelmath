@@ -26,7 +26,7 @@ export default function ContactPage() {
       // Send as text/plain so n8n receives raw body as a string,
       // matching Postman behavior for JSON.parse($json.body).message
       const response = await fetch(
-        "https://spoon-audacity-runway.ngrok-free.dev/webhook-test/c94ee385-df03-4acf-aa43-f2dcdbec4964",
+        "https://spoon-audacity-runway.ngrok-free.dev/webhook/c94ee385-df03-4acf-aa43-f2dcdbec4964",
         {
           method: "POST",
           headers: {
