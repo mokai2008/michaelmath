@@ -144,7 +144,7 @@ export default function Home() {
               <div className="text-white/80 font-medium text-lg uppercase tracking-wider">Happy Students</div>
             </motion.div>
             <motion.div variants={fadeInUp}>
-              <div className="text-4xl md:text-6xl font-black text-white mb-2">1,200+</div>
+              <div className="text-4xl md:text-6xl font-black text-white mb-2">100+</div>
               <div className="text-white/80 font-medium text-lg uppercase tracking-wider">Hours of Content</div>
             </motion.div>
           </div>
