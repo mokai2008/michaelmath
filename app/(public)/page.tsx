@@ -262,7 +262,7 @@ export default function Home() {
               <h2 className="text-3xl md:text-4xl font-bold mb-4">Learn at your own pace on mobile and desktop</h2>
               <div className="flex items-center gap-3 text-primary font-medium text-lg">
                 <Phone className="w-6 h-6" />
-                <span>+44 123 456 7890</span>
+                <span>+20 122 529 3317</span>
               </div>
             </div>
             <div className="flex md:justify-end">
