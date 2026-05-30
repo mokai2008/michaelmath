@@ -16,25 +16,21 @@ export default function ContactPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const innerPayload = {
+    const payload = {
       customer_email: email,
       subject: `Platform Support: ${firstName} ${lastName}`,
       message: message,
     };
 
-    // Wrap in { body: "..." } so n8n's AI Agent can use
-    // {{JSON.parse($json.body).message}} to extract fields
-    const payload = {
-      body: JSON.stringify(innerPayload),
-    };
-
     try {
+      // Send as text/plain so n8n receives raw body as a string,
+      // matching Postman behavior for JSON.parse($json.body).message
       const response = await fetch(
         "https://spoon-audacity-runway.ngrok-free.dev/webhook-test/c94ee385-df03-4acf-aa43-f2dcdbec4964",
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "text/plain",
           },
           body: JSON.stringify(payload),
         }
