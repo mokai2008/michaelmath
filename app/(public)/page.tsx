@@ -94,12 +94,13 @@ export default function Home() {
               viewport={{ once: true }}
               className="relative hidden lg:block h-[600px]"
             >
-              {/* Tutor Photo Placeholder - Will be absolute positioned */}
-              <div className="absolute inset-0 bg-primary/10 rounded-[3rem] overflow-hidden flex items-center justify-center border-8 border-white shadow-2xl transform rotate-3 hover:rotate-0 transition-transform duration-500 cursor-pointer">
-                 <div className="text-center p-8">
-                    <span className="text-4xl">📸</span>
-                    <p className="text-primary font-bold mt-4">Michael Gad Photo</p>
-                 </div>
+              {/* Michael Gad Photo */}
+              <div className="absolute inset-0 bg-primary/10 rounded-[3rem] overflow-hidden border-8 border-white shadow-2xl transform rotate-3 hover:rotate-0 transition-transform duration-500 cursor-pointer">
+                 <img 
+                   src="/michael-gad.jpg" 
+                   alt="Michael Gad - Math Tutor"
+                   className="w-full h-full object-cover object-top"
+                 />
               </div>
               {/* Floating Math SVG Elements */}
               <motion.div 
