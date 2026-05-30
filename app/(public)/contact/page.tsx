@@ -16,10 +16,16 @@ export default function ContactPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const payload = {
+    const innerPayload = {
       customer_email: email,
       subject: `Platform Support: ${firstName} ${lastName}`,
       message: message,
+    };
+
+    // Wrap in { body: "..." } so n8n's AI Agent can use
+    // {{JSON.parse($json.body).message}} to extract fields
+    const payload = {
+      body: JSON.stringify(innerPayload),
     };
 
     try {
