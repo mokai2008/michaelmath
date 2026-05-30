@@ -640,7 +640,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               } else {
                 videoId = rawUrl;
               }
-              return `https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&showinfo=0&fs=1`;
+              return `https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=0&iv_load_policy=3&cc_load_policy=0&autoplay=0`;
             };
 
             return (
@@ -648,13 +648,19 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-xl mb-8 relative">
                 {activeTopic.youtube_url ? (
                   isYouTube(activeTopic.youtube_url) ? (
-                    <iframe 
-                      src={getEmbedUrl(activeTopic.youtube_url)}
-                      className="w-full h-full"
-                      allowFullScreen
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      referrerPolicy="strict-origin-when-cross-origin"
-                    />
+                    <div className="relative w-full h-full">
+                      <iframe 
+                        src={getEmbedUrl(activeTopic.youtube_url)}
+                        className="w-full h-full"
+                        allowFullScreen
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                      />
+                      {/* Overlay to block "Watch on YouTube" link in bottom-right */}
+                      <div className="absolute bottom-0 right-0 w-40 h-10 bg-transparent z-10 cursor-default" />
+                      {/* Overlay to block YouTube logo in top-left */}
+                      <div className="absolute top-0 left-0 w-16 h-10 bg-transparent z-10 cursor-default" />
+                    </div>
                   ) : (
                     <video 
                       src={activeTopic.youtube_url} 
