@@ -53,15 +53,14 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex flex-col overflow-hidden">
+    <div className="flex flex-col">
       {/* HERO SECTION */}
-      <section className="bg-background relative py-20 lg:py-32">
+      <section className="bg-background relative py-20 lg:py-32 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
             <motion.div 
               initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
+              animate="visible"
               variants={staggerContainer}
               className="space-y-8"
             >
@@ -88,11 +87,10 @@ export default function Home() {
               </motion.div>
             </motion.div>
             <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8 }}
-              viewport={{ once: true }}
-              className="relative hidden lg:block h-[600px]"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+              className="relative hidden md:block h-[450px] md:h-[500px] lg:h-[600px]"
             >
               {/* Michael Gad Photo */}
               <div className="absolute inset-0 bg-primary/10 rounded-[3rem] overflow-hidden border-8 border-white shadow-2xl transform rotate-3 hover:rotate-0 transition-transform duration-500 cursor-pointer">
@@ -106,21 +104,21 @@ export default function Home() {
               <motion.div 
                 animate={{ y: [-10, 10, -10] }}
                 transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-                className="absolute -top-10 -left-10 bg-white p-4 rounded-xl shadow-lg transform -rotate-12"
+                className="absolute -top-10 -left-10 bg-white p-4 rounded-xl shadow-lg transform -rotate-12 hidden lg:block"
               >
                 <span className="text-2xl font-bold text-accent">E = mc²</span>
               </motion.div>
               <motion.div 
                 animate={{ y: [10, -10, 10] }}
                 transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
-                className="absolute top-40 -right-12 bg-white p-4 rounded-xl shadow-lg transform rotate-12"
+                className="absolute top-40 -right-12 bg-white p-4 rounded-xl shadow-lg transform rotate-12 hidden lg:block"
               >
                 <span className="text-3xl font-bold text-primary">∫</span>
               </motion.div>
               <motion.div 
                 animate={{ y: [-5, 5, -5] }}
                 transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-                className="absolute bottom-20 -left-8 bg-white p-4 rounded-xl shadow-lg transform rotate-6"
+                className="absolute bottom-20 -left-8 bg-white p-4 rounded-xl shadow-lg transform rotate-6 hidden lg:block"
               >
                 <span className="text-3xl font-bold text-primary">π ≈ 3.14</span>
               </motion.div>
