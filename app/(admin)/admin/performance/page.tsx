@@ -104,7 +104,7 @@ export default function PerformancePage() {
   };
 
   if (isLoading) {
-    return <div className="p-8 flex items-center justify-center min-h-[60vh]"><Loader2 className="w-10 h-10 text-primary animate-spin" /></div>;
+    return <div className="p-4 md:p-8 flex items-center justify-center min-h-[60vh]"><Loader2 className="w-10 h-10 text-primary animate-spin" /></div>;
   }
 
   // Calculate overall stats
@@ -114,7 +114,7 @@ export default function PerformancePage() {
   const passRate = allSubs.length > 0 ? Math.round((totalPassed / allSubs.length) * 100) : 0;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-text">Student Performance</h1>
         <p className="text-text/60 text-sm">Track quiz scores, submissions, and overall student progress.</p>

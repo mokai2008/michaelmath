@@ -236,10 +236,10 @@ export default function AdminLiveSessionsPage() {
 
   const pendingCount = bookingRequests.filter((r: any) => r.status === "pending").length;
 
-  if (isLoading) return <div className="p-8 flex items-center justify-center min-h-[60vh]"><Loader2 className="w-10 h-10 text-primary animate-spin" /></div>;
+  if (isLoading) return <div className="p-4 md:p-8 flex items-center justify-center min-h-[60vh]"><Loader2 className="w-10 h-10 text-primary animate-spin" /></div>;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text">Live Sessions</h1>

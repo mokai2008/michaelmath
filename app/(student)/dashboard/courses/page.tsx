@@ -74,7 +74,7 @@ export default function MyCoursesPage() {
 
   if (isLoading) {
     return (
-      <div className="p-8 max-w-7xl mx-auto flex items-center justify-center min-h-[60vh]">
+      <div className="p-4 md:p-8 max-w-7xl mx-auto flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
           <p className="text-text/60">Loading your courses...</p>
@@ -84,7 +84,7 @@ export default function MyCoursesPage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-text">My Courses</h1>

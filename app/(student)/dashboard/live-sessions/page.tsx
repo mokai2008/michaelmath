@@ -144,24 +144,24 @@ export default function LiveSessionsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-8 max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
+      <div className="p-4 md:p-8 max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-10 h-10 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-text">Live Sessions</h1>
         <p className="text-text/60 text-sm">Join live tutoring sessions with Michael Gad.</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-8 w-fit">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 md:mb-8 w-full md:w-fit overflow-x-auto">
         <button
           onClick={() => setTab("invitations")}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+          className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2.5 rounded-lg font-semibold text-xs md:text-sm transition-all whitespace-nowrap ${
             tab === "invitations"
               ? "bg-white text-primary shadow-sm"
               : "text-text/50 hover:text-text/70"
@@ -170,25 +170,25 @@ export default function LiveSessionsPage() {
           <Mail className="w-4 h-4" />
           Invitations
           {invitations.length > 0 && (
-            <span className="bg-accent text-white text-xs font-bold px-2 py-0.5 rounded-full ml-1">
+            <span className="bg-accent text-white text-xs font-bold px-2 py-0.5 rounded-full ml-0.5 md:ml-1">
               {invitations.length}
             </span>
           )}
         </button>
         <button
           onClick={() => setTab("book")}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+          className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2.5 rounded-lg font-semibold text-xs md:text-sm transition-all whitespace-nowrap ${
             tab === "book"
               ? "bg-white text-primary shadow-sm"
               : "text-text/50 hover:text-text/70"
           }`}
         >
           <CalendarPlus className="w-4 h-4" />
-          Book a Session
+          Book Session
         </button>
         <button
           onClick={() => setTab("mysessions")}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+          className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2.5 rounded-lg font-semibold text-xs md:text-sm transition-all whitespace-nowrap ${
             tab === "mysessions"
               ? "bg-white text-primary shadow-sm"
               : "text-text/50 hover:text-text/70"
@@ -215,8 +215,8 @@ export default function LiveSessionsPage() {
                   if (!s) return null;
                   const isActing = actionId === enrollment.id;
                   return (
-                    <div key={enrollment.id} className="bg-white rounded-2xl border-2 border-accent/20 shadow-sm p-5 hover:shadow-md transition-shadow">
-                      <div className="flex items-start gap-4">
+                    <div key={enrollment.id} className="bg-white rounded-2xl border-2 border-accent/20 shadow-sm p-4 md:p-5 hover:shadow-md transition-shadow">
+                      <div className="flex flex-col sm:flex-row items-start gap-3 md:gap-4">
                         <div className="bg-accent/10 p-3 rounded-xl flex-shrink-0 mt-0.5">
                           <Mail className="w-6 h-6 text-accent" />
                         </div>
@@ -240,7 +240,7 @@ export default function LiveSessionsPage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto mt-3 sm:mt-0">
                           <button
                             onClick={() => handleRespond(enrollment.id, "declined")}
                             disabled={isActing}
@@ -292,7 +292,7 @@ export default function LiveSessionsPage() {
                       const s = enrollment.live_sessions;
                       if (!s) return null;
                       return (
-                        <div key={enrollment.id} className="bg-white rounded-2xl border shadow-sm p-5 flex items-center gap-5 border-primary/20">
+                        <div key={enrollment.id} className="bg-white rounded-2xl border shadow-sm p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-5 border-primary/20">
                           <div className="bg-primary/10 p-3 rounded-xl flex-shrink-0">
                             <Video className="w-6 h-6 text-primary" />
                           </div>
@@ -304,7 +304,7 @@ export default function LiveSessionsPage() {
                               <span className="text-xs text-text/60 flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatTime(s.scheduled_at)} · {s.duration_minutes} min</span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3 flex-shrink-0">
+                          <div className="flex items-center gap-3 flex-shrink-0 w-full sm:w-auto">
                             <span className="text-xs font-medium text-primary bg-primary/10 px-3 py-1 rounded-full flex items-center gap-1">
                               <CheckCircle2 className="w-3.5 h-3.5" />Accepted
                             </span>
@@ -331,7 +331,7 @@ export default function LiveSessionsPage() {
                         const s = enrollment.live_sessions;
                         if (!s) return null;
                         return (
-                          <div key={enrollment.id} className="bg-white rounded-2xl border border-gray-100 opacity-60 shadow-sm p-5 flex items-center gap-5">
+                          <div key={enrollment.id} className="bg-white rounded-2xl border border-gray-100 opacity-60 shadow-sm p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-5">
                             <div className="bg-gray-100 text-gray-400 p-3 rounded-xl flex-shrink-0">
                               <Video className="w-6 h-6" />
                             </div>
@@ -343,7 +343,7 @@ export default function LiveSessionsPage() {
                                 <span className="text-xs text-text/60 flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatTime(s.scheduled_at)} · {s.duration_minutes} min</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className="flex items-center gap-3 flex-shrink-0 w-full sm:w-auto">
                               {s.recording_url && (
                                 <a href={s.recording_url.startsWith('http') ? s.recording_url : `https://${s.recording_url}`} target="_blank" rel="noopener noreferrer"
                                   className="flex items-center gap-1.5 bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-gray-300 transition-all">

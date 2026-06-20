@@ -124,14 +124,14 @@ export default function ProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="p-8 max-w-3xl mx-auto flex items-center justify-center min-h-[60vh]">
+      <div className="p-4 md:p-8 max-w-3xl mx-auto flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-10 h-10 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-text">My Profile</h1>
         <p className="text-text/60 text-sm">Manage your account information.</p>
@@ -187,7 +187,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Form */}
-        <div className="p-8 space-y-6">
+        <div className="p-5 md:p-8 space-y-6">
           <div>
             <label className="block text-sm font-medium text-text mb-2">
               Full Name

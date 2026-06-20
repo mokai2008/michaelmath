@@ -153,14 +153,14 @@ export default function RemindersPage() {
 
   if (isLoading) {
     return (
-      <div className="p-8 max-w-3xl mx-auto flex items-center justify-center min-h-[60vh]">
+      <div className="p-4 md:p-8 max-w-3xl mx-auto flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-10 h-10 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto animate-fade-in">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto animate-fade-in">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-text">Study Reminders</h1>

@@ -76,7 +76,7 @@ function WalletContent() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-text">My Wallet</h1>
         <p className="text-text/60 text-sm">Manage your funds and purchase history.</p>
@@ -89,9 +89,9 @@ function WalletContent() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-3 gap-8 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 mb-8 md:mb-12">
         {/* Balance Card */}
-        <div className="col-span-2 bg-text text-white rounded-3xl p-8 relative overflow-hidden shadow-xl shadow-text/20">
+        <div className="md:col-span-2 bg-text text-white rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-xl shadow-text/20">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
           <div className="relative z-10 flex flex-col h-full justify-between">
             <div className="flex items-center gap-2 mb-8">
@@ -106,7 +106,7 @@ function WalletContent() {
         </div>
 
         {/* Top Up Card */}
-        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm flex flex-col justify-center">
+        <div className="bg-white rounded-3xl p-5 md:p-8 border border-gray-100 shadow-sm flex flex-col justify-center">
           <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mb-4 mx-auto">
             <CreditCard className="w-7 h-7 text-primary" />
           </div>

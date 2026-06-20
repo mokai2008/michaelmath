@@ -92,11 +92,11 @@ export default function AdminWalletPage() {
   );
 
   if (isLoading) {
-    return <div className="p-8 flex items-center justify-center min-h-[60vh]"><Loader2 className="w-10 h-10 text-primary animate-spin" /></div>;
+    return <div className="p-4 md:p-8 flex items-center justify-center min-h-[60vh]"><Loader2 className="w-10 h-10 text-primary animate-spin" /></div>;
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-text">Wallet Management</h1>
         <p className="text-text/60 text-sm">Search students by name, email, or code and manually add funds.</p>

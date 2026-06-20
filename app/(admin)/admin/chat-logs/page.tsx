@@ -49,7 +49,7 @@ export default function AdminChatLogsPage() {
   );
 
   return (
-    <div className="p-8 max-w-7xl mx-auto h-[calc(100vh-2rem)] flex flex-col">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto h-[calc(100vh-2rem)] flex flex-col">
       <div className="flex justify-between items-center mb-6 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-text">AI Chat Logs</h1>
@@ -76,9 +76,9 @@ export default function AdminChatLogsPage() {
           
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
-              <div className="p-8 text-center text-gray-400 text-sm">Loading chats...</div>
+              <div className="p-4 md:p-8 text-center text-gray-400 text-sm">Loading chats...</div>
             ) : filteredLogs.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 text-sm">No chat logs found.</div>
+              <div className="p-4 md:p-8 text-center text-gray-400 text-sm">No chat logs found.</div>
             ) : (
               filteredLogs.map(log => (
                 <button

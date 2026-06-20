@@ -399,7 +399,7 @@ export default function AdminCourseEditor() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
           <div className="flex items-center gap-2 mb-2 text-text/60">
