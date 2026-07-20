@@ -687,13 +687,17 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       <div className="absolute top-0 left-0 w-16 h-10 bg-transparent z-10 cursor-default" />
                     </div>
                   ) : isGoogleDrive(activeTopic.youtube_url) ? (
-                    <iframe 
-                      src={getGoogleDriveEmbedUrl(activeTopic.youtube_url)}
-                      className="w-full h-full"
-                      allowFullScreen
-                      allow="autoplay; encrypted-media"
-                      sandbox="allow-same-origin allow-scripts allow-popups"
-                    />
+                    <div className="relative w-full h-full">
+                      <iframe 
+                        src={getGoogleDriveEmbedUrl(activeTopic.youtube_url)}
+                        className="w-full h-full"
+                        allowFullScreen
+                        allow="autoplay; encrypted-media"
+                        sandbox="allow-same-origin allow-scripts"
+                      />
+                      {/* Overlay to block pop-out button in top-right */}
+                      <div className="absolute top-0 right-0 w-12 h-12 bg-black z-10 cursor-default" />
+                    </div>
                   ) : (
                     <video 
                       src={activeTopic.youtube_url} 
