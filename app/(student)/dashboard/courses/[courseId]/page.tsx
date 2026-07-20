@@ -643,6 +643,31 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               return `https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=0&iv_load_policy=3&cc_load_policy=0&autoplay=0`;
             };
 
+            // Google Drive embed support
+            const isGoogleDrive = (url: string) => {
+              return url.includes('drive.google.com');
+            };
+
+            const getGoogleDriveEmbedUrl = (rawUrl: string) => {
+              // Extract file ID from various Google Drive URL formats:
+              // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+              // https://drive.google.com/file/d/FILE_ID/edit
+              // https://drive.google.com/open?id=FILE_ID
+              let fileId = '';
+              const fileMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+              const openMatch = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+              if (fileMatch) {
+                fileId = fileMatch[1];
+              } else if (openMatch) {
+                fileId = openMatch[1];
+              }
+              if (fileId) {
+                return `https://drive.google.com/file/d/${fileId}/preview`;
+              }
+              // Fallback: if already a preview URL, use as-is
+              return rawUrl;
+            };
+
             return (
             <>
               <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-xl mb-8 relative">
@@ -661,6 +686,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       {/* Overlay to block YouTube logo in top-left */}
                       <div className="absolute top-0 left-0 w-16 h-10 bg-transparent z-10 cursor-default" />
                     </div>
+                  ) : isGoogleDrive(activeTopic.youtube_url) ? (
+                    <iframe 
+                      src={getGoogleDriveEmbedUrl(activeTopic.youtube_url)}
+                      className="w-full h-full"
+                      allowFullScreen
+                      allow="autoplay; encrypted-media"
+                      sandbox="allow-same-origin allow-scripts allow-popups"
+                    />
                   ) : (
                     <video 
                       src={activeTopic.youtube_url} 

@@ -525,20 +525,21 @@ export default function AdminCourseEditor() {
                         {/* Core Media Uploads */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="md:col-span-2">
-                            <label className="block text-xs font-medium text-text/70 mb-1">Video URL or Upload Video</label>
+                            <label className="block text-xs font-medium text-text/70 mb-1">Video URL (YouTube or Google Drive) or Upload</label>
                             <div className="flex gap-2">
                               <input 
                                 type="text" 
                                 value={topic.youtubeUrl}
                                 onChange={(e) => updateTopicField(section.id, topic.id, 'youtubeUrl', e.target.value)}
                                 className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                placeholder="https://youtube.com/watch?v=..." 
+                                placeholder="YouTube, Google Drive link, or upload a file" 
                               />
                               <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center min-w-[100px] text-sm">
                                 {uploadingField === `video_${topic.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
                                 <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `video_${topic.id}`, (url) => updateTopicField(section.id, topic.id, 'youtubeUrl', url))} disabled={uploadingField === `video_${topic.id}`} />
                               </label>
                             </div>
+                            <p className="text-[11px] text-text/40 mt-1">Supports YouTube links, Google Drive share links (drive.google.com/file/d/...), or direct video file uploads.</p>
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-text/70 mb-1">PDF Notes URL or Upload</label>
