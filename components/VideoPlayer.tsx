@@ -46,7 +46,7 @@ export default function VideoPlayer({
     } else {
       videoId = url;
     }
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=0&iv_load_policy=3&cc_load_policy=0&autoplay=${
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?hl=en&cc_lang_pref=en&modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=0&iv_load_policy=3&cc_load_policy=0&autoplay=${
       autoPlay ? 1 : 0
     }`;
 
@@ -78,8 +78,8 @@ export default function VideoPlayer({
       fileId = openMatch[1];
     }
     const embedUrl = fileId
-      ? `https://drive.google.com/file/d/${fileId}/preview`
-      : url;
+      ? `https://drive.google.com/file/d/${fileId}/preview?hl=en`
+      : (url.includes('?') ? `${url}&hl=en` : `${url}?hl=en`);
 
     return (
       <div className={`relative ${className} bg-black overflow-hidden`}>
