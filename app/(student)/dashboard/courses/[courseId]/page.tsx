@@ -511,19 +511,42 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
+    <div className="flex h-full min-h-[calc(100vh-3.5rem)] md:min-h-screen relative overflow-hidden bg-background-alt">
+      {/* Mobile/Tablet Backdrop for Syllabus Sidebar */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Content Sidebar */}
-      <aside className={`bg-white border-r border-gray-200 transition-all duration-300 flex flex-col ${sidebarOpen ? 'w-80' : 'w-0 hidden md:flex md:w-16'}`}>
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+      <aside className={`
+        bg-white border-r border-gray-200 flex flex-col transition-all duration-300 flex-shrink-0
+        fixed inset-y-0 left-0 z-40 w-72 sm:w-80 shadow-2xl
+        lg:relative lg:inset-auto lg:z-auto lg:shadow-none
+        ${sidebarOpen ? 'translate-x-0 lg:w-72 xl:w-80' : '-translate-x-full lg:translate-x-0 lg:w-16'}
+      `}>
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between h-14 shrink-0">
           {sidebarOpen ? (
-            <div className="flex items-center gap-2">
-              <Link href="/dashboard/courses" className="text-gray-400 hover:text-text">
-                <ChevronLeft className="w-5 h-5" />
-              </Link>
-              <h2 className="font-bold text-text truncate">{course.title}</h2>
-            </div>
+            <>
+              <div className="flex items-center gap-2 min-w-0">
+                <Link href="/dashboard/courses" className="text-gray-400 hover:text-text shrink-0" title="Back to Courses">
+                  <ChevronLeft className="w-5 h-5" />
+                </Link>
+                <h2 className="font-bold text-text truncate text-sm">{course.title}</h2>
+              </div>
+              <button 
+                onClick={() => setSidebarOpen(false)} 
+                className="text-gray-400 hover:text-text p-1 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
+                title="Close syllabus"
+              >
+                <X className="w-5 h-5 lg:hidden" />
+                <ChevronLeft className="w-5 h-5 hidden lg:block" />
+              </button>
+            </>
           ) : (
-            <button onClick={() => setSidebarOpen(true)} className="mx-auto text-gray-400 hover:text-text">
+            <button onClick={() => setSidebarOpen(true)} className="mx-auto text-gray-400 hover:text-text p-1" title="Open syllabus">
               <Menu className="w-6 h-6" />
             </button>
           )}
@@ -540,12 +563,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   className="p-4 bg-gray-50 flex items-center justify-between cursor-pointer"
                   onClick={() => toggleSection(section.id)}
                 >
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm text-text">{section.title}</h3>
-                    {!isSectionUnlocked && <Lock className="w-3.5 h-3.5 text-orange-400" />}
-                    {isFreeSection && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">FREE</span>}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="font-bold text-sm text-text truncate">{section.title}</h3>
+                    {!isSectionUnlocked && <Lock className="w-3.5 h-3.5 text-orange-400 shrink-0" />}
+                    {isFreeSection && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded shrink-0">FREE</span>}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     {!isFreeSection && !isSectionUnlocked && section.price > 0 && (
                       <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">${section.price}</span>
                     )}
@@ -565,7 +588,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                             key={topic.id}
                             onClick={() => {
                               setActiveTopic(topic);
-                              // If locked, clicking the topic will show the purchase gate in main area
+                              if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                                setSidebarOpen(false);
+                              }
                             }}
                             className={`px-4 py-2.5 border-l-4 flex items-start gap-3 cursor-pointer ${isActive ? 'bg-primary/5 border-primary' : 'hover:bg-gray-50 border-transparent'}`}
                           >
@@ -592,8 +617,37 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 bg-background-alt overflow-y-auto relative">
-        <div className="max-w-4xl mx-auto p-4 md:p-8">
+      <main className="flex-1 bg-background-alt overflow-y-auto relative min-w-0 flex flex-col">
+        {/* Top Navigation Bar inside Course Player */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-20 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button 
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-text text-xs font-bold rounded-lg transition-colors shrink-0"
+              title="Toggle syllabus sidebar"
+            >
+              <Menu className="w-4 h-4" />
+              <span>Syllabus</span>
+            </button>
+            <div className="min-w-0">
+              <div className="text-xs text-text/50 truncate flex items-center gap-1">
+                <Link href="/dashboard/courses" className="hover:underline">My Courses</Link>
+                <span>/</span>
+                <span className="truncate">{course?.title}</span>
+              </div>
+              {activeTopic && (
+                <h2 className="text-sm font-bold text-text truncate">{activeTopic.title}</h2>
+              )}
+            </div>
+          </div>
+          {activeTopic && progress[activeTopic.id] && (
+            <span className="text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full shrink-0 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Completed</span>
+            </span>
+          )}
+        </div>
+
+        <div className="max-w-4xl mx-auto p-3 sm:p-5 md:p-8 w-full min-w-0">
           {/* Purchase Gate - shown when student clicks a topic in a locked section */}
           {isActiveTopicLocked && activeSection ? (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
