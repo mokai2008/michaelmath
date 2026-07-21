@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, Sparkles, Code } from "lucide-react";
+import { Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, Sparkles, Code, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import MathText from "@/components/MathText";
