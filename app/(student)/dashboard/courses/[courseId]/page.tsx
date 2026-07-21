@@ -1150,51 +1150,123 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       )}
 
       {/* Interactive Quiz Fullscreen Modal */}
-      {canvaQuizModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-white">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                  <PlayCircle className="w-4 h-4" />
+      {canvaQuizModal && (() => {
+        const rawCode = canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || '';
+        
+        // Helper to extract clean URL or format HTML so Canva controls display properly
+        let isUrl = false;
+        let content = '';
+        if (rawCode) {
+          const trimmed = rawCode.trim();
+          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            isUrl = true;
+            content = trimmed;
+          } else {
+            const srcMatch = trimmed.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+            if (srcMatch && srcMatch[1]) {
+              isUrl = true;
+              content = srcMatch[1];
+            } else {
+              isUrl = false;
+              const cleanedHtml = trimmed
+                .replace(/padding-top:\s*[^;"]+;?/gi, 'height: 100%;')
+                .replace(/height:\s*0;?/gi, 'height: 100%;');
+              content = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      * { box-sizing: border-box; }
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background: #0f172a;
+        overflow: hidden;
+      }
+      div {
+        width: 100% !important;
+        height: 100% !important;
+        position: static !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      iframe {
+        width: 100% !important;
+        height: 100% !important;
+        border: none !important;
+        position: static !important;
+      }
+    </style>
+  </head>
+  <body>
+    ${cleanedHtml}
+  </body>
+</html>`;
+            }
+          }
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+            <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
+                    <PlayCircle className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-text text-base sm:text-lg truncate">{activeTopic?.title || 'Quiz'}: Quiz</h3>
+                    <p className="text-xs text-text/60 truncate">Complete the interactive questions below</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-text text-lg">{activeTopic?.title || 'Quiz'}: Quiz</h3>
-                  <p className="text-xs text-text/60">Complete the interactive questions below</p>
-                </div>
+                <button 
+                  onClick={() => setCanvaQuizModal(null)} 
+                  className="text-text/50 hover:text-text p-2 font-bold text-sm bg-gray-100 hover:bg-gray-200 rounded-full transition-colors shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button 
-                onClick={() => setCanvaQuizModal(null)} 
-                className="text-text/50 hover:text-text p-2 font-bold text-sm bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="flex-1 bg-gray-900 p-2 md:p-4 relative">
-              <iframe 
-                srcDoc={canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code} 
-                className="w-full h-full border-0 rounded-2xl bg-white shadow-lg"
-                title="Interactive Quiz"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-              />
-            </div>
+              <div className="flex-1 bg-gray-900 p-1 sm:p-3 relative overflow-hidden min-h-0">
+                {isUrl ? (
+                  <iframe 
+                    src={content} 
+                    className="w-full h-full border-0 rounded-xl bg-white shadow-lg"
+                    title="Interactive Quiz"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allowFullScreen
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation"
+                  />
+                ) : (
+                  <iframe 
+                    srcDoc={content} 
+                    className="w-full h-full border-0 rounded-xl bg-white shadow-lg"
+                    title="Interactive Quiz"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allowFullScreen
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation"
+                  />
+                )}
+              </div>
 
-            <div className="p-4 border-t border-gray-100 bg-white flex items-center justify-between">
-              <span className="text-xs text-text/60">Interactive Quiz</span>
-              <button 
-                onClick={() => {
-                  handleQuizSubmit(canvaQuizModal.id, 10, {});
-                  setCanvaQuizModal(null);
-                }}
-                className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md flex items-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" /> Mark Quiz as Completed
-              </button>
+              <div className="p-3 sm:p-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3 shrink-0">
+                <span className="text-xs text-text/60 truncate">Interactive Quiz</span>
+                <button 
+                  onClick={() => {
+                    handleQuizSubmit(canvaQuizModal.id, 10, {});
+                    setCanvaQuizModal(null);
+                  }}
+                  className="px-4 sm:px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-md flex items-center gap-2 shrink-0"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Mark Quiz as Completed
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
