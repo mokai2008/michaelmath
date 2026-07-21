@@ -43,13 +43,17 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [purchasedSections, setPurchasedSections] = useState<Record<string, boolean>>({});
   const [walletBalance, setWalletBalance] = useState(0);
   const [buyingSection, setBuyingSection] = useState<string | null>(null);
+  const [canvaQuizModal, setCanvaQuizModal] = useState<any>(null);
 
 
   useEffect(() => {
     const fetchCourseData = async () => {
       // First verify enrollment
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
       setSessionUser(session.user);
 
       const { data: enrollment } = await supabase
@@ -99,9 +103,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       if (courseData) {
         // Sort sections and topics
         const progMap: Record<string, boolean> = {};
-        courseData.sections.sort((a: any, b: any) => a.order_index - b.order_index);
-        courseData.sections.forEach((s: any) => {
-          s.topics.sort((a: any, b: any) => a.order_index - b.order_index);
+        const sections = courseData.sections || [];
+        sections.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
+        sections.forEach((s: any) => {
+          s.topics = s.topics || [];
+          s.topics.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
           s.topics.forEach((t: any) => {
             if (t.topic_progress && t.topic_progress.length > 0) {
               progMap[t.id] = t.topic_progress[0].is_completed;
@@ -110,7 +116,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         });
         setProgress(progMap);
 
-        setCourse(courseData);
+        setCourse({ ...courseData, sections });
 
         // Fetch section purchases
         const { data: purchases } = await supabase
@@ -132,10 +138,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         setWalletBalance(prof?.wallet_balance || 0);
         
         // Open first section and set first topic active by default
-        if (courseData.sections.length > 0) {
-          setOpenSections({ [courseData.sections[0].id]: true });
-          if (courseData.sections[0].topics.length > 0) {
-            setActiveTopic(courseData.sections[0].topics[0]);
+        if (sections.length > 0) {
+          setOpenSections({ [sections[0].id]: true });
+          if (sections[0].topics && sections[0].topics.length > 0) {
+            setActiveTopic(sections[0].topics[0]);
           }
         }
       }
@@ -515,7 +521,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
         {sidebarOpen && (
           <div className="flex-1 overflow-y-auto">
-            {course.sections.map((section: any, sIdx: number) => {
+            {(course.sections || []).map((section: any, sIdx: number) => {
               const isFreeSection = sIdx === 0;
               const isSectionUnlocked = isFreeSection || purchasedSections[section.id] || (section.price || 0) === 0;
               return (
