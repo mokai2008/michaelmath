@@ -1154,80 +1154,158 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         const rawCode = (canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || '').trim();
         const isDirectUrl = rawCode.startsWith('http://') || rawCode.startsWith('https://');
 
-        // Inject CSS fix for background theme, Next Question button text contrast, feedback text white color, and scaling
+        // Robust preparation helper for Canva AI HTML embeds
         const prepareSrcDoc = (html: string) => {
           if (!html) return '';
-          const styleInjection = `
-            <style id="lms-quiz-iframe-fix">
-              html {
-                background-color: #1e1b4b !important;
-                height: 100% !important;
-              }
-              body {
-                margin: 0 !important;
-                padding: 24px 16px !important;
-                min-height: 100% !important;
-                height: auto !important;
+          
+          const styleAndScriptInjection = `
+            <style id="canva-ai-lms-fix">
+              html, body {
+                background: linear-gradient(135deg, #1e1b4b 0%, #252262 50%, #1e1b4b 100%) !important;
                 background-color: #1e1b4b !important;
                 color: #ffffff !important;
+                margin: 0 !important;
+                padding: 24px 16px !important;
+                min-height: 100vh !important;
+                height: auto !important;
                 display: flex !important;
                 flex-direction: column !important;
                 justify-content: flex-start !important;
                 align-items: center !important;
                 overflow-y: auto !important;
                 box-sizing: border-box !important;
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+                font-family: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
               }
               * {
                 box-sizing: border-box !important;
               }
-              /* Optimal width for card container so quiz feels large and readable */
-              .container, .quiz-container, .card, [class*="container"], [class*="card"] {
+              header h1, header p, .canva-text, [data-template-id="quiz-title"], [data-template-id="quiz-subtitle"] {
+                color: #ffffff !important;
+              }
+              .canva-card, #quiz-card {
+                background-color: #ffffff !important;
+                color: #1e293b !important;
+                border-radius: 1.25rem !important;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4) !important;
                 max-width: 680px !important;
                 width: 100% !important;
               }
-              /* Force all feedback / explanation text to be bright white */
-              .feedback, .explanation, [class*="feedback"], [class*="explanation"], 
-              [id*="feedback"], [id*="explanation"], .explanation-text, .feedback-text, 
-              p, small, span.explanation, div.explanation {
-                color: #ffffff !important;
-                opacity: 1 !important;
-                visibility: visible !important;
+              .canva-card p, #quiz-card p, #question-text {
+                color: #0f172a !important;
               }
-              /* Fix Next Question / Submit / Continue buttons to be vibrant indigo with bold white text */
-              button[id*="next"], button[class*="next"], 
-              button[onclick*="next"], button[onclick*="Next"],
-              .next-btn, .btn-next, #next-btn, #nextBtn,
-              button:not([class*="option"]):not([class*="choice"]):not([class*="alt"]) {
-                background: #4f46e5 !important;
+              #score-display {
+                color: #4f46e5 !important;
+              }
+              #score-bar span {
+                color: #475569 !important;
+              }
+              #feedback {
+                font-weight: 600 !important;
+              }
+              #feedback span {
+                color: #475569 !important;
+                font-weight: 500 !important;
+              }
+              .canva-button, #next-btn, #restart-btn, .opt-btn.canva-button {
                 background-color: #4f46e5 !important;
                 color: #ffffff !important;
                 font-weight: 700 !important;
                 border: none !important;
-                box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4) !important;
-                min-height: 48px !important;
-                font-size: 16px !important;
-                border-radius: 12px !important;
+                border-radius: 0.75rem !important;
                 padding: 12px 24px !important;
+                min-height: 48px !important;
+                font-size: 1.125rem !important;
+                box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
+                transition: all 0.2s ease !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                display: inline-block !important;
                 cursor: pointer !important;
-                opacity: 1 !important;
-                visibility: visible !important;
               }
-              /* Target all children inside buttons so text like 'Next Question →' is 100% visible white */
-              button *, .btn *, [class*="next"] *, #next-btn *, #nextBtn * {
+              .canva-button.hidden, #next-btn.hidden, #restart-btn.hidden, #results.hidden, #question-area.hidden, #score-bar.hidden {
+                display: none !important;
+              }
+              .canva-button:hover:not(:disabled), #next-btn:hover:not(:disabled), #restart-btn:hover:not(:disabled) {
+                background-color: #4338ca !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45) !important;
+              }
+              .canva-button *, #next-btn *, #restart-btn * {
                 color: #ffffff !important;
-                opacity: 1 !important;
-                visibility: visible !important;
               }
+              .opt-btn:not(.canva-button) {
+                border: 2px solid #cbd5e1 !important;
+                color: #1e293b !important;
+                background-color: #ffffff !important;
+                font-weight: 500 !important;
+              }
+              .opt-btn:not(.canva-button):hover:not(:disabled) {
+                border-color: #818cf8 !important;
+                background-color: #f8fafc !important;
+              }
+              .correct {
+                background-color: #059669 !important;
+                color: #ffffff !important;
+                border-color: #059669 !important;
+              }
+              .correct * { color: #ffffff !important; }
+              .incorrect {
+                background-color: #dc2626 !important;
+                color: #ffffff !important;
+                border-color: #dc2626 !important;
+              }
+              .incorrect * { color: #ffffff !important; }
             </style>
+            <script>
+              document.addEventListener('DOMContentLoaded', function() {
+                function fixCanvaTemplate() {
+                  var nextBtn = document.getElementById('next-btn');
+                  if (nextBtn && (!nextBtn.textContent || !nextBtn.textContent.trim())) {
+                    nextBtn.textContent = 'Next Question →';
+                  }
+                  var restartBtn = document.getElementById('restart-btn');
+                  if (restartBtn && (!restartBtn.textContent || !restartBtn.textContent.trim())) {
+                    restartBtn.textContent = 'Restart Quiz ↺';
+                  }
+                  var qLabel = document.querySelector('[data-template-id="question-label"]');
+                  if (qLabel && (!qLabel.textContent || !qLabel.textContent.trim())) {
+                    qLabel.textContent = 'Question';
+                  }
+                  var qTitle = document.querySelector('[data-template-id="quiz-title"]');
+                  if (qTitle && (!qTitle.textContent || !qTitle.textContent.trim())) {
+                    qTitle.textContent = 'Quadratic Transformations';
+                  }
+                  var qSub = document.querySelector('[data-template-id="quiz-subtitle"]');
+                  if (qSub && (!qSub.textContent || !qSub.textContent.trim())) {
+                    qSub.textContent = 'Test your knowledge of parabola shifts, stretches & reflections';
+                  }
+                }
+                fixCanvaTemplate();
+                setTimeout(fixCanvaTemplate, 100);
+                setTimeout(fixCanvaTemplate, 500);
+
+                var observer = new MutationObserver(function() {
+                  fixCanvaTemplate();
+                  var fb = document.getElementById('feedback');
+                  if (fb) {
+                    var spans = fb.getElementsByTagName('span');
+                    for (var i = 0; i < spans.length; i++) {
+                      spans[i].style.setProperty('color', '#475569', 'important');
+                    }
+                  }
+                });
+                var card = document.getElementById('quiz-card') || document.body;
+                if (card) observer.observe(card, { childList: true, subtree: true, characterData: true });
+              });
+            </script>
           `;
 
           if (html.includes('</head>')) {
-            return html.replace('</head>', `${styleInjection}</head>`);
+            return html.replace('</head>', `${styleAndScriptInjection}</head>`);
           } else if (html.includes('<body')) {
-            return html.replace(/<body([^>]*)>/i, `<head>${styleInjection}</head><body$1>`);
+            return html.replace(/<body([^>]*)>/i, `<head>${styleAndScriptInjection}</head><body$1>`);
           }
-          return `<!DOCTYPE html><html><head>${styleInjection}</head><body>${html}</body></html>`;
+          return `<!DOCTYPE html><html><head>${styleAndScriptInjection}</head><body>${html}</body></html>`;
         };
 
         const formattedHtml = isDirectUrl ? '' : prepareSrcDoc(rawCode);

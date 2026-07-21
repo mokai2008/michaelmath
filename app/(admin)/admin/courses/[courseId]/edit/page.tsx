@@ -718,7 +718,55 @@ export default function AdminCourseEditor() {
                                   </div>
                                   <div className="bg-white rounded-lg overflow-hidden border border-gray-700 h-[450px]">
                                     <iframe 
-                                      srcDoc={topic.quizEmbedCode}
+                                      srcDoc={(() => {
+                                        const html = topic.quizEmbedCode || '';
+                                        if (!html) return '';
+                                        const isUrl = html.trim().startsWith('http://') || html.trim().startsWith('https://');
+                                        if (isUrl) return '';
+                                        const styleAndScript = `
+                                          <style>
+                                            html, body {
+                                              background: linear-gradient(135deg, #1e1b4b 0%, #252262 50%, #1e1b4b 100%) !important;
+                                              background-color: #1e1b4b !important;
+                                              color: #ffffff !important;
+                                              margin: 0 !important;
+                                              padding: 24px 16px !important;
+                                              min-height: 100vh !important;
+                                              display: flex !important;
+                                              flex-direction: column !important;
+                                              justify-content: flex-start !important;
+                                              align-items: center !important;
+                                              overflow-y: auto !important;
+                                              font-family: 'DM Sans', system-ui, sans-serif !important;
+                                            }
+                                            header h1, header p, .canva-text, [data-template-id="quiz-title"], [data-template-id="quiz-subtitle"] { color: #ffffff !important; }
+                                            .canva-card, #quiz-card { background-color: #ffffff !important; color: #1e293b !important; border-radius: 1.25rem !important; max-width: 680px !important; width: 100% !important; }
+                                            .canva-card p, #quiz-card p, #question-text { color: #0f172a !important; }
+                                            #score-display { color: #4f46e5 !important; }
+                                            #score-bar span { color: #475569 !important; }
+                                            #feedback span { color: #475569 !important; font-weight: 500 !important; }
+                                            .canva-button, #next-btn, #restart-btn { background-color: #4f46e5 !important; color: #ffffff !important; font-weight: 700 !important; border: none !important; border-radius: 0.75rem !important; padding: 12px 24px !important; min-height: 48px !important; }
+                                            .canva-button *, #next-btn *, #restart-btn * { color: #ffffff !important; }
+                                            .opt-btn:not(.canva-button) { border: 2px solid #cbd5e1 !important; color: #1e293b !important; background-color: #ffffff !important; }
+                                            .correct { background-color: #059669 !important; color: #ffffff !important; }
+                                            .incorrect { background-color: #dc2626 !important; color: #ffffff !important; }
+                                          </style>
+                                          <script>
+                                            document.addEventListener('DOMContentLoaded', function() {
+                                              function fix() {
+                                                var n = document.getElementById('next-btn'); if (n && !n.textContent.trim()) n.textContent = 'Next Question →';
+                                                var r = document.getElementById('restart-btn'); if (r && !r.textContent.trim()) r.textContent = 'Restart Quiz ↺';
+                                                var q = document.querySelector('[data-template-id="question-label"]'); if (q && !q.textContent.trim()) q.textContent = 'Question';
+                                                var t = document.querySelector('[data-template-id="quiz-title"]'); if (t && !t.textContent.trim()) t.textContent = 'Quadratic Transformations';
+                                                var s = document.querySelector('[data-template-id="quiz-subtitle"]'); if (s && !s.textContent.trim()) s.textContent = 'Test your knowledge of parabola shifts, stretches & reflections';
+                                              }
+                                              fix(); setTimeout(fix, 200);
+                                            });
+                                          </script>
+                                        `;
+                                        if (html.includes('</head>')) return html.replace('</head>', `${styleAndScript}</head>`);
+                                        return `<!DOCTYPE html><html><head>${styleAndScript}</head><body>${html}</body></html>`;
+                                      })()}
                                       className="w-full h-full border-0"
                                       title="Canva Quiz Preview"
                                       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
