@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PlayCircle, FileText, CheckCircle2, ChevronDown, ChevronUp, Star, Clock, Award, ShieldCheck, Video, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import VideoPlayer from "@/components/VideoPlayer";
 
 export default function CourseSalesClient({ course }: { course: any }) {
   const router = useRouter();
@@ -190,8 +191,10 @@ export default function CourseSalesClient({ course }: { course: any }) {
             </div>
             
             <div className="hidden lg:block relative">
-              <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10">
-                {course.thumbnail_url ? (
+              <div className="aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 bg-black">
+                {course.intro_video_url ? (
+                  <VideoPlayer url={course.intro_video_url} poster={course.thumbnail_url} />
+                ) : course.thumbnail_url ? (
                   <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-black/20 flex items-center justify-center backdrop-blur-sm">

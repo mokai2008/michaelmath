@@ -11,6 +11,13 @@ export default function AdminCourseBuilder() {
   const [sections, setSections] = useState<any[]>([]);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
 
+  const [courseTitle, setCourseTitle] = useState("");
+  const [courseDescription, setCourseDescription] = useState("");
+  const [courseThumbnail, setCourseThumbnail] = useState("");
+  const [courseIntroVideo, setCourseIntroVideo] = useState("");
+  const [coursePrice, setCoursePrice] = useState("99.00");
+  const [courseKeywords, setCourseKeywords] = useState("");
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldId: string, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -136,12 +143,6 @@ export default function AdminCourseBuilder() {
     } : s));
   };
 
-  const [courseTitle, setCourseTitle] = useState("");
-  const [courseDescription, setCourseDescription] = useState("");
-  const [courseThumbnail, setCourseThumbnail] = useState("");
-  const [coursePrice, setCoursePrice] = useState("99.00");
-  const [courseKeywords, setCourseKeywords] = useState("");
-
   const handleSave = async (isPublished: boolean = false) => {
     if (!courseTitle) {
       alert("Please enter a course title.");
@@ -158,6 +159,7 @@ export default function AdminCourseBuilder() {
           title: courseTitle,
           description: courseDescription,
           thumbnail_url: courseThumbnail,
+          intro_video_url: courseIntroVideo,
           total_price: parseFloat(coursePrice) || 0,
           is_published: isPublished,
           keywords: courseKeywords.split(',').map(k => k.trim()).filter(Boolean)
@@ -305,6 +307,17 @@ export default function AdminCourseBuilder() {
               <label className="block text-sm font-medium text-text mb-2">Total Price (£)</label>
               <input type="number" value={coursePrice} onChange={(e) => setCoursePrice(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" placeholder="99.00" />
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">Course Entrance / Intro Video (YouTube, Google Drive, or Upload)</label>
+            <div className="flex gap-2">
+              <input type="text" value={courseIntroVideo} onChange={(e) => setCourseIntroVideo(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" placeholder="YouTube, Google Drive link (drive.google.com/file/d/...), or upload video" />
+              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center min-w-[120px] text-sm">
+                {uploadingField === 'intro_video' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
+                <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, 'intro_video', setCourseIntroVideo)} disabled={uploadingField === 'intro_video'} />
+              </label>
+            </div>
+            <p className="text-xs text-text/50 mt-1">This video will be shown as the main preview video at the entrance of the course sales page.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-2">Keywords (comma-separated)</label>

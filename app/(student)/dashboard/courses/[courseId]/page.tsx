@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
+import VideoPlayer from "@/components/VideoPlayer";
 
 export default function CoursePlayerPage({ params }: { params: { courseId: string } }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -625,94 +626,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               </div>
             </div>
           ) : activeTopic ? (() => {
-            // Extract video ID from YouTube URL
-            const isYouTube = (url: string) => {
-              return url.includes('youtube.com') || url.includes('youtu.be');
-            };
-
-            const getEmbedUrl = (rawUrl: string) => {
-              let videoId = '';
-              if (rawUrl.includes('youtu.be/')) {
-                videoId = rawUrl.split('youtu.be/')[1]?.split(/[?&]/)[0];
-              } else if (rawUrl.includes('watch?v=')) {
-                videoId = rawUrl.split('watch?v=')[1]?.split(/[?&]/)[0];
-              } else if (rawUrl.includes('/embed/')) {
-                videoId = rawUrl.split('/embed/')[1]?.split(/[?&]/)[0];
-              } else {
-                videoId = rawUrl;
-              }
-              return `https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=0&iv_load_policy=3&cc_load_policy=0&autoplay=0`;
-            };
-
-            // Google Drive embed support
-            const isGoogleDrive = (url: string) => {
-              return url.includes('drive.google.com');
-            };
-
-            const getGoogleDriveEmbedUrl = (rawUrl: string) => {
-              // Extract file ID from various Google Drive URL formats:
-              // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
-              // https://drive.google.com/file/d/FILE_ID/edit
-              // https://drive.google.com/open?id=FILE_ID
-              let fileId = '';
-              const fileMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-              const openMatch = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-              if (fileMatch) {
-                fileId = fileMatch[1];
-              } else if (openMatch) {
-                fileId = openMatch[1];
-              }
-              if (fileId) {
-                return `https://drive.google.com/file/d/${fileId}/preview`;
-              }
-              // Fallback: if already a preview URL, use as-is
-              return rawUrl;
-            };
-
             return (
             <>
               <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-xl mb-8 relative">
-                {activeTopic.youtube_url ? (
-                  isYouTube(activeTopic.youtube_url) ? (
-                    <div className="relative w-full h-full">
-                      <iframe 
-                        src={getEmbedUrl(activeTopic.youtube_url)}
-                        className="w-full h-full"
-                        allowFullScreen
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        referrerPolicy="strict-origin-when-cross-origin"
-                      />
-                      {/* Overlay to block "Watch on YouTube" link in bottom-right */}
-                      <div className="absolute bottom-0 right-0 w-40 h-10 bg-transparent z-10 cursor-default" />
-                      {/* Overlay to block YouTube logo in top-left */}
-                      <div className="absolute top-0 left-0 w-16 h-10 bg-transparent z-10 cursor-default" />
-                    </div>
-                  ) : isGoogleDrive(activeTopic.youtube_url) ? (
-                    <div className="relative w-full h-full">
-                      <iframe 
-                        src={getGoogleDriveEmbedUrl(activeTopic.youtube_url)}
-                        className="w-full h-full"
-                        allowFullScreen
-                        allow="autoplay; encrypted-media"
-                        sandbox="allow-same-origin allow-scripts"
-                      />
-                      {/* Overlay to block pop-out button in top-right */}
-                      <div className="absolute top-0 right-0 w-12 h-12 bg-black z-10 cursor-default" />
-                    </div>
-                  ) : (
-                    <video 
-                      src={activeTopic.youtube_url} 
-                      controls 
-                      controlsList="nodownload"
-                      className="w-full h-full object-contain bg-black"
-                    />
-                  )
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center flex-col text-white/50">
-                    <PlayCircle className="w-16 h-16 mb-4" />
-                    <p>No video available for this topic</p>
-                  </div>
-                )}
+                <VideoPlayer url={activeTopic.youtube_url} />
               </div>
 
               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
