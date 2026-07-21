@@ -1154,7 +1154,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         const rawCode = (canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || '').trim();
         const isDirectUrl = rawCode.startsWith('http://') || rawCode.startsWith('https://');
 
-        // Inject CSS fix for background theme, Next Question button contrast, and scaling
+        // Inject CSS fix for background theme, Next Question button text contrast, feedback text white color, and scaling
         const prepareSrcDoc = (html: string) => {
           if (!html) return '';
           const styleInjection = `
@@ -1186,6 +1186,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 max-width: 680px !important;
                 width: 100% !important;
               }
+              /* Force all feedback / explanation text to be bright white */
+              .feedback, .explanation, [class*="feedback"], [class*="explanation"], 
+              [id*="feedback"], [id*="explanation"], .explanation-text, .feedback-text, 
+              p, small, span.explanation, div.explanation {
+                color: #ffffff !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+              }
               /* Fix Next Question / Submit / Continue buttons to be vibrant indigo with bold white text */
               button[id*="next"], button[class*="next"], 
               button[onclick*="next"], button[onclick*="Next"],
@@ -1202,6 +1210,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 border-radius: 12px !important;
                 padding: 12px 24px !important;
                 cursor: pointer !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+              }
+              /* Target all children inside buttons so text like 'Next Question →' is 100% visible white */
+              button *, .btn *, [class*="next"] *, #next-btn *, #nextBtn * {
+                color: #ffffff !important;
+                opacity: 1 !important;
+                visibility: visible !important;
               }
             </style>
           `;
