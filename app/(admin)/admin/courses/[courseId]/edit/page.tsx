@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2 } from "lucide-react";
+import { Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, Sparkles, Code } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import MathText from "@/components/MathText";
@@ -104,7 +104,7 @@ export default function AdminCourseEditor() {
           const mappedTopics = topicsData.map((topic) => {
             const notes = topic.topic_pdfs.find((p: any) => p.type === 'notes');
             const worksheet = topic.topic_pdfs.find((p: any) => p.type === 'worksheet');
-              const mcqQuiz = topic.quizzes?.find((q: any) => q.questions_data && q.questions_data.length > 0);
+              const mcqQuiz = topic.quizzes?.find((q: any) => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code);
               const pastPaperQuiz = topic.quizzes?.find((q: any) => q.quiz_pdf_url);
 
               return {
@@ -114,7 +114,13 @@ export default function AdminCourseEditor() {
                 youtubeUrl: topic.youtube_url || '',
                 pdfNotesUrl: notes ? notes.file_url : '',
                 pdfWorksheetUrl: worksheet ? worksheet.file_url : '',
-                quizQuestions: mcqQuiz && mcqQuiz.questions_data ? mcqQuiz.questions_data.map((q: any) => ({ ...q, imageUrl: q.imageUrl || '' })) : [],
+                quizQuestions: mcqQuiz && mcqQuiz.questions_data ? mcqQuiz.questions_data.map((q: any) => ({
+                  ...q,
+                  imageUrl: q.imageUrl || '',
+                  optionImages: Array.isArray(q.optionImages) ? q.optionImages : (q.options ? q.options.map((opt: any) => (typeof opt === 'object' && opt?.imageUrl ? opt.imageUrl : '')) : ['', '', '', '']),
+                  explanationImageUrl: q.explanationImageUrl || q.explanation_image_url || q.feedbackImageUrl || q.feedback_image_url || ''
+                })) : [],
+                quizEmbedCode: mcqQuiz ? (mcqQuiz.embed_code || mcqQuiz.settings?.embed_code || '') : '',
                 quizTimeLimit: mcqQuiz?.time_limit_minutes || '',
                 quizPassingScore: mcqQuiz?.passing_score || '70',
                 quizShuffleQuestions: mcqQuiz?.settings?.shuffle_questions || false,
@@ -166,6 +172,7 @@ export default function AdminCourseEditor() {
             pdfNotesUrl: '',
             pdfWorksheetUrl: '',
             quizQuestions: [],
+            quizEmbedCode: '',
             quizTimeLimit: '',
             quizPassingScore: '70',
             quizShuffleQuestions: false,
@@ -211,7 +218,15 @@ export default function AdminCourseEditor() {
       ...s,
       topics: s.topics.map((t: any) => t.id === topicId ? { 
         ...t, 
-        quizQuestions: [...(t.quizQuestions || []), { question: '', imageUrl: '', options: ['', '', '', ''], correctIndex: 0, explanation: '' }] 
+        quizQuestions: [...(t.quizQuestions || []), { 
+          question: '', 
+          imageUrl: '', 
+          options: ['', '', '', ''], 
+          optionImages: ['', '', '', ''],
+          correctIndex: 0, 
+          explanation: '',
+          explanationImageUrl: ''
+        }] 
       } : t)
     } : s));
   };
@@ -226,7 +241,14 @@ export default function AdminCourseEditor() {
           else if (field === 'imageUrl') newQs[qIndex].imageUrl = value;
           else if (field === 'correctIndex') newQs[qIndex].correctIndex = value;
           else if (field === 'explanation') newQs[qIndex].explanation = value;
+          else if (field === 'explanationImageUrl') newQs[qIndex].explanationImageUrl = value;
           else if (field === 'option') newQs[qIndex].options[optIndex!] = value;
+          else if (field === 'optionImage') {
+            if (!newQs[qIndex].optionImages) {
+              newQs[qIndex].optionImages = newQs[qIndex].options ? newQs[qIndex].options.map(() => '') : ['', '', '', ''];
+            }
+            newQs[qIndex].optionImages[optIndex!] = value;
+          }
           else if (field === 'delete') newQs.splice(qIndex, 1);
           return { ...t, quizQuestions: newQs };
         }
@@ -246,18 +268,30 @@ export default function AdminCourseEditor() {
     try {
       const finalIsPublished = publishOverride !== undefined ? publishOverride : isPublished;
       // 1. Update Course
-      const { error: courseError } = await supabase
+      const coursePayload: any = {
+        title: courseTitle,
+        description: courseDescription,
+        thumbnail_url: courseThumbnail,
+        intro_video_url: courseIntroVideo,
+        total_price: parseFloat(coursePrice) || 0,
+        is_published: finalIsPublished,
+        keywords: courseKeywords.split(',').map(k => k.trim()).filter(Boolean)
+      };
+
+      let { error: courseError } = await supabase
         .from('courses')
-        .update({
-          title: courseTitle,
-          description: courseDescription,
-          thumbnail_url: courseThumbnail,
-          intro_video_url: courseIntroVideo,
-          total_price: parseFloat(coursePrice) || 0,
-          is_published: finalIsPublished,
-          keywords: courseKeywords.split(',').map(k => k.trim()).filter(Boolean)
-        })
+        .update(coursePayload)
         .eq('id', courseId);
+
+      if (courseError && (courseError.message?.includes('intro_video_url') || courseError.message?.includes('keywords'))) {
+        if (courseError.message.includes('intro_video_url')) delete coursePayload.intro_video_url;
+        if (courseError.message.includes('keywords')) delete coursePayload.keywords;
+        const fallback = await supabase
+          .from('courses')
+          .update(coursePayload)
+          .eq('id', courseId);
+        courseError = fallback.error;
+      }
 
       if (courseError) throw courseError;
 
@@ -327,55 +361,73 @@ export default function AdminCourseEditor() {
             console.error('Quiz fetch error:', quizFetchError);
             throw quizFetchError;
           }
-          const existingMcqQuiz = existingQuizzes?.find(q => q.questions_data && q.questions_data.length > 0) || null;
+          const existingMcqQuiz = existingQuizzes?.find(q => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code) || null;
 
-          // MCQ Quiz — save or update
-          if (topic.quizQuestions && topic.quizQuestions.length > 0) {
-            const quizPayload = { 
-              questions_data: topic.quizQuestions, 
-              total_marks: topic.quizQuestions.length,
+          const hasQuestions = topic.quizQuestions && topic.quizQuestions.length > 0;
+          const hasEmbed = topic.quizEmbedCode && topic.quizEmbedCode.trim().length > 0;
+
+          if (hasQuestions || hasEmbed) {
+            const quizPayload: any = { 
+              questions_data: hasQuestions ? topic.quizQuestions : null,
+              embed_code: hasEmbed ? topic.quizEmbedCode : null,
+              total_marks: hasQuestions ? topic.quizQuestions.length : (hasEmbed ? 10 : 0),
               time_limit_minutes: parseInt(topic.quizTimeLimit) || null,
               passing_score: parseInt(topic.quizPassingScore) || null,
               settings: {
                 shuffle_questions: topic.quizShuffleQuestions,
-                shuffle_options: topic.quizShuffleOptions
+                shuffle_options: topic.quizShuffleOptions,
+                embed_code: hasEmbed ? topic.quizEmbedCode : null
               }
             };
 
+            let quizSaveError: any = null;
             if (existingMcqQuiz) {
-               const { error: quizUpdateError } = await supabase.from('quizzes').update(quizPayload).eq('id', existingMcqQuiz.id);
-               if (quizUpdateError) {
-                 console.error('Quiz update error:', quizUpdateError);
-                 throw quizUpdateError;
+               let { error } = await supabase.from('quizzes').update(quizPayload).eq('id', existingMcqQuiz.id);
+               if (error && error.message?.includes('embed_code')) {
+                 delete quizPayload.embed_code;
+                 const fallback = await supabase.from('quizzes').update(quizPayload).eq('id', existingMcqQuiz.id);
+                 error = fallback.error;
                }
+               quizSaveError = error;
             } else {
-               // Check if there's any existing quiz for this topic we can reuse
                const existingAny = existingQuizzes && existingQuizzes.length > 0 ? existingQuizzes[0] : null;
                if (existingAny) {
-                 const { error: quizUpdateError } = await supabase.from('quizzes').update(quizPayload).eq('id', existingAny.id);
-                 if (quizUpdateError) {
-                   console.error('Quiz update error:', quizUpdateError);
-                   throw quizUpdateError;
+                 let { error } = await supabase.from('quizzes').update(quizPayload).eq('id', existingAny.id);
+                 if (error && error.message?.includes('embed_code')) {
+                   delete quizPayload.embed_code;
+                   const fallback = await supabase.from('quizzes').update(quizPayload).eq('id', existingAny.id);
+                   error = fallback.error;
                  }
+                 quizSaveError = error;
                } else {
-                 const { error: quizInsertError } = await supabase.from('quizzes').insert({ 
+                 let { error } = await supabase.from('quizzes').insert({ 
                    topic_id: dbTopicId, 
                    section_id: dbSectionId, 
                    type: 'topic', 
                    ...quizPayload
                  });
-                 if (quizInsertError) {
-                   console.error('Quiz insert error:', quizInsertError);
-                   throw quizInsertError;
+                 if (error && error.message?.includes('embed_code')) {
+                   delete quizPayload.embed_code;
+                   const fallback = await supabase.from('quizzes').insert({ 
+                     topic_id: dbTopicId, 
+                     section_id: dbSectionId, 
+                     type: 'topic', 
+                     ...quizPayload
+                   });
+                   error = fallback.error;
                  }
+                 quizSaveError = error;
                }
             }
+            if (quizSaveError) {
+              console.error('Quiz save error:', quizSaveError);
+              throw quizSaveError;
+            }
           } else if (existingMcqQuiz) {
-            // If questions were removed, clear the quiz data
-            const { error: quizClearError } = await supabase.from('quizzes').update({ questions_data: null, total_marks: 0 }).eq('id', existingMcqQuiz.id);
-            if (quizClearError) {
-              console.error('Quiz clear error:', quizClearError);
-              throw quizClearError;
+            // If quiz data was cleared, reset quiz columns
+            const { error: quizClearError } = await supabase.from('quizzes').update({ questions_data: null, embed_code: null, total_marks: 0 }).eq('id', existingMcqQuiz.id);
+            if (quizClearError && quizClearError.message?.includes('embed_code')) {
+              await supabase.from('quizzes').update({ questions_data: null, total_marks: 0 }).eq('id', existingMcqQuiz.id);
             }
           }
 
@@ -591,166 +643,339 @@ export default function AdminCourseEditor() {
                         </div>
 
                         {/* Quiz Builder */}
-                        <div className="pt-4 border-t border-gray-200">
+                        <div className="pt-6 border-t border-gray-200 mt-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                            <div>
+                              <h4 className="font-bold text-base text-text flex items-center gap-2">
+                                Topic Quiz
+                              </h4>
+                              <p className="text-xs text-text/60">Select how to create the quiz for this topic:</p>
+                            </div>
 
-
-                          <div className="flex items-center justify-between mb-4 mt-8">
-                            <div>
-                              <h4 className="font-bold text-sm text-text">MCQ Quiz Maker</h4>
-                              <p className="text-xs text-text/60">Generate auto-correcting multiple choice questions for this topic.</p>
-                            </div>
-                            <button 
-                              onClick={() => addQuizQuestion(section.id, topic.id)}
-                              className="text-xs font-bold text-white bg-text px-3 py-2 rounded-lg hover:bg-text/90 shadow-sm"
-                            >
-                              + Add Question
-                            </button>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                            <div>
-                              <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Time Limit (Min)</label>
-                              <input 
-                                type="number" 
-                                value={topic.quizTimeLimit}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'quizTimeLimit', e.target.value)}
-                                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary"
-                                placeholder="None"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Passing Score (%)</label>
-                              <input 
-                                type="number" 
-                                value={topic.quizPassingScore}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'quizPassingScore', e.target.value)}
-                                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary"
-                                placeholder="70"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2 pt-5">
-                              <input 
-                                type="checkbox" 
-                                id={`shuffle-q-${topic.id}`}
-                                checked={topic.quizShuffleQuestions}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'quizShuffleQuestions', e.target.checked)}
-                                className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
-                              />
-                              <label htmlFor={`shuffle-q-${topic.id}`} className="text-xs font-medium text-text/70">Shuffle Qs</label>
-                            </div>
-                            <div className="flex items-center gap-2 pt-5">
-                              <input 
-                                type="checkbox" 
-                                id={`shuffle-o-${topic.id}`}
-                                checked={topic.quizShuffleOptions}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'quizShuffleOptions', e.target.checked)}
-                                className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
-                              />
-                              <label htmlFor={`shuffle-o-${topic.id}`} className="text-xs font-medium text-text/70">Shuffle Options</label>
+                            {/* Mode Switcher Tabs */}
+                            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200/60 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => updateTopicField(section.id, topic.id, 'quizMode', 'manual')}
+                                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                                  (topic.quizMode || (topic.quizEmbedCode && (!topic.quizQuestions || topic.quizQuestions.length === 0) ? 'canva' : 'manual')) === 'manual' 
+                                    ? 'bg-white text-text shadow-sm' 
+                                    : 'text-text/60 hover:text-text'
+                                }`}
+                              >
+                                <FileText className="w-4 h-4" /> Create Quiz Manually (MCQ)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateTopicField(section.id, topic.id, 'quizMode', 'canva')}
+                                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                                  (topic.quizMode || (topic.quizEmbedCode && (!topic.quizQuestions || topic.quizQuestions.length === 0) ? 'canva' : 'manual')) === 'canva' 
+                                    ? 'bg-purple-600 text-white shadow-sm' 
+                                    : 'text-purple-700 hover:bg-purple-50'
+                                }`}
+                              >
+                                <Sparkles className="w-4 h-4" /> Embed Canva AI Code
+                              </button>
                             </div>
                           </div>
-                          
-                          <div className="space-y-4">
-                            {topic.quizQuestions?.map((q: any, qIndex: number) => (
-                              <div key={qIndex} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative">
-                                <button 
-                                  onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'delete', null)}
-                                  className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors"
-                                  title="Delete Question"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                                <div className="flex gap-4 mb-4 pr-8">
-                                  <div className="flex-1">
-                                    <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Text (Optional if using image) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
-                                    <textarea 
-                                      value={q.question}
-                                      onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'question', e.target.value)}
-                                      placeholder={`Enter question ${qIndex + 1} here... Use $x^2$ for math`}
-                                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none font-bold text-text resize-none h-16" 
-                                    />
-                                    {q.question && /\$/.test(q.question) && (
-                                      <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
-                                        <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
-                                        <MathText text={q.question} className="text-sm font-bold text-text" block />
-                                      </div>
-                                    )}
+
+                          {(topic.quizMode || (topic.quizEmbedCode && (!topic.quizQuestions || topic.quizQuestions.length === 0) ? 'canva' : 'manual')) === 'canva' ? (
+                            /* CANVA AI MODE */
+                            <div className="bg-gradient-to-br from-purple-50 via-white to-purple-50/40 p-6 rounded-2xl border border-purple-200 shadow-sm">
+                              <div className="flex items-center justify-between mb-3">
+                                <div>
+                                  <h5 className="font-bold text-sm text-text flex items-center gap-2">
+                                    <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase">Canva AI</span>
+                                    Copy & Paste Canva HTML Code
+                                  </h5>
+                                  <p className="text-xs text-text/60 mt-1">Paste the full HTML code generated by Canva AI below (starts with <code className="bg-purple-100 text-purple-800 px-1 rounded">&lt;!doctype html&gt;</code> or <code className="bg-purple-100 text-purple-800 px-1 rounded">&lt;iframe&gt;</code>).</p>
+                                </div>
+                                {topic.quizEmbedCode && (
+                                  <button 
+                                    type="button"
+                                    onClick={() => updateTopicField(section.id, topic.id, 'quizEmbedCode', '')}
+                                    className="text-xs text-red-500 hover:text-red-700 font-medium px-2.5 py-1 rounded-md bg-white border border-red-100 shadow-xs"
+                                  >
+                                    Clear Code
+                                  </button>
+                                )}
+                              </div>
+
+                              <textarea 
+                                value={topic.quizEmbedCode || ''}
+                                onChange={(e) => updateTopicField(section.id, topic.id, 'quizEmbedCode', e.target.value)}
+                                placeholder="<!doctype html>... Paste your Canva AI interactive quiz code here"
+                                className="w-full text-xs font-mono p-4 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none h-36 bg-white shadow-inner resize-y"
+                              />
+
+                              {topic.quizEmbedCode ? (
+                                <div className="mt-4 bg-gray-900 rounded-xl p-4 overflow-hidden border border-gray-800">
+                                  <div className="flex items-center justify-between text-white text-xs mb-3 pb-2 border-b border-gray-800">
+                                    <span className="font-bold flex items-center gap-2 text-purple-400">
+                                      <Sparkles className="w-4 h-4" /> Live Interactive Canva Quiz Preview
+                                    </span>
+                                    <span className="text-[10px] text-gray-400">Student Interactive View</span>
                                   </div>
-                                  <div className="w-1/3">
-                                    <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Image (Optional)</label>
-                                    <div className="flex gap-2">
-                                      <input 
-                                        type="text" 
-                                        value={q.imageUrl || ''}
-                                        onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', e.target.value)}
-                                        placeholder={`Image URL`}
-                                        className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                      />
-                                      <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-md font-medium transition-colors flex items-center justify-center text-sm">
-                                        {uploadingField === `q_img_${topic.id}_${qIndex}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4" />}
-                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `q_img_${topic.id}_${qIndex}`, (url) => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', url))} disabled={uploadingField === `q_img_${topic.id}_${qIndex}`} />
-                                      </label>
-                                    </div>
+                                  <div className="bg-white rounded-lg overflow-hidden border border-gray-700 h-[450px]">
+                                    <iframe 
+                                      srcDoc={topic.quizEmbedCode}
+                                      className="w-full h-full border-0"
+                                      title="Canva Quiz Preview"
+                                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                                    />
                                   </div>
                                 </div>
-                                {q.imageUrl && (
-                                  <div className="mb-4">
-                                    <img src={q.imageUrl} alt={`Question ${qIndex + 1}`} className="max-h-48 rounded-md object-contain border border-gray-200" />
-                                  </div>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  {q.options.map((opt: string, optIndex: number) => (
-                                    <div key={optIndex} className="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                                      <div className="relative flex items-center justify-center">
-                                        <input 
-                                          type="radio" 
-                                          name={`correct-${section.id}-${topic.id}-${qIndex}`}
-                                          checked={q.correctIndex === optIndex}
-                                          onChange={() => updateQuizQuestion(section.id, topic.id, qIndex, 'correctIndex', optIndex)}
-                                          className="w-4 h-4 text-green-500 focus:ring-green-500 border-gray-300 cursor-pointer"
+                              ) : (
+                                <div className="mt-3 p-4 bg-purple-50/60 rounded-xl border border-dashed border-purple-200 text-center">
+                                  <p className="text-xs text-purple-700 font-medium">
+                                    Paste your Canva AI code in the box above to generate and preview the interactive quiz widget.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* MANUAL MCQ QUIZ MAKER MODE */
+                            <div>
+                              <div className="flex items-center justify-between mb-4">
+                                <div>
+                                  <h5 className="font-bold text-sm text-text">Multiple Choice (MCQ) Questions</h5>
+                                  <p className="text-xs text-text/60">Generate auto-correcting multiple choice questions for this topic.</p>
+                                </div>
+                                <button 
+                                  type="button"
+                                  onClick={() => addQuizQuestion(section.id, topic.id)}
+                                  className="text-xs font-bold text-white bg-text px-4 py-2.5 rounded-xl hover:bg-text/90 shadow-sm flex items-center gap-1"
+                                >
+                                  <Plus className="w-4 h-4" /> Add Question
+                                </button>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                <div>
+                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Time Limit (Min)</label>
+                                  <input 
+                                    type="number" 
+                                    value={topic.quizTimeLimit}
+                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizTimeLimit', e.target.value)}
+                                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="None"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Passing Score (%)</label>
+                                  <input 
+                                    type="number" 
+                                    value={topic.quizPassingScore}
+                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizPassingScore', e.target.value)}
+                                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="70"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2 pt-5">
+                                  <input 
+                                    type="checkbox" 
+                                    id={`shuffle-q-${topic.id}`}
+                                    checked={topic.quizShuffleQuestions}
+                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizShuffleQuestions', e.target.checked)}
+                                    className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
+                                  />
+                                  <label htmlFor={`shuffle-q-${topic.id}`} className="text-xs font-medium text-text/70">Shuffle Qs</label>
+                                </div>
+                                <div className="flex items-center gap-2 pt-5">
+                                  <input 
+                                    type="checkbox" 
+                                    id={`shuffle-o-${topic.id}`}
+                                    checked={topic.quizShuffleOptions}
+                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizShuffleOptions', e.target.checked)}
+                                    className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
+                                  />
+                                  <label htmlFor={`shuffle-o-${topic.id}`} className="text-xs font-medium text-text/70">Shuffle Options</label>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-4">
+                                {topic.quizQuestions?.map((q: any, qIndex: number) => (
+                                  <div key={qIndex} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative">
+                                    <button 
+                                      type="button"
+                                      onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'delete', null)}
+                                      className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors"
+                                      title="Delete Question"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                    <div className="flex gap-4 mb-4 pr-8">
+                                      <div className="flex-1">
+                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Text (Optional if using image) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
+                                        <textarea 
+                                          value={q.question}
+                                          onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'question', e.target.value)}
+                                          placeholder={`Enter question ${qIndex + 1} here... Use $x^2$ for math`}
+                                          className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none font-bold text-text resize-none h-16" 
                                         />
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <input 
-                                          type="text" 
-                                          value={opt}
-                                          onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'option', e.target.value, optIndex)}
-                                          placeholder={`Option ${optIndex + 1} — use $...$ for math`}
-                                          className="w-full text-xs px-2 py-1.5 border border-gray-200 bg-white rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                        />
-                                        {opt && /\$/.test(opt) && (
-                                          <MathText text={opt} className="block mt-1 text-xs text-text/70 px-2" />
+                                        {q.question && /\$/.test(q.question) && (
+                                          <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
+                                            <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
+                                            <MathText text={q.question} className="text-sm font-bold text-text" block />
+                                          </div>
                                         )}
                                       </div>
-                                      {q.correctIndex === optIndex && (
-                                        <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-1 rounded">Correct</span>
-                                      )}
+                                      <div className="w-1/3">
+                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Image (Optional)</label>
+                                        <div className="flex gap-2">
+                                          <input 
+                                            type="text" 
+                                            value={q.imageUrl || ''}
+                                            onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', e.target.value)}
+                                            placeholder={`Image URL`}
+                                            className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
+                                          />
+                                          <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-md font-medium transition-colors flex items-center justify-center text-sm shrink-0">
+                                            {uploadingField === `q_img_${topic.id}_${qIndex}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4" />}
+                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `q_img_${topic.id}_${qIndex}`, (url) => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', url))} disabled={uploadingField === `q_img_${topic.id}_${qIndex}`} />
+                                          </label>
+                                          {q.imageUrl && (
+                                            <button 
+                                              type="button"
+                                              onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', '')}
+                                              className="text-gray-400 hover:text-red-500 p-2"
+                                              title="Remove Question Image"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
-                                  ))}
-                                </div>
-                                <div className="mt-4">
-                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Explanation (Shown after submission) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
-                                  <textarea 
-                                    value={q.explanation}
-                                    onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanation', e.target.value)}
-                                    placeholder="Explain why the correct answer is right... Use $x^2$ for math"
-                                    className="w-full text-xs px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none h-16 resize-none"
-                                  />
-                                  {q.explanation && /\$/.test(q.explanation) && (
-                                    <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
-                                      <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
-                                      <MathText text={q.explanation} className="text-xs text-text/80" block />
+                                    {q.imageUrl && (
+                                      <div className="mb-4">
+                                        <img src={q.imageUrl} alt={`Question ${qIndex + 1}`} className="max-h-48 rounded-md object-contain border border-gray-200" />
+                                      </div>
+                                    )}
+
+                                    {/* Answer Options */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {q.options.map((opt: string, optIndex: number) => (
+                                        <div key={optIndex} className="bg-gray-50 p-2.5 rounded-lg border border-gray-100 space-y-2">
+                                          <div className="flex items-center gap-3">
+                                            <div className="relative flex items-center justify-center">
+                                              <input 
+                                                type="radio" 
+                                                name={`correct-${section.id}-${topic.id}-${qIndex}`}
+                                                checked={q.correctIndex === optIndex}
+                                                onChange={() => updateQuizQuestion(section.id, topic.id, qIndex, 'correctIndex', optIndex)}
+                                                className="w-4 h-4 text-green-500 focus:ring-green-500 border-gray-300 cursor-pointer"
+                                              />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <input 
+                                                type="text" 
+                                                value={opt}
+                                                onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'option', e.target.value, optIndex)}
+                                                placeholder={`Option ${optIndex + 1} — use $...$ for math`}
+                                                className="w-full text-xs px-2 py-1.5 border border-gray-200 bg-white rounded-md focus:ring-2 focus:ring-primary outline-none" 
+                                              />
+                                              {opt && /\$/.test(opt) && (
+                                                <MathText text={opt} className="block mt-1 text-xs text-text/70 px-2" />
+                                              )}
+                                            </div>
+                                            {q.correctIndex === optIndex && (
+                                              <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-1 rounded">Correct</span>
+                                            )}
+                                          </div>
+
+                                          {/* Option Image Field */}
+                                          <div className="pl-7 flex items-center gap-2">
+                                            <input 
+                                              type="text" 
+                                              value={q.optionImages?.[optIndex] || ''}
+                                              onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'optionImage', e.target.value, optIndex)}
+                                              placeholder={`Option ${optIndex + 1} Image URL (Optional)`}
+                                              className="w-full text-[11px] px-2 py-1 border border-gray-200 bg-white rounded-md focus:ring-2 focus:ring-primary outline-none" 
+                                            />
+                                            <label className="cursor-pointer bg-gray-200 hover:bg-gray-300 text-text px-2 py-1 rounded-md font-medium transition-colors flex items-center justify-center text-xs shrink-0" title="Upload Option Image">
+                                              {uploadingField === `opt_img_${topic.id}_${qIndex}_${optIndex}` ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Upload className="w-3.5 h-3.5" />}
+                                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `opt_img_${topic.id}_${qIndex}_${optIndex}`, (url) => updateQuizQuestion(section.id, topic.id, qIndex, 'optionImage', url, optIndex))} disabled={uploadingField === `opt_img_${topic.id}_${qIndex}_${optIndex}`} />
+                                            </label>
+                                            {q.optionImages?.[optIndex] && (
+                                              <button 
+                                                type="button"
+                                                onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'optionImage', '', optIndex)}
+                                                className="text-gray-400 hover:text-red-500 p-1"
+                                                title="Remove Option Image"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            )}
+                                          </div>
+                                          {q.optionImages?.[optIndex] && (
+                                            <div className="pl-7">
+                                              <img src={q.optionImages[optIndex]} alt={`Option ${optIndex + 1}`} className="max-h-24 rounded-md object-contain border border-gray-200 bg-white" />
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
                                     </div>
-                                  )}
-                                </div>
+
+                                    {/* Explanation / Feedback */}
+                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                      <div className="md:col-span-2">
+                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Explanation / Feedback (Shown after submission) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
+                                        <textarea 
+                                          value={q.explanation}
+                                          onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanation', e.target.value)}
+                                          placeholder="Explain why the correct answer is right... Use $x^2$ for math"
+                                          className="w-full text-xs px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none h-20 resize-none"
+                                        />
+                                        {q.explanation && /\$/.test(q.explanation) && (
+                                          <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
+                                            <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
+                                            <MathText text={q.explanation} className="text-xs text-text/80" block />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Feedback Image (Optional)</label>
+                                        <div className="flex gap-2">
+                                          <input 
+                                            type="text" 
+                                            value={q.explanationImageUrl || ''}
+                                            onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanationImageUrl', e.target.value)}
+                                            placeholder="Feedback Image URL"
+                                            className="w-full text-xs px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
+                                          />
+                                          <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-md font-medium transition-colors flex items-center justify-center text-sm shrink-0">
+                                            {uploadingField === `exp_img_${topic.id}_${qIndex}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4" />}
+                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `exp_img_${topic.id}_${qIndex}`, (url) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanationImageUrl', url))} disabled={uploadingField === `exp_img_${topic.id}_${qIndex}`} />
+                                          </label>
+                                          {q.explanationImageUrl && (
+                                            <button 
+                                              type="button"
+                                              onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'explanationImageUrl', '')}
+                                              className="text-gray-400 hover:text-red-500 p-2"
+                                              title="Remove Feedback Image"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          )}
+                                        </div>
+                                        {q.explanationImageUrl && (
+                                          <div className="mt-2">
+                                            <img src={q.explanationImageUrl} alt="Feedback explanation" className="max-h-32 rounded-md object-contain border border-gray-200 bg-white" />
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                                {(!topic.quizQuestions || topic.quizQuestions.length === 0) && (
+                                  <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
+                                    <p className="text-sm text-text/60">No MCQ quiz questions added yet. Click "+ Add Question" above.</p>
+                                  </div>
+                                )}
                               </div>
-                            ))}
-                            {(!topic.quizQuestions || topic.quizQuestions.length === 0) && (
-                              <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-                                <p className="text-sm text-text/60">No quiz questions added yet.</p>
-                              </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

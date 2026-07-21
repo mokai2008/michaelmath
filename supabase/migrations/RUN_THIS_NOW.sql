@@ -97,3 +97,7 @@ DROP POLICY IF EXISTS "Admin can manage availability slots." ON public.admin_ava
 CREATE POLICY "Admin can manage availability slots."
   ON public.admin_availability_slots FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+-- 4. Add keywords and intro_video_url to courses table
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS keywords text[] DEFAULT '{}'::text[];
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS intro_video_url text;
+

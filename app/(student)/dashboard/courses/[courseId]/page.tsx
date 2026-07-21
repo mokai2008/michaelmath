@@ -13,7 +13,8 @@ import {
   Upload,
   X,
   ZoomIn,
-  ShoppingCart
+  ShoppingCart,
+  Sparkles
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -754,11 +755,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   <div className="mt-8 pt-8 border-t border-gray-100">
                     <h3 className="font-bold text-lg text-text mb-4">Topic Quizzes</h3>
                     <div className="space-y-4">
-                      {activeTopic.quizzes.filter((q: any) => q.questions_data && q.questions_data.length > 0).map((quiz: any) => {
+                      {activeTopic.quizzes.filter((q: any) => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code).map((quiz: any) => {
                         const submission = quiz.quiz_submissions && quiz.quiz_submissions.length > 0 
                           ? [...quiz.quiz_submissions].sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())[0] 
                           : null;
                         const hasQuestions = quiz.questions_data && quiz.questions_data.length > 0;
+                        const isCanvaQuiz = !!(quiz.embed_code || quiz.settings?.embed_code);
 
                         if (takingQuiz && takingQuiz.id === quiz.id) {
                           // Interactive Quiz UI
@@ -945,8 +947,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         return (
                           <div key={quiz.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
-                              <div className="font-bold text-text">{hasQuestions ? 'Interactive MCQ Quiz' : 'Past Paper Quiz'}</div>
-                              <div className="text-sm text-text/60">Total Marks: {quiz.total_marks}</div>
+                              <div className="font-bold text-text flex items-center gap-2">
+                                {isCanvaQuiz && <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-0.5 rounded">Canva AI</span>}
+                                {isCanvaQuiz ? 'Canva AI Interactive Quiz' : (hasQuestions ? 'Interactive MCQ Quiz' : 'Past Paper Quiz')}
+                              </div>
+                              <div className="text-sm text-text/60">{isCanvaQuiz ? 'Interactive Canva Learning Widget' : `Total Marks: ${quiz.total_marks}`}</div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               {quiz.quiz_pdf_url && (
@@ -958,7 +963,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   <div className="flex flex-col gap-2 w-full md:w-auto mr-4">
                                     <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
                                       <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                      {hasQuestions ? (
+                                      {isCanvaQuiz ? (
+                                        <span className="font-bold text-green-700">Quiz Completed</span>
+                                      ) : hasQuestions ? (
                                         <span className="font-bold text-green-700">Score: {submission.score} / {quiz.total_marks}</span>
                                       ) : (
                                         <span className="font-bold text-green-700">Answers Submitted</span>
@@ -967,7 +974,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   </div>
                                 )}
 
-                                {hasQuestions ? (
+                                {isCanvaQuiz ? (
+                                  <button 
+                                    onClick={() => setCanvaQuizModal(quiz)}
+                                    className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl text-sm shadow-sm transition-all flex items-center gap-2"
+                                  >
+                                    <Sparkles className="w-4 h-4" /> {submission ? 'Retake Canva Quiz' : 'Start Canva Quiz'}
+                                  </button>
+                                ) : hasQuestions ? (
                                   <button onClick={() => startQuiz(quiz)} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 flex items-center gap-1 shadow-sm">
                                     {submission ? 'Retake Quiz' : 'Take Quiz Now'}
                                   </button>
@@ -1061,6 +1075,53 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {/* Canva AI Quiz Fullscreen Modal */}
+      {canvaQuizModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-white">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-text text-lg">{activeTopic?.title || 'Interactive Quiz'}: Canva AI Quiz</h3>
+                  <p className="text-xs text-text/60">Complete the interactive questions below</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setCanvaQuizModal(null)} 
+                className="text-text/50 hover:text-text p-2 font-bold text-sm bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 bg-gray-900 p-2 md:p-4 relative">
+              <iframe 
+                srcDoc={canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code} 
+                className="w-full h-full border-0 rounded-2xl bg-white shadow-lg"
+                title="Canva Quiz"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              />
+            </div>
+
+            <div className="p-4 border-t border-gray-100 bg-white flex items-center justify-between">
+              <span className="text-xs text-text/60">Canva AI Interactive Learning Widget</span>
+              <button 
+                onClick={() => {
+                  handleQuizSubmit(canvaQuizModal.id, 10, {});
+                  setCanvaQuizModal(null);
+                }}
+                className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Mark Canva Quiz as Completed
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
