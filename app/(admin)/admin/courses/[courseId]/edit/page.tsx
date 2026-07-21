@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import MathText from "@/components/MathText";
 
 export default function AdminCourseEditor() {
   const { courseId } = useParams();
@@ -647,14 +648,19 @@ export default function AdminCourseEditor() {
                                 </button>
                                 <div className="flex gap-4 mb-4 pr-8">
                                   <div className="flex-1">
-                                    <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Text (Optional if using image)</label>
-                                    <input 
-                                      type="text" 
+                                    <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Text (Optional if using image) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
+                                    <textarea 
                                       value={q.question}
                                       onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'question', e.target.value)}
-                                      placeholder={`Enter question ${qIndex + 1} here...`}
-                                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none font-bold text-text" 
+                                      placeholder={`Enter question ${qIndex + 1} here... Use $x^2$ for math`}
+                                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none font-bold text-text resize-none h-16" 
                                     />
+                                    {q.question && /\$/.test(q.question) && (
+                                      <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
+                                        <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
+                                        <MathText text={q.question} className="text-sm font-bold text-text" block />
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="w-1/3">
                                     <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Image (Optional)</label>
@@ -690,13 +696,18 @@ export default function AdminCourseEditor() {
                                           className="w-4 h-4 text-green-500 focus:ring-green-500 border-gray-300 cursor-pointer"
                                         />
                                       </div>
-                                      <input 
-                                        type="text" 
-                                        value={opt}
-                                        onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'option', e.target.value, optIndex)}
-                                        placeholder={`Option ${optIndex + 1}`}
-                                        className="w-full text-xs px-2 py-1.5 border border-gray-200 bg-white rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <input 
+                                          type="text" 
+                                          value={opt}
+                                          onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'option', e.target.value, optIndex)}
+                                          placeholder={`Option ${optIndex + 1} — use $...$ for math`}
+                                          className="w-full text-xs px-2 py-1.5 border border-gray-200 bg-white rounded-md focus:ring-2 focus:ring-primary outline-none" 
+                                        />
+                                        {opt && /\$/.test(opt) && (
+                                          <MathText text={opt} className="block mt-1 text-xs text-text/70 px-2" />
+                                        )}
+                                      </div>
                                       {q.correctIndex === optIndex && (
                                         <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-1 rounded">Correct</span>
                                       )}
@@ -704,13 +715,19 @@ export default function AdminCourseEditor() {
                                   ))}
                                 </div>
                                 <div className="mt-4">
-                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Explanation (Shown after submission)</label>
+                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Explanation (Shown after submission) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
                                   <textarea 
                                     value={q.explanation}
                                     onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanation', e.target.value)}
-                                    placeholder="Explain why the correct answer is right..."
+                                    placeholder="Explain why the correct answer is right... Use $x^2$ for math"
                                     className="w-full text-xs px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none h-16 resize-none"
                                   />
+                                  {q.explanation && /\$/.test(q.explanation) && (
+                                    <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
+                                      <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
+                                      <MathText text={q.explanation} className="text-xs text-text/80" block />
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             ))}

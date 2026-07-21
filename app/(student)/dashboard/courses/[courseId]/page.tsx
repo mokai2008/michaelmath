@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import MathText from "@/components/MathText";
 
 export default function CoursePlayerPage({ params }: { params: { courseId: string } }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -918,7 +919,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               {i + 1}
                             </span>
                             <div className="flex-1">
-                              {q.question && <p className="font-bold text-text leading-snug mb-2">{q.question}</p>}
+                              {q.question && <div className="font-bold text-text leading-snug mb-2"><MathText text={q.question} block /></div>}
                               {q.imageUrl && (
                                 <button onClick={() => setLightboxImage(q.imageUrl)} className="group relative cursor-zoom-in">
                                   <img src={q.imageUrl} alt={`Question ${i + 1}`} className="max-h-48 rounded-md border border-gray-100 object-contain transition-opacity group-hover:opacity-80" />
@@ -937,7 +938,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   optIdx === studentIdx ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-100 text-text/50'
                                 }`}
                               >
-                                {opt}
+                                <MathText text={opt} />
                                 {optIdx === q.correctIndex && <CheckCircle2 className="w-4 h-4" />}
                               </div>
                             ))}
@@ -946,7 +947,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           {q.explanation && (
                             <div className="bg-primary/5 p-4 rounded-xl border border-primary/10">
                               <p className="text-[10px] uppercase font-bold text-primary/50 mb-1">Explanation</p>
-                              <p className="text-sm text-text/80 leading-relaxed italic">"{q.explanation}"</p>
+                              <div className="text-sm text-text/80 leading-relaxed italic"><MathText text={q.explanation} block /></div>
                             </div>
                           )}
                         </div>
@@ -962,7 +963,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       <div className="flex items-start gap-3 mb-4">
                         <span className="font-bold text-primary text-lg shrink-0">Q{i + 1}.</span> 
                         <div className="flex-1">
-                          {q.question && <p className="font-bold text-text text-lg mb-2">{q.question}</p>}
+                          {q.question && <div className="font-bold text-text text-lg mb-2"><MathText text={q.question} block /></div>}
                           {q.imageUrl && (
                             <button onClick={() => setLightboxImage(q.imageUrl)} className="group relative cursor-zoom-in">
                               <img src={q.imageUrl} alt={`Question ${i + 1}`} className="max-h-64 rounded-xl border border-gray-100 object-contain transition-opacity group-hover:opacity-80" />
@@ -988,7 +989,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               }`}>
                                 {String.fromCharCode(65 + optIndex)}
                               </div>
-                              {opt}
+                              <MathText text={opt} />
                             </div>
                           </button>
                         ))}
