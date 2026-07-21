@@ -755,9 +755,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   <div className="mt-8 pt-8 border-t border-gray-100">
                     <h3 className="font-bold text-lg text-text mb-4">Topic Quizzes</h3>
                     <div className="space-y-4">
-                      {activeTopic.quizzes.filter((q: any) => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code).map((quiz: any) => {
-                        const submission = quiz.quiz_submissions && quiz.quiz_submissions.length > 0 
-                          ? [...quiz.quiz_submissions].sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())[0] 
+                      {(activeTopic.quizzes || []).map((quiz: any) => {
+                        const rawSubmissions = Array.isArray(quiz.quiz_submissions) 
+                          ? quiz.quiz_submissions 
+                          : (quiz.quiz_submissions ? [quiz.quiz_submissions] : []);
+                        const submission = rawSubmissions.length > 0 
+                          ? [...rawSubmissions].sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())[0] 
                           : null;
                         const hasQuestions = quiz.questions_data && quiz.questions_data.length > 0;
                         const isCanvaQuiz = !!(quiz.embed_code || quiz.settings?.embed_code);
@@ -770,7 +773,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                 <div className="flex justify-between items-center">
                                   <div>
                                     <h4 className="font-bold text-lg text-text">Taking Topic Quiz</h4>
-                                    <p className="text-sm text-text/60">{quiz.questions_data.length} Questions</p>
+                                    <p className="text-sm text-text/60">{(quiz.questions_data || []).length} Questions</p>
                                   </div>
                                 </div>
                               </div>
