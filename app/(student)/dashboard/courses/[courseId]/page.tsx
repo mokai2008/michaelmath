@@ -1154,9 +1154,42 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         const rawCode = (canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || '').trim();
         const isDirectUrl = rawCode.startsWith('http://') || rawCode.startsWith('https://');
 
+        // Inject CSS fix so flexbox align-center inside embed code doesn't clip top title or bottom Next Question button
+        const prepareSrcDoc = (html: string) => {
+          if (!html) return '';
+          const styleInjection = `
+            <style id="lms-quiz-iframe-fix">
+              html, body {
+                margin: 0 !important;
+                padding: 16px 8px !important;
+                min-height: 100% !important;
+                height: auto !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: flex-start !important;
+                align-items: center !important;
+                overflow-y: auto !important;
+                box-sizing: border-box !important;
+              }
+              * {
+                box-sizing: border-box !important;
+              }
+            </style>
+          `;
+
+          if (html.includes('</head>')) {
+            return html.replace('</head>', `${styleInjection}</head>`);
+          } else if (html.includes('<body')) {
+            return html.replace(/<body([^>]*)>/i, `<head>${styleInjection}</head><body$1>`);
+          }
+          return `<!DOCTYPE html><html><head>${styleInjection}</head><body>${html}</body></html>`;
+        };
+
+        const formattedHtml = isDirectUrl ? '' : prepareSrcDoc(rawCode);
+
         return (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
-            <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-6xl h-[95vh] flex flex-col shadow-2xl overflow-hidden">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
@@ -1175,11 +1208,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 </button>
               </div>
 
-              <div className="flex-1 bg-white p-1 sm:p-3 relative overflow-hidden min-h-0">
+              <div className="flex-1 bg-white p-0 relative overflow-hidden min-h-0">
                 {isDirectUrl ? (
                   <iframe 
                     src={rawCode} 
-                    className="w-full h-full border-0 rounded-xl bg-white"
+                    className="w-full h-full border-0 bg-white"
                     title="Interactive Quiz"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
@@ -1187,8 +1220,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   />
                 ) : (
                   <iframe 
-                    srcDoc={rawCode} 
-                    className="w-full h-full border-0 rounded-xl bg-white"
+                    srcDoc={formattedHtml} 
+                    className="w-full h-full border-0 bg-white"
                     title="Interactive Quiz"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
