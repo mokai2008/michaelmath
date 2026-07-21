@@ -1154,25 +1154,54 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         const rawCode = (canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || '').trim();
         const isDirectUrl = rawCode.startsWith('http://') || rawCode.startsWith('https://');
 
-        // Inject CSS fix so flexbox align-center inside embed code doesn't clip top title or bottom Next Question button
+        // Inject CSS fix for background theme, Next Question button contrast, and scaling
         const prepareSrcDoc = (html: string) => {
           if (!html) return '';
           const styleInjection = `
             <style id="lms-quiz-iframe-fix">
-              html, body {
+              html {
+                background-color: #1e1b4b !important;
+                height: 100% !important;
+              }
+              body {
                 margin: 0 !important;
-                padding: 16px 8px !important;
+                padding: 24px 16px !important;
                 min-height: 100% !important;
                 height: auto !important;
+                background-color: #1e1b4b !important;
+                color: #ffffff !important;
                 display: flex !important;
                 flex-direction: column !important;
                 justify-content: flex-start !important;
                 align-items: center !important;
                 overflow-y: auto !important;
                 box-sizing: border-box !important;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
               }
               * {
                 box-sizing: border-box !important;
+              }
+              /* Optimal width for card container so quiz feels large and readable */
+              .container, .quiz-container, .card, [class*="container"], [class*="card"] {
+                max-width: 680px !important;
+                width: 100% !important;
+              }
+              /* Fix Next Question / Submit / Continue buttons to be vibrant indigo with bold white text */
+              button[id*="next"], button[class*="next"], 
+              button[onclick*="next"], button[onclick*="Next"],
+              .next-btn, .btn-next, #next-btn, #nextBtn,
+              button:not([class*="option"]):not([class*="choice"]):not([class*="alt"]) {
+                background: #4f46e5 !important;
+                background-color: #4f46e5 !important;
+                color: #ffffff !important;
+                font-weight: 700 !important;
+                border: none !important;
+                box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4) !important;
+                min-height: 48px !important;
+                font-size: 16px !important;
+                border-radius: 12px !important;
+                padding: 12px 24px !important;
+                cursor: pointer !important;
               }
             </style>
           `;
@@ -1189,7 +1218,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
         return (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
-            <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-6xl h-[95vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
@@ -1208,11 +1237,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 </button>
               </div>
 
-              <div className="flex-1 bg-white p-0 relative overflow-hidden min-h-0">
+              <div className="flex-1 bg-[#1e1b4b] p-0 relative overflow-hidden min-h-0">
                 {isDirectUrl ? (
                   <iframe 
                     src={rawCode} 
-                    className="w-full h-full border-0 bg-white"
+                    className="w-full h-full border-0 bg-[#1e1b4b]"
                     title="Interactive Quiz"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
@@ -1221,7 +1250,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 ) : (
                   <iframe 
                     srcDoc={formattedHtml} 
-                    className="w-full h-full border-0 bg-white"
+                    className="w-full h-full border-0 bg-[#1e1b4b]"
                     title="Interactive Quiz"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
