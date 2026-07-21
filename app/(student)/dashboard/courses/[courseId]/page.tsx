@@ -48,104 +48,115 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
   useEffect(() => {
     const fetchCourseData = async () => {
-      // First verify enrollment
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setIsLoading(false);
-        return;
-      }
-      setSessionUser(session.user);
+      try {
+        // First verify enrollment
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setIsLoading(false);
+          return;
+        }
+        setSessionUser(session.user);
 
-      const { data: enrollment } = await supabase
-        .from('enrollments')
-        .select('id')
-        .eq('student_id', session.user.id)
-        .eq('course_id', params.courseId)
-        .maybeSingle();
+        const { data: enrollment } = await supabase
+          .from('enrollments')
+          .select('id')
+          .eq('student_id', session.user.id)
+          .eq('course_id', params.courseId)
+          .maybeSingle();
 
-      if (!enrollment) {
-        // Not enrolled, let's just log for now. In a real app we'd redirect.
-        console.warn("Not enrolled in this course");
-      }
-
-      // Fetch manual submissions
-      const { data: subData } = await supabase
-        .from('manual_submissions')
-        .select('*')
-        .eq('student_id', session.user.id);
-      
-      if (subData) {
-        const subMap: Record<string, any> = {};
-        subData.forEach((sub: any) => {
-          subMap[`${sub.topic_id}_${sub.type}`] = sub;
-        });
-        setManualSubmissions(subMap);
-      }
-
-      // Fetch course with sections and topics
-      const { data: courseData, error } = await supabase
-        .from('courses')
-        .select(`
-          *,
-          sections (
-            id, title, order_index, price,
-            topics (
-              id, title, order_index, youtube_url, 
-              topic_pdfs (id, type, file_url),
-              quizzes (*, quiz_submissions(*)),
-              topic_progress (is_completed)
-            )
-          )
-        `)
-        .eq('id', params.courseId)
-        .single();
-
-      if (courseData) {
-        // Sort sections and topics
-        const progMap: Record<string, boolean> = {};
-        const sections = courseData.sections || [];
-        sections.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
-        sections.forEach((s: any) => {
-          s.topics = s.topics || [];
-          s.topics.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
-          s.topics.forEach((t: any) => {
-            if (t.topic_progress && t.topic_progress.length > 0) {
-              progMap[t.id] = t.topic_progress[0].is_completed;
-            }
-          });
-        });
-        setProgress(progMap);
-
-        setCourse({ ...courseData, sections });
-
-        // Fetch section purchases
-        const { data: purchases } = await supabase
-          .from('section_purchases')
-          .select('section_id')
-          .eq('student_id', session.user.id);
-        if (purchases) {
-          const pMap: Record<string, boolean> = {};
-          purchases.forEach((p: any) => { pMap[p.section_id] = true; });
-          setPurchasedSections(pMap);
+        if (!enrollment) {
+          // Not enrolled, let's just log for now. In a real app we'd redirect.
+          console.warn("Not enrolled in this course");
         }
 
-        // Fetch wallet balance
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('wallet_balance')
-          .eq('id', session.user.id)
-          .single();
-        setWalletBalance(prof?.wallet_balance || 0);
+        // Fetch manual submissions
+        const { data: subData } = await supabase
+          .from('manual_submissions')
+          .select('*')
+          .eq('student_id', session.user.id);
         
-        // Open first section and set first topic active by default
-        if (sections.length > 0) {
-          setOpenSections({ [sections[0].id]: true });
-          if (sections[0].topics && sections[0].topics.length > 0) {
-            setActiveTopic(sections[0].topics[0]);
+        if (subData) {
+          const subMap: Record<string, any> = {};
+          subData.forEach((sub: any) => {
+            subMap[`${sub.topic_id}_${sub.type}`] = sub;
+          });
+          setManualSubmissions(subMap);
+        }
+
+        // Fetch course with sections and topics
+        const { data: courseData, error } = await supabase
+          .from('courses')
+          .select(`
+            *,
+            sections (
+              id, title, order_index, price,
+              topics (
+                id, title, order_index, youtube_url, 
+                topic_pdfs (id, type, file_url),
+                quizzes (*, quiz_submissions(*)),
+                topic_progress (is_completed)
+              )
+            )
+          `)
+          .eq('id', params.courseId)
+          .single();
+
+        if (error) {
+          console.error("Error fetching course:", error);
+        }
+
+        if (courseData) {
+          // Sort sections and topics
+          const progMap: Record<string, boolean> = {};
+          const sections = courseData.sections || [];
+          sections.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
+          sections.forEach((s: any) => {
+            s.topics = s.topics || [];
+            s.topics.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
+            s.topics.forEach((t: any) => {
+              t.topic_pdfs = t.topic_pdfs || [];
+              t.quizzes = t.quizzes || [];
+              if (t.topic_progress && t.topic_progress.length > 0) {
+                progMap[t.id] = t.topic_progress[0].is_completed;
+              }
+            });
+          });
+          setProgress(progMap);
+
+          setCourse({ ...courseData, sections });
+
+          // Fetch section purchases
+          const { data: purchases } = await supabase
+            .from('section_purchases')
+            .select('section_id')
+            .eq('student_id', session.user.id);
+          if (purchases) {
+            const pMap: Record<string, boolean> = {};
+            purchases.forEach((p: any) => { pMap[p.section_id] = true; });
+            setPurchasedSections(pMap);
+          }
+
+          // Fetch wallet balance
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('wallet_balance')
+            .eq('id', session.user.id)
+            .single();
+          setWalletBalance(prof?.wallet_balance || 0);
+          
+          // Open first section and set first topic active by default
+          if (sections.length > 0) {
+            setOpenSections({ [sections[0].id]: true });
+            if (sections[0].topics && sections[0].topics.length > 0) {
+              setActiveTopic(sections[0].topics[0]);
+            }
           }
         }
+      } catch (err) {
+        console.error("CoursePlayer fetch error:", err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchCourseData();
@@ -490,8 +501,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   // Check if active topic belongs to a locked section
   const getActiveTopicSection = () => {
     if (!activeTopic || !course) return null;
-    return course.sections.find((s: any) => 
-      s.topics.some((t: any) => t.id === activeTopic.id)
+    return (course.sections || []).find((s: any) => 
+      (s.topics || []).some((t: any) => t.id === activeTopic.id)
     );
   };
 
