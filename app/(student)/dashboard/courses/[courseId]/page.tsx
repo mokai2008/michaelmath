@@ -1151,62 +1151,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
       {/* Interactive Quiz Fullscreen Modal */}
       {canvaQuizModal && (() => {
-        const rawCode = canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || '';
-        
-        // Helper to extract clean URL or format HTML so Canva controls display properly
-        let isUrl = false;
-        let content = '';
-        if (rawCode) {
-          const trimmed = rawCode.trim();
-          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-            isUrl = true;
-            content = trimmed;
-          } else {
-            const srcMatch = trimmed.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-            if (srcMatch && srcMatch[1]) {
-              isUrl = true;
-              content = srcMatch[1];
-            } else {
-              isUrl = false;
-              const cleanedHtml = trimmed
-                .replace(/padding-top:\s*[^;"]+;?/gi, 'height: 100%;')
-                .replace(/height:\s*0;?/gi, 'height: 100%;');
-              content = `<!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-      * { box-sizing: border-box; }
-      html, body {
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        background: #0f172a;
-        overflow: hidden;
-      }
-      div {
-        width: 100% !important;
-        height: 100% !important;
-        position: static !important;
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      iframe {
-        width: 100% !important;
-        height: 100% !important;
-        border: none !important;
-        position: static !important;
-      }
-    </style>
-  </head>
-  <body>
-    ${cleanedHtml}
-  </body>
-</html>`;
-            }
-          }
-        }
+        const rawCode = (canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || '').trim();
+        const isDirectUrl = rawCode.startsWith('http://') || rawCode.startsWith('https://');
 
         return (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
@@ -1229,11 +1175,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 </button>
               </div>
 
-              <div className="flex-1 bg-gray-900 p-1 sm:p-3 relative overflow-hidden min-h-0">
-                {isUrl ? (
+              <div className="flex-1 bg-white p-1 sm:p-3 relative overflow-hidden min-h-0">
+                {isDirectUrl ? (
                   <iframe 
-                    src={content} 
-                    className="w-full h-full border-0 rounded-xl bg-white shadow-lg"
+                    src={rawCode} 
+                    className="w-full h-full border-0 rounded-xl bg-white"
                     title="Interactive Quiz"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
@@ -1241,8 +1187,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   />
                 ) : (
                   <iframe 
-                    srcDoc={content} 
-                    className="w-full h-full border-0 rounded-xl bg-white shadow-lg"
+                    srcDoc={rawCode} 
+                    className="w-full h-full border-0 rounded-xl bg-white"
                     title="Interactive Quiz"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
