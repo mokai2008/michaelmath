@@ -1159,19 +1159,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           if (!html) return '';
           
           const styleAndScriptInjection = `
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
             <style id="canva-ai-lms-fix">
               html, body {
                 background: linear-gradient(135deg, #1e1b4b 0%, #252262 50%, #1e1b4b 100%) !important;
                 background-color: #1e1b4b !important;
                 color: #ffffff !important;
                 margin: 0 !important;
-                padding: 24px 16px !important;
+                padding: clamp(12px, 2.5vh, 24px) clamp(8px, 2vw, 16px) !important;
                 min-height: 100vh !important;
                 height: auto !important;
                 display: flex !important;
                 flex-direction: column !important;
                 justify-content: flex-start !important;
                 align-items: center !important;
+                overflow-x: hidden !important;
                 overflow-y: auto !important;
                 box-sizing: border-box !important;
                 font-family: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
@@ -1179,6 +1181,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               * {
                 box-sizing: border-box !important;
               }
+              header { width: 100% !important; max-width: min(780px, 94vw) !important; text-align: center !important; }
               header h1, header p, .canva-text, [data-template-id="quiz-title"], [data-template-id="quiz-subtitle"] {
                 color: #ffffff !important;
               }
@@ -1187,11 +1190,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 color: #1e293b !important;
                 border-radius: 1.25rem !important;
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4) !important;
-                max-width: 760px !important;
+                max-width: min(780px, 94vw) !important;
                 width: 100% !important;
+                padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 32px) !important;
+                box-sizing: border-box !important;
               }
               .canva-card p, #quiz-card p, #question-text {
                 color: #0f172a !important;
+                font-size: clamp(1rem, 0.95rem + 0.4vw, 1.3rem) !important;
               }
               #score-display {
                 color: #4f46e5 !important;
@@ -1212,9 +1218,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 font-weight: 700 !important;
                 border: none !important;
                 border-radius: 0.75rem !important;
-                padding: 12px 24px !important;
+                padding: clamp(10px, 1.5vh, 16px) clamp(16px, 3vw, 32px) !important;
                 min-height: 48px !important;
-                font-size: 1.125rem !important;
+                font-size: clamp(1rem, 0.95rem + 0.3vw, 1.2rem) !important;
                 box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
                 transition: all 0.2s ease !important;
                 opacity: 1 !important;
@@ -1255,6 +1261,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 border-color: #dc2626 !important;
               }
               .incorrect * { color: #ffffff !important; }
+              #options {
+                display: grid !important;
+                grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)) !important;
+                gap: clamp(8px, 1.5vw, 14px) !important;
+              }
             </style>
             <script>
               document.addEventListener('DOMContentLoaded', function() {
