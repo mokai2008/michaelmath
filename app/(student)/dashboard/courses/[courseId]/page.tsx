@@ -1187,7 +1187,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 color: #1e293b !important;
                 border-radius: 1.25rem !important;
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4) !important;
-                max-width: 680px !important;
+                max-width: 760px !important;
                 width: 100% !important;
               }
               .canva-card p, #quiz-card p, #question-text {
