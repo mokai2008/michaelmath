@@ -575,15 +575,16 @@ export default function AdminCourseBuilder() {
                                         if (!html) return '';
                                         const isUrl = html.trim().startsWith('http://') || html.trim().startsWith('https://');
                                         if (isUrl) return '';
-                                        const styleAndScript = `
+                                        const patchScriptAndStyle = `
                                           <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
-                                          <style>
+                                          <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:wght@700;900&display=swap" rel="stylesheet">
+                                          <style id="canva-exact-original-fix">
                                             html, body {
                                               background: linear-gradient(135deg, #1e1b4b 0%, #252262 50%, #1e1b4b 100%) !important;
                                               background-color: #1e1b4b !important;
                                               color: #ffffff !important;
                                               margin: 0 !important;
-                                              padding: clamp(12px, 2.5vh, 24px) clamp(8px, 2vw, 16px) !important;
+                                              padding: clamp(16px, 3vh, 32px) clamp(12px, 2vw, 24px) !important;
                                               min-height: 100vh !important;
                                               height: auto !important;
                                               display: flex !important;
@@ -592,55 +593,140 @@ export default function AdminCourseBuilder() {
                                               align-items: center !important;
                                               overflow-x: hidden !important;
                                               overflow-y: auto !important;
-                                              font-family: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+                                              font-family: 'DM Sans', system-ui, sans-serif !important;
                                             }
-                                            header { width: 100% !important; max-width: min(780px, 94vw) !important; text-align: center !important; }
-                                            header h1, header p, .canva-text, [data-template-id="quiz-title"], [data-template-id="quiz-subtitle"] { color: #ffffff !important; }
+                                            * { box-sizing: border-box !important; }
+                                            header { width: 100% !important; max-width: min(720px, 94vw) !important; text-align: center !important; margin-bottom: 2rem !important; }
+                                            header h1, .heading-font, [data-template-id="quiz-title"] {
+                                              font-family: 'Fraunces', Georgia, serif !important;
+                                              color: #ffffff !important;
+                                              font-size: clamp(1.75rem, 1.2rem + 1.5vw, 2.75rem) !important;
+                                              font-weight: 900 !important;
+                                              margin: 0 0 0.5rem 0 !important;
+                                            }
+                                            header p, [data-template-id="quiz-subtitle"] {
+                                              color: #cbd5e1 !important;
+                                              font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.15rem) !important;
+                                              margin: 0 !important;
+                                            }
                                             .canva-card, #quiz-card {
                                               background-color: #ffffff !important;
                                               color: #1e293b !important;
                                               border-radius: 1.25rem !important;
                                               box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4) !important;
-                                              max-width: min(780px, 94vw) !important;
+                                              max-width: min(720px, 94vw) !important;
                                               width: 100% !important;
-                                              padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 32px) !important;
+                                              padding: clamp(20px, 3.5vh, 32px) clamp(20px, 3.5vw, 32px) !important;
                                               box-sizing: border-box !important;
                                             }
-                                            .canva-card p, #quiz-card p, #question-text { color: #0f172a !important; font-size: clamp(1rem, 0.95rem + 0.4vw, 1.3rem) !important; }
-                                            #score-display { color: #4f46e5 !important; }
-                                            #score-bar span { color: #475569 !important; }
-                                            #feedback span { color: #475569 !important; font-weight: 500 !important; }
+                                            [data-template-id="question-label"] {
+                                              color: #6366f1 !important;
+                                              font-weight: 600 !important;
+                                            }
+                                            #score-display {
+                                              color: #0f172a !important;
+                                              font-weight: 700 !important;
+                                            }
+                                            .canva-card p, #quiz-card p, #question-text {
+                                              color: #0f172a !important;
+                                              font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.3rem) !important;
+                                              font-weight: 500 !important;
+                                            }
+                                            /* Default Option Buttons */
+                                            .opt-btn:not(.correct):not(.incorrect) {
+                                              background-color: #ffffff !important;
+                                              color: #1e293b !important;
+                                              border: 2px solid #cbd5e1 !important;
+                                              border-radius: 0.75rem !important;
+                                              padding: 0.75rem 1rem !important;
+                                              font-weight: 500 !important;
+                                              transition: all 0.2s ease !important;
+                                            }
+                                            .opt-btn:not(.correct):not(.incorrect):hover:not(:disabled) {
+                                              border-color: #818cf8 !important;
+                                              transform: translateY(-2px) !important;
+                                              box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+                                            }
+                                            /* Correct Option Button -> GREEN */
+                                            .correct, .opt-btn.correct, button.correct {
+                                              background: #059669 !important;
+                                              background-color: #059669 !important;
+                                              color: #ffffff !important;
+                                              border-color: #059669 !important;
+                                              opacity: 1 !important;
+                                            }
+                                            .correct *, .opt-btn.correct *, button.correct * {
+                                              color: #ffffff !important;
+                                            }
+                                            /* Incorrect Option Button -> RED */
+                                            .incorrect, .opt-btn.incorrect, button.incorrect {
+                                              background: #dc2626 !important;
+                                              background-color: #dc2626 !important;
+                                              color: #ffffff !important;
+                                              border-color: #dc2626 !important;
+                                              opacity: 1 !important;
+                                            }
+                                            .incorrect *, .opt-btn.incorrect *, button.incorrect * {
+                                              color: #ffffff !important;
+                                            }
+                                            /* Next / Restart Buttons */
                                             .canva-button, #next-btn, #restart-btn {
                                               background-color: #4f46e5 !important;
                                               color: #ffffff !important;
                                               font-weight: 700 !important;
                                               border: none !important;
                                               border-radius: 0.75rem !important;
-                                              padding: clamp(10px, 1.5vh, 16px) clamp(16px, 3vw, 32px) !important;
+                                              padding: 12px 24px !important;
                                               min-height: 48px !important;
-                                              font-size: clamp(1rem, 0.95rem + 0.3vw, 1.2rem) !important;
+                                              font-size: 1.125rem !important;
+                                              box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
+                                              width: 100% !important;
+                                              margin-top: 1.5rem !important;
+                                              cursor: pointer !important;
                                             }
                                             .canva-button *, #next-btn *, #restart-btn * { color: #ffffff !important; }
-                                            .opt-btn:not(.canva-button) { border: 2px solid #cbd5e1 !important; color: #1e293b !important; background-color: #ffffff !important; }
-                                            .correct { background-color: #059669 !important; color: #ffffff !important; }
-                                            .incorrect { background-color: #dc2626 !important; color: #ffffff !important; }
-                                            #options { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)) !important; gap: clamp(8px, 1.5vw, 14px) !important; }
+                                            .canva-button.hidden, #next-btn.hidden, #restart-btn.hidden, #results.hidden, #question-area.hidden, #score-bar.hidden {
+                                              display: none !important;
+                                            }
                                           </style>
                                           <script>
                                             document.addEventListener('DOMContentLoaded', function() {
-                                              function fix() {
-                                                var n = document.getElementById('next-btn'); if (n && !n.textContent.trim()) n.textContent = 'Next Question →';
-                                                var r = document.getElementById('restart-btn'); if (r && !r.textContent.trim()) r.textContent = 'Restart Quiz ↺';
-                                                var q = document.querySelector('[data-template-id="question-label"]'); if (q && !q.textContent.trim()) q.textContent = 'Question';
-                                                var t = document.querySelector('[data-template-id="quiz-title"]'); if (t && !t.textContent.trim()) t.textContent = 'Quadratic Transformations';
-                                                var s = document.querySelector('[data-template-id="quiz-subtitle"]'); if (s && !s.textContent.trim()) s.textContent = 'Test your knowledge of parabola shifts, stretches & reflections';
+                                              function fixCanvaOriginal() {
+                                                var nextBtn = document.getElementById('next-btn');
+                                                if (nextBtn && (!nextBtn.textContent || !nextBtn.textContent.trim())) {
+                                                  nextBtn.textContent = 'Next Question →';
+                                                }
+                                                var restartBtn = document.getElementById('restart-btn');
+                                                if (restartBtn && (!restartBtn.textContent || !restartBtn.textContent.trim())) {
+                                                  restartBtn.textContent = 'Restart Quiz ↺';
+                                                }
+                                                var qLabel = document.querySelector('[data-template-id="question-label"]');
+                                                if (qLabel && (!qLabel.textContent || !qLabel.textContent.trim() || qLabel.textContent.trim() === 'Question')) {
+                                                  qLabel.textContent = 'Score';
+                                                }
+                                                var qTitle = document.querySelector('[data-template-id="quiz-title"]');
+                                                if (qTitle && (!qTitle.textContent || !qTitle.textContent.trim())) {
+                                                  qTitle.textContent = 'Quadratic Transformations';
+                                                }
+                                                var qSub = document.querySelector('[data-template-id="quiz-subtitle"]');
+                                                if (qSub && (!qSub.textContent || !qSub.textContent.trim())) {
+                                                  qSub.textContent = 'Test your knowledge of parabola shifts, stretches & reflections';
+                                                }
                                               }
-                                              fix(); setTimeout(fix, 200);
+                                              fixCanvaOriginal();
+                                              setTimeout(fixCanvaOriginal, 100);
+                                              setTimeout(fixCanvaOriginal, 400);
+
+                                              var observer = new MutationObserver(function() {
+                                                fixCanvaOriginal();
+                                              });
+                                              var card = document.getElementById('quiz-card') || document.body;
+                                              if (card) observer.observe(card, { childList: true, subtree: true, characterData: true });
                                             });
                                           </script>
                                         `;
-                                        if (html.includes('</head>')) return html.replace('</head>', `${styleAndScript}</head>`);
-                                        return `<!DOCTYPE html><html><head>${styleAndScript}</head><body>${html}</body></html>`;
+                                        if (html.includes('</head>')) return html.replace('</head>', `${patchScriptAndStyle}</head>`);
+                                        return `<!DOCTYPE html><html><head>${patchScriptAndStyle}</head><body>${html}</body></html>`;
                                       })()}
                                       className="w-full h-full border-0"
                                       title="Canva Quiz Preview"
