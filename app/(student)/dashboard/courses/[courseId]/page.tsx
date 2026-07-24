@@ -1319,10 +1319,37 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             <script>
               document.addEventListener('DOMContentLoaded', function() {
                 function sendScoreToParent() {
-                  var scoreEl = document.getElementById('score-display');
-                  if (scoreEl) {
-                    var txt = (scoreEl.textContent || scoreEl.innerText || '').trim();
-                    var match = txt.match(/(\d+)\s*\/\s*(\d+)/);
+                  var scoreText = '';
+                  // Try multiple possible score element selectors
+                  var candidates = [
+                    document.getElementById('score-display'),
+                    document.querySelector('[data-template-id="score-display"]'),
+                    document.querySelector('.score-display'),
+                    document.querySelector('#score-bar span'),
+                    document.querySelector('#score-bar')
+                  ];
+                  for (var i = 0; i < candidates.length; i++) {
+                    if (candidates[i]) {
+                      var t = (candidates[i].textContent || candidates[i].innerText || '').trim();
+                      if (t.match(/\d+\s*\/\s*\d+/)) { scoreText = t; break; }
+                    }
+                  }
+                  // Fallback: search all elements for "X / Y" pattern
+                  if (!scoreText) {
+                    var allEls = document.querySelectorAll('span, div, p, h1, h2, h3, h4, h5, h6');
+                    for (var j = 0; j < allEls.length; j++) {
+                      var elText = (allEls[j].textContent || '').trim();
+                      if (elText.match(/^\d+\s*\/\s*\d+$/) || elText.match(/^Score\s*:?\s*\d+\s*\/\s*\d+$/i)) {
+                        scoreText = elText; break;
+                      }
+                    }
+                  }
+                  // Also try reading the score variable directly from window
+                  if (!scoreText && typeof window.score !== 'undefined' && typeof window.questions !== 'undefined') {
+                    scoreText = window.score + ' / ' + window.questions.length;
+                  }
+                  if (scoreText) {
+                    var match = scoreText.match(/(\d+)\s*\/\s*(\d+)/);
                     if (match) {
                       window.parent.postMessage({
                         type: 'CANVA_QUIZ_SCORE_UPDATE',
@@ -1449,10 +1476,41 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 <button 
                   onClick={async () => {
                     if (!sessionUser || !canvaQuizModal) return;
-                    const liveScore = canvaLiveScores[canvaQuizModal.id];
+                    let liveScore = canvaLiveScores[canvaQuizModal.id];
                     const modalRaw = canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || activeTopic?.quizEmbedCode || '';
                     const totalQuestionsCount = liveScore?.total || getCanvaQuizTotalMarks(modalRaw) || 8;
-                    const scoreToSubmit = liveScore ? liveScore.score : totalQuestionsCount;
+
+                    // If no postMessage score, try reading iframe DOM directly
+                    if (!liveScore) {
+                      try {
+                        const iframeEl = document.querySelector('iframe[title="Interactive Quiz"]') as HTMLIFrameElement;
+                        if (iframeEl?.contentDocument) {
+                          const doc = iframeEl.contentDocument;
+                          // Try reading score variable directly
+                          const win = iframeEl.contentWindow as any;
+                          if (win && typeof win.score !== 'undefined' && typeof win.questions !== 'undefined') {
+                            liveScore = { score: Number(win.score), total: win.questions.length };
+                          }
+                          // Try reading score from DOM
+                          if (!liveScore) {
+                            const allEls = doc.querySelectorAll('span, div, p');
+                            for (let k = 0; k < allEls.length; k++) {
+                              const elText = (allEls[k].textContent || '').trim();
+                              const m = elText.match(/^(\d+)\s*\/\s*(\d+)$/);
+                              if (m) {
+                                liveScore = { score: parseInt(m[1], 10), total: parseInt(m[2], 10) };
+                                break;
+                              }
+                            }
+                          }
+                        }
+                      } catch (e) {
+                        console.log('Could not read iframe score:', e);
+                      }
+                    }
+
+                    // Default to 0 if we still couldn't get the score
+                    const scoreToSubmit = liveScore ? liveScore.score : 0;
 
                     const { error: subErr } = await supabase.from('quiz_submissions').insert({
                       student_id: sessionUser.id,
