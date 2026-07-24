@@ -20,6 +20,20 @@ import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
 import VideoPlayer from "@/components/VideoPlayer";
 
+function getCanvaQuizTotalMarks(rawCode?: string): number {
+  if (!rawCode) return 0;
+  const scoreMatch = rawCode.match(/id=["']score-display["'][^>]*>\s*\d+\s*\/\s*(\d+)/i) || rawCode.match(/0\s*\/\s*(\d+)/);
+  if (scoreMatch && scoreMatch[1]) {
+    const val = parseInt(scoreMatch[1], 10);
+    if (val > 0) return val;
+  }
+  const qMatches = rawCode.match(/\{\s*q\s*:/g);
+  if (qMatches && qMatches.length > 0) {
+    return qMatches.length;
+  }
+  return 0;
+}
+
 export default function CoursePlayerPage({ params }: { params: { courseId: string } }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [course, setCourse] = useState<any>(null);
@@ -43,7 +57,23 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [walletBalance, setWalletBalance] = useState(0);
   const [buyingSection, setBuyingSection] = useState<string | null>(null);
   const [canvaQuizModal, setCanvaQuizModal] = useState<any>(null);
+  const [canvaLiveScores, setCanvaLiveScores] = useState<Record<string, { score: number; total: number }>>({});
 
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'CANVA_QUIZ_SCORE_UPDATE') {
+        const { score, total } = e.data;
+        if (canvaQuizModal?.id) {
+          setCanvaLiveScores(prev => ({
+            ...prev,
+            [canvaQuizModal.id]: { score, total }
+          }));
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [canvaQuizModal]);
 
   useEffect(() => {
     const fetchCourseData = async () => {
@@ -835,6 +865,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           : null;
                         const hasQuestions = quiz.questions_data && quiz.questions_data.length > 0;
                         const isCanvaQuiz = !!(quiz.embed_code || quiz.settings?.embed_code);
+                        const rawEmbed = quiz.embed_code || quiz.settings?.embed_code || activeTopic?.quizEmbedCode || '';
+                        const actualTotalMarks = isCanvaQuiz 
+                          ? (getCanvaQuizTotalMarks(rawEmbed) || (quiz.total_marks && quiz.total_marks > 1 ? quiz.total_marks : 8))
+                          : (quiz.total_marks || 10);
 
                         if (takingQuiz && takingQuiz.id === quiz.id) {
                           // Interactive Quiz UI
@@ -1024,7 +1058,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               <div className="font-bold text-text flex items-center gap-2">
                                 {isCanvaQuiz ? 'Interactive Quiz' : (hasQuestions ? 'Interactive MCQ Quiz' : 'Past Paper Quiz')}
                               </div>
-                              <div className="text-sm text-text/60">{isCanvaQuiz ? `Total Marks: ${quiz.total_marks || 10}` : `Total Marks: ${quiz.total_marks}`}</div>
+                              <div className="text-sm text-text/60">Total Marks: {actualTotalMarks}</div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               {quiz.quiz_pdf_url && (
@@ -1037,7 +1071,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
                                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                                       {hasQuestions || isCanvaQuiz ? (
-                                        <span className="font-bold text-green-700">Score: {submission.score} / {quiz.total_marks || 10}</span>
+                                        <span className="font-bold text-green-700">Score: {submission.score} / {actualTotalMarks}</span>
                                       ) : (
                                         <span className="font-bold text-green-700">Answers Submitted</span>
                                       )}
@@ -1275,6 +1309,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             </style>
             <script>
               document.addEventListener('DOMContentLoaded', function() {
+                function sendScoreToParent() {
+                  var scoreEl = document.getElementById('score-display');
+                  if (scoreEl) {
+                    var txt = (scoreEl.textContent || scoreEl.innerText || '').trim();
+                    var match = txt.match(/(\d+)\s*\/\s*(\d+)/);
+                    if (match) {
+                      window.parent.postMessage({
+                        type: 'CANVA_QUIZ_SCORE_UPDATE',
+                        score: parseInt(match[1], 10),
+                        total: parseInt(match[2], 10)
+                      }, '*');
+                    }
+                  }
+                }
+
                 function fixCanvaOriginal() {
                   var nextBtn = document.getElementById('next-btn');
                   if (nextBtn && (!nextBtn.textContent || !nextBtn.textContent.trim())) {
@@ -1296,16 +1345,23 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   if (qSub && (!qSub.textContent || !qSub.textContent.trim())) {
                     qSub.textContent = 'Test your knowledge of parabola shifts, stretches & reflections';
                   }
+                  sendScoreToParent();
                 }
+
                 fixCanvaOriginal();
                 setTimeout(fixCanvaOriginal, 100);
                 setTimeout(fixCanvaOriginal, 400);
 
                 var observer = new MutationObserver(function() {
                   fixCanvaOriginal();
+                  sendScoreToParent();
                 });
                 var card = document.getElementById('quiz-card') || document.body;
                 if (card) observer.observe(card, { childList: true, subtree: true, characterData: true });
+
+                document.addEventListener('click', function() {
+                  setTimeout(sendScoreToParent, 50);
+                });
               });
             </script>
           `;
@@ -1366,8 +1422,53 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               <div className="p-3 sm:p-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3 shrink-0">
                 <span className="text-xs text-text/60 truncate">Interactive Quiz</span>
                 <button 
-                  onClick={() => {
-                    handleQuizSubmit(canvaQuizModal.id, 10, {});
+                  onClick={async () => {
+                    if (!sessionUser || !canvaQuizModal) return;
+                    const liveScore = canvaLiveScores[canvaQuizModal.id];
+                    const modalRaw = canvaQuizModal.embed_code || canvaQuizModal.settings?.embed_code || activeTopic?.quizEmbedCode || '';
+                    const totalQuestionsCount = liveScore?.total || getCanvaQuizTotalMarks(modalRaw) || 8;
+                    const scoreToSubmit = liveScore ? liveScore.score : totalQuestionsCount;
+
+                    const { error: subErr } = await supabase.from('quiz_submissions').insert({
+                      student_id: sessionUser.id,
+                      quiz_id: canvaQuizModal.id,
+                      score: scoreToSubmit,
+                      answers_data: { canva_quiz: true, total_marks: totalQuestionsCount }
+                    });
+
+                    if (subErr) {
+                      console.error("Quiz submission error:", subErr);
+                    } else {
+                      if (!progress[activeTopic.id]) {
+                        handleMarkComplete(activeTopic.id);
+                      }
+                    }
+
+                    const { data: updatedCourse } = await supabase
+                      .from('courses')
+                      .select(`
+                        *,
+                        sections (
+                          *,
+                          topics (
+                            *,
+                            quizzes (*, quiz_submissions(*))
+                          )
+                        )
+                      `)
+                      .eq('id', params.courseId)
+                      .single();
+
+                    if (updatedCourse) {
+                      setCourse(updatedCourse);
+                      if (activeTopic) {
+                        const refreshedTopic = updatedCourse.sections
+                          ?.flatMap((s: any) => s.topics || [])
+                          ?.find((t: any) => t.id === activeTopic.id);
+                        if (refreshedTopic) setActiveTopic(refreshedTopic);
+                      }
+                    }
+
                     setCanvaQuizModal(null);
                   }}
                   className="px-4 sm:px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-md flex items-center gap-2 shrink-0"
