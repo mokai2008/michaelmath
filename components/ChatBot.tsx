@@ -109,13 +109,12 @@ export function ChatBot() {
     return (
       <button 
         onClick={() => setIsOpen(true)}
+        title="Ask Michael's AI Assistant"
+        aria-label="Ask Michael's AI Assistant"
         className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-tr from-primary to-green-400 rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-110 transition-transform z-50 group"
       >
         <Sparkles className="w-6 h-6 group-hover:hidden" />
         <MessageSquare className="w-6 h-6 hidden group-hover:block" />
-        <span className="absolute -top-10 right-0 bg-text text-white text-xs py-1 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-lg">
-          Ask Michael's AI Assistant
-        </span>
       </button>
     );
   }
