@@ -1297,12 +1297,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 padding: 12px 24px !important;
                 min-height: 48px !important;
                 font-size: 1.125rem !important;
+                line-height: 1.5 !important;
+                text-indent: 0 !important;
+                text-align: center !important;
+                overflow: visible !important;
+                letter-spacing: normal !important;
                 box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
                 width: 100% !important;
                 margin-top: 1.5rem !important;
                 cursor: pointer !important;
               }
-              .canva-button *, #next-btn *, #restart-btn * { color: #ffffff !important; }
+              .canva-button *, #next-btn *, #restart-btn * { 
+                color: #ffffff !important; 
+                font-size: inherit !important;
+                visibility: visible !important;
+              }
               .canva-button.hidden, #next-btn.hidden, #restart-btn.hidden, #results.hidden, #question-area.hidden, #score-bar.hidden {
                 display: none !important;
               }
@@ -1326,15 +1335,31 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                 function fixCanvaOriginal() {
                   var nextBtn = document.getElementById('next-btn');
-                  if (nextBtn && (!nextBtn.textContent || !nextBtn.textContent.trim())) {
-                    nextBtn.textContent = 'Next Question →';
+                  if (nextBtn) {
+                    nextBtn.innerHTML = 'Next Question \\u2192';
+                    nextBtn.style.color = '#ffffff';
+                    nextBtn.style.fontSize = '1.125rem';
+                    nextBtn.style.fontWeight = '700';
+                    nextBtn.style.lineHeight = '1.5';
+                    nextBtn.style.textIndent = '0';
+                    nextBtn.style.letterSpacing = 'normal';
+                    nextBtn.style.textAlign = 'center';
+                    nextBtn.style.overflow = 'visible';
                   }
                   var restartBtn = document.getElementById('restart-btn');
-                  if (restartBtn && (!restartBtn.textContent || !restartBtn.textContent.trim())) {
-                    restartBtn.textContent = 'Restart Quiz ↺';
+                  if (restartBtn) {
+                    restartBtn.innerHTML = 'Restart Quiz \\u21BA';
+                    restartBtn.style.color = '#ffffff';
+                    restartBtn.style.fontSize = '1.125rem';
+                    restartBtn.style.fontWeight = '700';
+                    restartBtn.style.lineHeight = '1.5';
+                    restartBtn.style.textIndent = '0';
+                    restartBtn.style.letterSpacing = 'normal';
+                    restartBtn.style.textAlign = 'center';
+                    restartBtn.style.overflow = 'visible';
                   }
                   var qLabel = document.querySelector('[data-template-id="question-label"]');
-                  if (qLabel && (!qLabel.textContent || !qLabel.textContent.trim() || qLabel.textContent.trim() === 'Question')) {
+                  if (qLabel) {
                     qLabel.textContent = 'Score';
                   }
                   var qTitle = document.querySelector('[data-template-id="quiz-title"]');
