@@ -13,7 +13,8 @@ import {
   Upload,
   X,
   ZoomIn,
-  ShoppingCart
+  ShoppingCart,
+  Server
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -40,6 +41,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [isLoading, setIsLoading] = useState(true);
   const [activeTopic, setActiveTopic] = useState<any>(null);
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
+  const [selectedMirrorIndex, setSelectedMirrorIndex] = useState<number | null>(null);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [manualSubmissions, setManualSubmissions] = useState<Record<string, any>>({});
@@ -729,8 +731,33 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             </div>
           ) : activeTopic ? (() => {
             const contentItems = activeTopic.content_items || [];
-            const videoItems = contentItems.filter((i: any) => i.type === 'video' && i.url);
-            const currentVideoUrl = videoItems.length > 0 ? (videoItems[selectedVideoIndex]?.url || videoItems[0]?.url) : activeTopic.youtube_url;
+            const videoItems = contentItems.filter((i: any) => i.type === 'video' && (i.url || (Array.isArray(i.urls) && i.urls.some((u: string) => u))));
+            const currentVideoItem = videoItems.length > 0 ? (videoItems[selectedVideoIndex] || videoItems[0]) : null;
+
+            // Extract raw mirror URLs
+            const rawUrls = currentVideoItem 
+              ? (Array.isArray(currentVideoItem.urls) && currentVideoItem.urls.length > 0 ? currentVideoItem.urls : [currentVideoItem.url])
+              : (activeTopic.youtube_url ? [activeTopic.youtube_url] : []);
+            
+            const activeUrls = rawUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
+
+            // Compute student-assigned default mirror link based on sessionUser ID hash for load balancing
+            let autoAssignedIndex = 0;
+            if (sessionUser?.id && activeUrls.length > 1) {
+              let hash = 0;
+              const uid = sessionUser.id;
+              for (let i = 0; i < uid.length; i++) {
+                hash = (hash << 5) - hash + uid.charCodeAt(i);
+                hash |= 0;
+              }
+              autoAssignedIndex = Math.abs(hash) % activeUrls.length;
+            }
+
+            const currentMirrorIndex = selectedMirrorIndex !== null && selectedMirrorIndex < activeUrls.length
+              ? selectedMirrorIndex
+              : autoAssignedIndex;
+
+            const currentVideoUrl = activeUrls[currentMirrorIndex] || activeUrls[0] || '';
 
             const pdfItems = contentItems.filter((i: any) => (i.type === 'worksheet' || i.type === 'notes') && i.url);
 
@@ -744,7 +771,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   {videoItems.map((vid: any, idx: number) => (
                     <button
                       key={vid.id || idx}
-                      onClick={() => setSelectedVideoIndex(idx)}
+                      onClick={() => {
+                        setSelectedVideoIndex(idx);
+                        setSelectedMirrorIndex(null);
+                      }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
                         selectedVideoIndex === idx
                           ? 'bg-primary text-white shadow-sm'
@@ -755,6 +785,39 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       {vid.title || `Video ${idx + 1}`}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* Bandwidth Load Balancing / Server Mirror Selector */}
+              {activeUrls.length > 1 && (
+                <div className="flex items-center justify-between gap-3 bg-gray-900 text-white px-4 py-2.5 rounded-xl mb-4 text-xs flex-wrap border border-gray-800 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Server className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="font-bold text-gray-200">Server Mirror:</span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                      Bandwidth Load Balanced
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {activeUrls.map((_url: string, mIdx: number) => {
+                      const isAuto = mIdx === autoAssignedIndex;
+                      const isSelected = mIdx === currentMirrorIndex;
+                      return (
+                        <button
+                          key={mIdx}
+                          onClick={() => setSelectedMirrorIndex(mIdx)}
+                          className={`px-3 py-1 rounded-lg font-bold transition-all text-xs flex items-center gap-1 ${
+                            isSelected
+                              ? 'bg-primary text-white shadow-sm ring-2 ring-primary/40'
+                              : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white border border-gray-700'
+                          }`}
+                        >
+                          Server {mIdx + 1}
+                          {isAuto && <span className="text-[10px] opacity-75">(Auto)</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

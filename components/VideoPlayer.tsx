@@ -96,6 +96,28 @@ export default function VideoPlayer({
     );
   }
 
+  // OneDrive / SharePoint embed handler
+  const isOneDrive = url.includes("onedrive.live.com") || url.includes("1drv.ms") || url.includes("sharepoint.com");
+  if (isOneDrive) {
+    let embedUrl = url;
+    if (url.includes("onedrive.live.com/redir")) {
+      embedUrl = url.replace("onedrive.live.com/redir", "onedrive.live.com/embed");
+    } else if (url.includes("onedrive.live.com") && !url.includes("embed")) {
+      embedUrl = url.includes("?") ? `${url}&embed=1` : `${url}?embed=1`;
+    }
+
+    return (
+      <div className={`relative ${className} bg-black overflow-hidden`}>
+        <iframe
+          src={embedUrl}
+          className="w-full h-full border-0"
+          allowFullScreen
+          allow="autoplay; encrypted-media"
+        />
+      </div>
+    );
+  }
+
   // Direct HTML5 Video (Uploaded file or mp4/webm link)
   return (
     <video

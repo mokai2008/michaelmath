@@ -143,6 +143,7 @@ export default function AdminNewCourse() {
                 type,
                 title: defaultTitle,
                 url: '',
+                urls: type === 'video' ? [''] : undefined,
                 quizMode: 'manual',
                 quizQuestions: [],
                 quizEmbedCode: '',
@@ -155,6 +156,86 @@ export default function AdminNewCourse() {
               return {
                 ...topic,
                 items: [...items, newItem]
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleUpdateMirrorUrl = (sectionId: string | number, topicId: string | number, itemId: string | number, urlIndex: number, value: string) => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).map((item: any) => {
+                  if (item.id === itemId) {
+                    const urls = [...(item.urls || [item.url || ''])];
+                    urls[urlIndex] = value;
+                    return { ...item, urls, url: urls[0] || '' };
+                  }
+                  return item;
+                })
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleAddMirrorUrl = (sectionId: string | number, topicId: string | number, itemId: string | number) => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).map((item: any) => {
+                  if (item.id === itemId) {
+                    const urls = [...(item.urls || [item.url || '']), ''];
+                    return { ...item, urls, url: urls[0] || '' };
+                  }
+                  return item;
+                })
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleDeleteMirrorUrl = (sectionId: string | number, topicId: string | number, itemId: string | number, urlIndex: number) => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).map((item: any) => {
+                  if (item.id === itemId) {
+                    let urls = (item.urls || [item.url || '']).filter((_: any, idx: number) => idx !== urlIndex);
+                    if (urls.length === 0) urls = [''];
+                    return { ...item, urls, url: urls[0] || '' };
+                  }
+                  return item;
+                })
               };
             }
             return topic;
@@ -391,7 +472,7 @@ export default function AdminNewCourse() {
           const topicId = topicData.id;
 
           // Insert PDFs for backwards compatibility & submission tracking
-          for (const item of items) {
+          for (const item of items as any[]) {
             if ((item.type === 'worksheet' || item.type === 'notes') && item.url) {
               await supabase.from('topic_pdfs').insert({
                 topic_id: topicId,
@@ -402,7 +483,7 @@ export default function AdminNewCourse() {
           }
 
           // Insert Quizzes for backwards compatibility & quiz submission tracking
-          for (const item of items) {
+          for (const item of items as any[]) {
             if (item.type === 'quiz') {
               const hasQuestions = item.quizQuestions && item.quizQuestions.length > 0;
               const hasEmbed = item.quizEmbedCode && item.quizEmbedCode.trim().length > 0;
@@ -741,21 +822,59 @@ export default function AdminNewCourse() {
 
                                   {/* Item Body: VIDEO */}
                                   {isVideo && (
-                                    <div className="space-y-2 pt-2 border-t border-gray-100">
-                                      <label className="block text-xs font-semibold text-text/70">Video Link (YouTube, Google Drive) or Video Upload</label>
-                                      <div className="flex gap-2">
-                                        <input 
-                                          type="text" 
-                                          value={item.url || ''}
-                                          onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'url', e.target.value)}
-                                          className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
-                                          placeholder="https://youtube.com/watch?... or https://drive.google.com/..."
-                                        />
-                                        <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[110px] shrink-0">
-                                          {uploadingField === `vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
-                                          <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url))} disabled={uploadingField === `vid_${item.id}`} />
+                                    <div className="space-y-3 pt-2 border-t border-gray-100">
+                                      <div className="flex items-center justify-between">
+                                        <label className="block text-xs font-bold text-text/80">
+                                          Video Links & Bandwidth Load Balancing (Google Drive, OneDrive, YouTube)
                                         </label>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAddMirrorUrl(section.id, topic.id, item.id)}
+                                          className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                                        >
+                                          + Add Mirror Link
+                                        </button>
                                       </div>
+
+                                      <div className="space-y-2">
+                                        {(item.urls && item.urls.length > 0 ? item.urls : [item.url || '']).map((mirrorUrl: string, mIdx: number) => (
+                                          <div key={mIdx} className="flex items-center gap-2">
+                                            <span className="text-[11px] font-bold text-gray-500 min-w-[75px] shrink-0">
+                                              {mIdx === 0 ? 'Link 1 (Main):' : `Link ${mIdx + 1}:`}
+                                            </span>
+                                            <input 
+                                              type="text" 
+                                              value={mirrorUrl}
+                                              onChange={(e) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, e.target.value)}
+                                              className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                                              placeholder={mIdx === 0 ? "https://drive.google.com/..., https://onedrive.live.com/..., or YouTube URL" : `Alternative Link ${mIdx + 1} (Google Drive / OneDrive)`}
+                                            />
+                                            <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
+                                              {uploadingField === `vid_${item.id}_${mIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                              <input 
+                                                type="file" 
+                                                accept="video/*" 
+                                                className="hidden" 
+                                                onChange={(e) => handleFileUpload(e, `vid_${item.id}_${mIdx}`, (url) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, url))} 
+                                                disabled={uploadingField === `vid_${item.id}_${mIdx}`} 
+                                              />
+                                            </label>
+                                            {mIdx > 0 && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteMirrorUrl(section.id, topic.id, item.id, mIdx)}
+                                                className="p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-red-50 shrink-0"
+                                                title="Remove mirror link"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <p className="text-[11px] text-gray-500 italic">
+                                        💡 Tip: Add multiple Google Drive / OneDrive links. The LMS automatically balances student traffic across these links to prevent bandwidth/quota limits.
+                                      </p>
                                     </div>
                                   )}
 
