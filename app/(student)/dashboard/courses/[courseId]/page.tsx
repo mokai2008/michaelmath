@@ -39,6 +39,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [course, setCourse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTopic, setActiveTopic] = useState<any>(null);
+  const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [manualSubmissions, setManualSubmissions] = useState<Record<string, any>>({});
@@ -120,7 +121,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             sections (
               id, title, order_index, price,
               topics (
-                id, title, order_index, youtube_url, 
+                id, title, order_index, youtube_url, content_items, 
                 topic_pdfs (id, type, file_url),
                 quizzes (*, quiz_submissions(*)),
                 topic_progress (is_completed)
@@ -727,30 +728,72 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               </div>
             </div>
           ) : activeTopic ? (() => {
+            const contentItems = activeTopic.content_items || [];
+            const videoItems = contentItems.filter((i: any) => i.type === 'video' && i.url);
+            const currentVideoUrl = videoItems.length > 0 ? (videoItems[selectedVideoIndex]?.url || videoItems[0]?.url) : activeTopic.youtube_url;
+
+            const pdfItems = contentItems.filter((i: any) => (i.type === 'worksheet' || i.type === 'notes') && i.url);
+
             return (
             <>
-              <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-xl mb-8 relative">
-                <VideoPlayer url={activeTopic.youtube_url} />
-              </div>
+              {videoItems.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-2">
+                  <span className="text-xs font-bold text-text/60 shrink-0 mr-1 flex items-center gap-1">
+                    <PlayCircle className="w-4 h-4 text-primary" /> Videos:
+                  </span>
+                  {videoItems.map((vid: any, idx: number) => (
+                    <button
+                      key={vid.id || idx}
+                      onClick={() => setSelectedVideoIndex(idx)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                        selectedVideoIndex === idx
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'bg-white text-text hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <PlayCircle className="w-3.5 h-3.5" />
+                      {vid.title || `Video ${idx + 1}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {currentVideoUrl ? (
+                <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-xl mb-8 relative">
+                  <VideoPlayer url={currentVideoUrl} />
+                </div>
+              ) : null}
 
               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
                 <h1 className="text-3xl font-bold text-text mb-4">{activeTopic.title}</h1>
-                <p className="text-text/70 leading-relaxed mb-6">
-                  {/* Topic description could go here if added to schema */}
-                </p>
+                
                 <div className="flex flex-col gap-4 pt-6 border-t border-gray-100">
                   <div className="flex flex-wrap gap-4">
-                    {activeTopic.topic_pdfs && activeTopic.topic_pdfs.map((pdf: any) => (
-                      <a 
-                        key={pdf.id}
-                        href={pdf.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-text rounded-lg font-medium transition-colors"
-                      >
-                        <FileText className="w-4 h-4" /> View {pdf.type === 'notes' ? 'Notes' : 'Worksheet'}
-                      </a>
-                    ))}
+                    {pdfItems.length > 0 ? (
+                      pdfItems.map((pdf: any) => (
+                        <a 
+                          key={pdf.id}
+                          href={pdf.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-text rounded-lg font-medium transition-colors"
+                        >
+                          <FileText className="w-4 h-4" /> {pdf.title || (pdf.type === 'notes' ? 'Notes' : 'Worksheet')}
+                        </a>
+                      ))
+                    ) : (
+                      activeTopic.topic_pdfs && activeTopic.topic_pdfs.map((pdf: any) => (
+                        <a 
+                          key={pdf.id}
+                          href={pdf.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-text rounded-lg font-medium transition-colors"
+                        >
+                          <FileText className="w-4 h-4" /> View {pdf.type === 'notes' ? 'Notes' : 'Worksheet'}
+                        </a>
+                      ))
+                    )}
                     
                     {(() => {
                       let canComplete = true;

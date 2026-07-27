@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, Sparkles, Code, FileText } from "lucide-react";
+import { 
+  Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, 
+  Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers 
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import MathText from "@/components/MathText";
@@ -102,30 +105,66 @@ export default function AdminCourseEditor() {
           if (topicsError) throw topicsError;
 
           const mappedTopics = topicsData.map((topic) => {
-            const notes = topic.topic_pdfs.find((p: any) => p.type === 'notes');
-            const worksheet = topic.topic_pdfs.find((p: any) => p.type === 'worksheet');
-              const mcqQuiz = topic.quizzes?.find((q: any) => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code);
-              const pastPaperQuiz = topic.quizzes?.find((q: any) => q.quiz_pdf_url);
+            const notes = topic.topic_pdfs?.find((p: any) => p.type === 'notes');
+            const worksheet = topic.topic_pdfs?.find((p: any) => p.type === 'worksheet');
+            const mcqQuiz = topic.quizzes?.find((q: any) => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code);
 
-              return {
-                id: topic.id,
-                title: topic.title,
-                isExpanded: false,
-                youtubeUrl: topic.youtube_url || '',
-                pdfNotesUrl: notes ? notes.file_url : '',
-                pdfWorksheetUrl: worksheet ? worksheet.file_url : '',
-                quizQuestions: mcqQuiz && mcqQuiz.questions_data ? mcqQuiz.questions_data.map((q: any) => ({
-                  ...q,
-                  imageUrl: q.imageUrl || '',
-                  optionImages: Array.isArray(q.optionImages) ? q.optionImages : (q.options ? q.options.map((opt: any) => (typeof opt === 'object' && opt?.imageUrl ? opt.imageUrl : '')) : ['', '', '', '']),
-                  explanationImageUrl: q.explanationImageUrl || q.explanation_image_url || q.feedbackImageUrl || q.feedback_image_url || ''
-                })) : [],
-                quizEmbedCode: mcqQuiz ? (mcqQuiz.embed_code || mcqQuiz.settings?.embed_code || '') : '',
-                quizTimeLimit: mcqQuiz?.time_limit_minutes || '',
-                quizPassingScore: mcqQuiz?.passing_score || '70',
-                quizShuffleQuestions: mcqQuiz?.settings?.shuffle_questions || false,
-                quizShuffleOptions: mcqQuiz?.settings?.shuffle_options || false
-              };
+            let items: any[] = [];
+            if (Array.isArray(topic.content_items) && topic.content_items.length > 0) {
+              items = topic.content_items;
+            } else {
+              // Backwards compatibility for legacy single-item structure
+              if (topic.youtube_url) {
+                items.push({
+                  id: `legacy_vid_${topic.id}`,
+                  type: 'video',
+                  title: `${topic.title} - Video`,
+                  url: topic.youtube_url
+                });
+              }
+              if (notes) {
+                items.push({
+                  id: `legacy_notes_${topic.id}`,
+                  type: 'notes',
+                  title: `${topic.title} - Notes`,
+                  url: notes.file_url
+                });
+              }
+              if (worksheet) {
+                items.push({
+                  id: `legacy_ws_${topic.id}`,
+                  type: 'worksheet',
+                  title: `${topic.title} - Worksheet`,
+                  url: worksheet.file_url
+                });
+              }
+              if (mcqQuiz) {
+                items.push({
+                  id: `legacy_quiz_${topic.id}`,
+                  type: 'quiz',
+                  title: mcqQuiz.settings?.title || `${topic.title} - Quiz`,
+                  quizMode: (mcqQuiz.questions_data && mcqQuiz.questions_data.length > 0) ? 'manual' : 'canva',
+                  quizQuestions: mcqQuiz.questions_data ? mcqQuiz.questions_data.map((q: any) => ({
+                    ...q,
+                    imageUrl: q.imageUrl || '',
+                    optionImages: Array.isArray(q.optionImages) ? q.optionImages : (q.options ? q.options.map((opt: any) => (typeof opt === 'object' && opt?.imageUrl ? opt.imageUrl : '')) : ['', '', '', '']),
+                    explanationImageUrl: q.explanationImageUrl || q.explanation_image_url || q.feedbackImageUrl || q.feedback_image_url || ''
+                  })) : [],
+                  quizEmbedCode: mcqQuiz.embed_code || mcqQuiz.settings?.embed_code || '',
+                  quizTimeLimit: mcqQuiz.time_limit_minutes || '',
+                  quizPassingScore: mcqQuiz.passing_score || '70',
+                  quizShuffleQuestions: mcqQuiz.settings?.shuffle_questions || false,
+                  quizShuffleOptions: mcqQuiz.settings?.shuffle_options || false
+                });
+              }
+            }
+
+            return {
+              id: topic.id,
+              title: topic.title,
+              isExpanded: false,
+              items
+            };
           });
 
           return {
@@ -166,17 +205,9 @@ export default function AdminCourseEditor() {
           ...section,
           topics: [...section.topics, { 
             id: newTopicId, 
-            title: `Topic ${newTopicId}: New Topic`,
+            title: `Lesson ${newTopicId}: New Lesson`,
             isExpanded: true,
-            youtubeUrl: '',
-            pdfNotesUrl: '',
-            pdfWorksheetUrl: '',
-            quizQuestions: [],
-            quizEmbedCode: '',
-            quizTimeLimit: '',
-            quizPassingScore: '70',
-            quizShuffleQuestions: false,
-            quizShuffleOptions: false
+            items: []
           }]
         };
       }
@@ -199,13 +230,6 @@ export default function AdminCourseEditor() {
     } : s));
   };
 
-  const updateTopicField = (sectionId: string | number, topicId: string | number, field: string, value: any) => {
-    setSections(sections.map(s => s.id === sectionId ? {
-      ...s,
-      topics: s.topics.map((t: any) => t.id === topicId ? { ...t, [field]: value } : t)
-    } : s));
-  };
-
   const toggleTopicExpand = (sectionId: string | number, topicId: string | number) => {
     setSections(sections.map(s => s.id === sectionId ? {
       ...s,
@@ -213,48 +237,188 @@ export default function AdminCourseEditor() {
     } : s));
   };
 
-  const addQuizQuestion = (sectionId: string | number, topicId: string | number) => {
-    setSections(sections.map(s => s.id === sectionId ? {
-      ...s,
-      topics: s.topics.map((t: any) => t.id === topicId ? { 
-        ...t, 
-        quizQuestions: [...(t.quizQuestions || []), { 
-          question: '', 
-          imageUrl: '', 
-          options: ['', '', '', ''], 
-          optionImages: ['', '', '', ''],
-          correctIndex: 0, 
-          explanation: '',
-          explanationImageUrl: ''
-        }] 
-      } : t)
-    } : s));
+  const handleAddItemToTopic = (sectionId: string | number, topicId: string | number, type: 'video' | 'quiz' | 'worksheet' | 'notes') => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              const items = topic.items || [];
+              const newItemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+              let defaultTitle = '';
+              if (type === 'video') defaultTitle = `Video ${items.filter((i: any) => i.type === 'video').length + 1}`;
+              else if (type === 'quiz') defaultTitle = `Quiz ${items.filter((i: any) => i.type === 'quiz').length + 1}`;
+              else if (type === 'worksheet') defaultTitle = `Worksheet ${items.filter((i: any) => i.type === 'worksheet').length + 1}`;
+              else if (type === 'notes') defaultTitle = `Notes ${items.filter((i: any) => i.type === 'notes').length + 1}`;
+
+              const newItem: any = {
+                id: newItemId,
+                type,
+                title: defaultTitle,
+                url: '',
+                quizMode: 'manual',
+                quizQuestions: [],
+                quizEmbedCode: '',
+                quizTimeLimit: '',
+                quizPassingScore: '70',
+                quizShuffleQuestions: false,
+                quizShuffleOptions: false
+              };
+
+              return {
+                ...topic,
+                items: [...items, newItem]
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
   };
 
-  const updateQuizQuestion = (sectionId: string | number, topicId: string | number, qIndex: number, field: string, value: any, optIndex?: number) => {
-    setSections(sections.map(s => s.id === sectionId ? {
-      ...s,
-      topics: s.topics.map((t: any) => {
-        if (t.id === topicId) {
-          const newQs = [...t.quizQuestions];
-          if (field === 'question') newQs[qIndex].question = value;
-          else if (field === 'imageUrl') newQs[qIndex].imageUrl = value;
-          else if (field === 'correctIndex') newQs[qIndex].correctIndex = value;
-          else if (field === 'explanation') newQs[qIndex].explanation = value;
-          else if (field === 'explanationImageUrl') newQs[qIndex].explanationImageUrl = value;
-          else if (field === 'option') newQs[qIndex].options[optIndex!] = value;
-          else if (field === 'optionImage') {
-            if (!newQs[qIndex].optionImages) {
-              newQs[qIndex].optionImages = newQs[qIndex].options ? newQs[qIndex].options.map(() => '') : ['', '', '', ''];
+  const handleUpdateItemField = (sectionId: string | number, topicId: string | number, itemId: string | number, field: string, value: any) => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).map((item: any) => {
+                  if (item.id === itemId) {
+                    return { ...item, [field]: value };
+                  }
+                  return item;
+                })
+              };
             }
-            newQs[qIndex].optionImages[optIndex!] = value;
-          }
-          else if (field === 'delete') newQs.splice(qIndex, 1);
-          return { ...t, quizQuestions: newQs };
-        }
-        return t;
-      })
-    } : s));
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleDeleteItemFromTopic = (sectionId: string | number, topicId: string | number, itemId: string | number) => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).filter((item: any) => item.id !== itemId)
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleMoveItemInTopic = (sectionId: string | number, topicId: string | number, itemIdx: number, direction: 'up' | 'down') => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              const items = [...(topic.items || [])];
+              const targetIdx = direction === 'up' ? itemIdx - 1 : itemIdx + 1;
+              if (targetIdx >= 0 && targetIdx < items.length) {
+                const temp = items[itemIdx];
+                items[itemIdx] = items[targetIdx];
+                items[targetIdx] = temp;
+              }
+              return { ...topic, items };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleAddQuestionToItem = (sectionId: string | number, topicId: string | number, itemId: string | number) => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).map((item: any) => {
+                  if (item.id === itemId) {
+                    return {
+                      ...item,
+                      quizQuestions: [...(item.quizQuestions || []), {
+                        question: '',
+                        imageUrl: '',
+                        options: ['', '', '', ''],
+                        optionImages: ['', '', '', ''],
+                        correctIndex: 0,
+                        explanation: '',
+                        explanationImageUrl: ''
+                      }]
+                    };
+                  }
+                  return item;
+                })
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleUpdateQuestionInItem = (sectionId: string | number, topicId: string | number, itemId: string | number, qIndex: number, field: string, value: any, optIndex?: number) => {
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).map((item: any) => {
+                  if (item.id === itemId && item.quizQuestions) {
+                    const newQs = [...item.quizQuestions];
+                    if (field === 'question') newQs[qIndex].question = value;
+                    else if (field === 'imageUrl') newQs[qIndex].imageUrl = value;
+                    else if (field === 'correctIndex') newQs[qIndex].correctIndex = value;
+                    else if (field === 'explanation') newQs[qIndex].explanation = value;
+                    else if (field === 'explanationImageUrl') newQs[qIndex].explanationImageUrl = value;
+                    else if (field === 'option') newQs[qIndex].options[optIndex!] = value;
+                    else if (field === 'optionImage') {
+                      if (!newQs[qIndex].optionImages) newQs[qIndex].optionImages = ['', '', '', ''];
+                      newQs[qIndex].optionImages[optIndex!] = value;
+                    }
+                    else if (field === 'delete') newQs.splice(qIndex, 1);
+                    return { ...item, quizQuestions: newQs };
+                  }
+                  return item;
+                })
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
   };
 
   const handleSave = async (publishOverride?: boolean) => {
@@ -317,121 +481,80 @@ export default function AdminCourseEditor() {
 
         for (let tIdx = 0; tIdx < section.topics.length; tIdx++) {
           const topic = section.topics[tIdx];
-          const topicPayload = {
+          const items = topic.items || [];
+          const firstVideo = items.find((i: any) => i.type === 'video');
+
+          const topicPayload: any = {
             section_id: dbSectionId,
             title: topic.title,
             order_index: tIdx,
-            youtube_url: topic.youtubeUrl
+            youtube_url: firstVideo?.url || '',
+            content_items: items
           };
           
           let dbTopicId = topic.id;
           if (typeof topic.id === 'string') {
              // Update existing
-             await supabase.from('topics').update(topicPayload).eq('id', topic.id);
+             let { error: tErr } = await supabase.from('topics').update(topicPayload).eq('id', topic.id);
+             if (tErr && tErr.message?.includes('content_items')) {
+               delete topicPayload.content_items;
+               await supabase.from('topics').update(topicPayload).eq('id', topic.id);
+             }
           } else {
              // Insert new
-             const { data } = await supabase.from('topics').insert(topicPayload).select().single();
+             let { data, error: tErr } = await supabase.from('topics').insert(topicPayload).select().single();
+             if (tErr && tErr.message?.includes('content_items')) {
+               delete topicPayload.content_items;
+               const retry = await supabase.from('topics').insert(topicPayload).select().single();
+               data = retry.data;
+             }
              dbTopicId = data.id;
           }
 
-          // Handle PDFs (safest to delete and re-insert for updates without foreign key cascades)
-          const { error: pdfDeleteError } = await supabase.from('topic_pdfs').delete().eq('topic_id', dbTopicId);
-          if (pdfDeleteError) {
-            console.error('PDF delete error:', pdfDeleteError);
-            throw pdfDeleteError;
-          }
-          if (topic.pdfNotesUrl) {
-            const { error: notesError } = await supabase.from('topic_pdfs').insert({ topic_id: dbTopicId, type: 'notes', file_url: topic.pdfNotesUrl });
-            if (notesError) {
-              console.error('PDF notes insert error:', notesError);
-              throw notesError;
-            }
-          }
-          if (topic.pdfWorksheetUrl) {
-            const { error: worksheetError } = await supabase.from('topic_pdfs').insert({ topic_id: dbTopicId, type: 'worksheet', file_url: topic.pdfWorksheetUrl });
-            if (worksheetError) {
-              console.error('PDF worksheet insert error:', worksheetError);
-              throw worksheetError;
+          // Handle PDFs (sync to topic_pdfs for backwards compatibility & submission tracking)
+          await supabase.from('topic_pdfs').delete().eq('topic_id', dbTopicId);
+          for (const item of items) {
+            if ((item.type === 'worksheet' || item.type === 'notes') && item.url) {
+              await supabase.from('topic_pdfs').insert({
+                topic_id: dbTopicId,
+                type: item.type,
+                file_url: item.url
+              });
             }
           }
 
-          // Handle Quizzes
-          const { data: existingQuizzes, error: quizFetchError } = await supabase.from('quizzes').select('*').eq('topic_id', dbTopicId);
-          if (quizFetchError) {
-            console.error('Quiz fetch error:', quizFetchError);
-            throw quizFetchError;
-          }
-          const existingMcqQuiz = existingQuizzes?.find(q => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code) || null;
+          // Handle Quizzes (sync to quizzes for backwards compatibility & quiz submission tracking)
+          await supabase.from('quizzes').delete().eq('topic_id', dbTopicId);
+          for (const item of items) {
+            if (item.type === 'quiz') {
+              const hasQuestions = item.quizQuestions && item.quizQuestions.length > 0;
+              const hasEmbed = item.quizEmbedCode && item.quizEmbedCode.trim().length > 0;
+              if (hasQuestions || hasEmbed) {
+                const quizPayload: any = {
+                  topic_id: dbTopicId,
+                  section_id: dbSectionId,
+                  type: 'topic',
+                  questions_data: hasQuestions ? item.quizQuestions : null,
+                  embed_code: hasEmbed ? item.quizEmbedCode : null,
+                  total_marks: hasQuestions ? item.quizQuestions.length : (hasEmbed ? 10 : 0),
+                  time_limit_minutes: parseInt(item.quizTimeLimit) || null,
+                  passing_score: parseInt(item.quizPassingScore) || null,
+                  settings: {
+                    title: item.title || 'Lesson Quiz',
+                    shuffle_questions: item.quizShuffleQuestions,
+                    shuffle_options: item.quizShuffleOptions,
+                    embed_code: hasEmbed ? item.quizEmbedCode : null
+                  }
+                };
 
-          const hasQuestions = topic.quizQuestions && topic.quizQuestions.length > 0;
-          const hasEmbed = topic.quizEmbedCode && topic.quizEmbedCode.trim().length > 0;
-
-          if (hasQuestions || hasEmbed) {
-            const quizPayload: any = { 
-              questions_data: hasQuestions ? topic.quizQuestions : null,
-              embed_code: hasEmbed ? topic.quizEmbedCode : null,
-              total_marks: hasQuestions ? topic.quizQuestions.length : (hasEmbed ? 10 : 0),
-              time_limit_minutes: parseInt(topic.quizTimeLimit) || null,
-              passing_score: parseInt(topic.quizPassingScore) || null,
-              settings: {
-                shuffle_questions: topic.quizShuffleQuestions,
-                shuffle_options: topic.quizShuffleOptions,
-                embed_code: hasEmbed ? topic.quizEmbedCode : null
+                let { error: qErr } = await supabase.from('quizzes').insert(quizPayload);
+                if (qErr && qErr.message?.includes('embed_code')) {
+                  delete quizPayload.embed_code;
+                  await supabase.from('quizzes').insert(quizPayload);
+                }
               }
-            };
-
-            let quizSaveError: any = null;
-            if (existingMcqQuiz) {
-               let { error } = await supabase.from('quizzes').update(quizPayload).eq('id', existingMcqQuiz.id);
-               if (error && error.message?.includes('embed_code')) {
-                 delete quizPayload.embed_code;
-                 const fallback = await supabase.from('quizzes').update(quizPayload).eq('id', existingMcqQuiz.id);
-                 error = fallback.error;
-               }
-               quizSaveError = error;
-            } else {
-               const existingAny = existingQuizzes && existingQuizzes.length > 0 ? existingQuizzes[0] : null;
-               if (existingAny) {
-                 let { error } = await supabase.from('quizzes').update(quizPayload).eq('id', existingAny.id);
-                 if (error && error.message?.includes('embed_code')) {
-                   delete quizPayload.embed_code;
-                   const fallback = await supabase.from('quizzes').update(quizPayload).eq('id', existingAny.id);
-                   error = fallback.error;
-                 }
-                 quizSaveError = error;
-               } else {
-                 let { error } = await supabase.from('quizzes').insert({ 
-                   topic_id: dbTopicId, 
-                   section_id: dbSectionId, 
-                   type: 'topic', 
-                   ...quizPayload
-                 });
-                 if (error && error.message?.includes('embed_code')) {
-                   delete quizPayload.embed_code;
-                   const fallback = await supabase.from('quizzes').insert({ 
-                     topic_id: dbTopicId, 
-                     section_id: dbSectionId, 
-                     type: 'topic', 
-                     ...quizPayload
-                   });
-                   error = fallback.error;
-                 }
-                 quizSaveError = error;
-               }
-            }
-            if (quizSaveError) {
-              console.error('Quiz save error:', quizSaveError);
-              throw quizSaveError;
-            }
-          } else if (existingMcqQuiz) {
-            // If quiz data was cleared, reset quiz columns
-            const { error: quizClearError } = await supabase.from('quizzes').update({ questions_data: null, embed_code: null, total_marks: 0 }).eq('id', existingMcqQuiz.id);
-            if (quizClearError && quizClearError.message?.includes('embed_code')) {
-              await supabase.from('quizzes').update({ questions_data: null, total_marks: 0 }).eq('id', existingMcqQuiz.id);
             }
           }
-
-
         }
       }
 
@@ -448,52 +571,66 @@ export default function AdminCourseEditor() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <div className="flex items-center gap-2 mb-2 text-text/60">
-            <Link href="/admin/courses" className="hover:text-primary transition-colors flex items-center gap-1">
-              <ArrowLeft className="w-4 h-4" /> Back to Courses
-            </Link>
+    <div className="p-8 max-w-5xl mx-auto space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/admin/courses" className="p-2 hover:bg-gray-100 rounded-lg text-text/60">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-text">Edit Course</h1>
+            <p className="text-sm text-text/60">Update your course syllabus, videos, worksheets, and quizzes</p>
           </div>
-          <h1 className="text-2xl font-bold text-text">Edit Course</h1>
-          <p className="text-text/60 text-sm">Update your syllabus and pricing.</p>
         </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => handleSave(false)}
+            disabled={isSaving}
+            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Save Draft
+          </button>
+          <button 
+            onClick={() => handleSave(true)}
+            disabled={isSaving}
+            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50"
+          >
+            {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Publish Course
+          </button>
+        </div>
+      </div>
+
+      {/* Wizard Steps */}
+      <div className="flex border-b border-gray-200">
         <button 
-          onClick={() => handleSave()}
-          disabled={isSaving}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors disabled:opacity-70"
+          onClick={() => setStep(1)}
+          className={`pb-4 px-6 font-medium text-sm border-b-2 transition-colors ${step === 1 ? 'border-primary text-primary' : 'border-transparent text-text/60'}`}
         >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {isSaving ? 'Saving...' : 'Save Changes'}
+          1. Basic Information
+        </button>
+        <button 
+          onClick={() => setStep(2)}
+          className={`pb-4 px-6 font-medium text-sm border-b-2 transition-colors ${step === 2 ? 'border-primary text-primary' : 'border-transparent text-text/60'}`}
+        >
+          2. Syllabus & Lessons
         </button>
       </div>
 
-      {/* Stepper */}
-      <div className="flex items-center mb-8">
-        <div className={`flex items-center gap-2 ${step >= 1 ? 'text-primary' : 'text-gray-400'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${step >= 1 ? 'bg-primary text-white' : 'bg-gray-200'}`}>1</div>
-          <span className="font-medium">Course Details</span>
-        </div>
-        <div className={`w-16 h-px mx-4 ${step >= 2 ? 'bg-primary' : 'bg-gray-200'}`}></div>
-        <div className={`flex items-center gap-2 ${step >= 2 ? 'text-primary' : 'text-gray-400'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${step >= 2 ? 'bg-primary text-white' : 'bg-gray-200'}`}>2</div>
-          <span className="font-medium">Syllabus Builder</span>
-        </div>
-      </div>
-
       {step === 1 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 space-y-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
           <div>
             <label className="block text-sm font-medium text-text mb-2">Course Title</label>
-            <input type="text" value={courseTitle} onChange={(e) => setCourseTitle(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. Complete Algebra Masterclass" />
+            <input type="text" value={courseTitle} onChange={(e) => setCourseTitle(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. A-Level Pure Mathematics" />
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-2">Description</label>
@@ -518,13 +655,12 @@ export default function AdminCourseEditor() {
           <div>
             <label className="block text-sm font-medium text-text mb-2">Course Entrance / Intro Video (YouTube, Google Drive, or Upload)</label>
             <div className="flex gap-2">
-              <input type="text" value={courseIntroVideo} onChange={(e) => setCourseIntroVideo(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" placeholder="YouTube, Google Drive link (drive.google.com/file/d/...), or upload video" />
+              <input type="text" value={courseIntroVideo} onChange={(e) => setCourseIntroVideo(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" placeholder="YouTube, Google Drive link, or upload video" />
               <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center min-w-[120px] text-sm">
                 {uploadingField === 'intro_video' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
                 <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, 'intro_video', setCourseIntroVideo)} disabled={uploadingField === 'intro_video'} />
               </label>
             </div>
-            <p className="text-xs text-text/50 mt-1">This video will be shown as the main preview video at the entrance of the course sales page.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-2">Keywords (comma-separated)</label>
@@ -545,7 +681,7 @@ export default function AdminCourseEditor() {
         <div className="space-y-4">
           {sections.map(section => (
             <div key={section.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-              <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between cursor-move">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-3 w-full max-w-md">
                   <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
                   <input 
@@ -566,571 +702,391 @@ export default function AdminCourseEditor() {
                   <button className="text-gray-400 hover:text-primary ml-2"><Settings className="w-4 h-4" /></button>
                 </div>
               </div>
-              <div className="p-4 space-y-3">
+
+              <div className="p-4 space-y-4">
                 {section.topics.map((topic: any) => (
-                  <div key={topic.id} className="bg-gray-50 border border-gray-100 rounded-lg overflow-hidden transition-all">
-                    <div className="flex items-center justify-between p-3">
-                      <div className="flex items-center gap-3 w-full">
+                  <div key={topic.id} className="bg-gray-50/80 border border-gray-200 rounded-xl overflow-hidden transition-all shadow-xs">
+                    {/* Lesson Header */}
+                    <div className="flex items-center justify-between p-3.5 bg-white border-b border-gray-100">
+                      <div className="flex items-center gap-3 w-full max-w-xl">
                         <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0 cursor-move" />
-                        <input 
-                          type="text" 
-                          value={topic.title}
-                          onChange={(e) => updateTopicTitle(section.id, topic.id, e.target.value)}
-                          className="text-sm font-medium bg-transparent border-none outline-none w-full focus:ring-2 focus:ring-primary/20 rounded px-2"
-                        />
+                        <div className="w-full">
+                          <label className="text-[10px] uppercase font-bold text-primary block mb-0.5">Lesson Title</label>
+                          <input 
+                            type="text" 
+                            value={topic.title}
+                            onChange={(e) => updateTopicTitle(section.id, topic.id, e.target.value)}
+                            className="text-base font-bold bg-transparent border-none outline-none w-full focus:ring-2 focus:ring-primary/20 rounded px-1.5 py-0.5 text-text"
+                            placeholder="e.g. Lesson 1: Introduction to Algebra"
+                          />
+                        </div>
                       </div>
-                      <button 
-                        onClick={() => toggleTopicExpand(section.id, topic.id)}
-                        className="text-gray-400 hover:text-primary px-2"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-text/50 bg-gray-100 px-2.5 py-1 rounded-full border border-gray-200">
+                          {topic.items?.length || 0} Content {topic.items?.length === 1 ? 'Item' : 'Items'}
+                        </span>
+                        <button 
+                          onClick={() => toggleTopicExpand(section.id, topic.id)}
+                          className="p-1.5 text-gray-500 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                        >
+                          <Settings className="w-4 h-4" /> {topic.isExpanded ? 'Collapse' : 'Edit Content'}
+                        </button>
+                      </div>
                     </div>
 
+                    {/* Lesson Content Items Editor */}
                     {topic.isExpanded && (
-                      <div className="px-6 pb-6 space-y-6 border-t border-gray-100 pt-4 bg-white/50">
-                        {/* Core Media Uploads */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="md:col-span-2">
-                            <label className="block text-xs font-medium text-text/70 mb-1">Video URL (YouTube or Google Drive) or Upload</label>
-                            <div className="flex gap-2">
-                              <input 
-                                type="text" 
-                                value={topic.youtubeUrl}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'youtubeUrl', e.target.value)}
-                                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                placeholder="YouTube, Google Drive link, or upload a file" 
-                              />
-                              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center min-w-[100px] text-sm">
-                                {uploadingField === `video_${topic.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
-                                <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `video_${topic.id}`, (url) => updateTopicField(section.id, topic.id, 'youtubeUrl', url))} disabled={uploadingField === `video_${topic.id}`} />
-                              </label>
-                            </div>
-                            <p className="text-[11px] text-text/40 mt-1">Supports YouTube links, Google Drive share links (drive.google.com/file/d/...), or direct video file uploads.</p>
-                          </div>
+                      <div className="p-5 space-y-6 bg-slate-50/50">
+                        <div className="flex items-center justify-between border-b border-gray-200/80 pb-3">
                           <div>
-                            <label className="block text-xs font-medium text-text/70 mb-1">PDF Notes URL or Upload</label>
-                            <div className="flex gap-2">
-                              <input 
-                                type="text" 
-                                value={topic.pdfNotesUrl}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'pdfNotesUrl', e.target.value)}
-                                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                placeholder="https://..." 
-                              />
-                              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center min-w-[100px] text-sm">
-                                {uploadingField === `notes_${topic.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-                                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `notes_${topic.id}`, (url) => updateTopicField(section.id, topic.id, 'pdfNotesUrl', url))} disabled={uploadingField === `notes_${topic.id}`} />
-                              </label>
-                            </div>
+                            <h4 className="font-bold text-sm text-text flex items-center gap-2">
+                              <Layers className="w-4 h-4 text-primary" /> Lesson Sections & Content Items
+                            </h4>
+                            <p className="text-xs text-text/60">Add videos, quizzes, worksheets, or notes to this lesson. Add as many videos or quizzes as needed.</p>
                           </div>
-                          <div>
-                            <label className="block text-xs font-medium text-text/70 mb-1">PDF Worksheet URL or Upload</label>
-                            <div className="flex gap-2">
-                              <input 
-                                type="text" 
-                                value={topic.pdfWorksheetUrl}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'pdfWorksheetUrl', e.target.value)}
-                                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                placeholder="https://..." 
-                              />
-                              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center min-w-[100px] text-sm">
-                                {uploadingField === `worksheet_${topic.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-                                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `worksheet_${topic.id}`, (url) => updateTopicField(section.id, topic.id, 'pdfWorksheetUrl', url))} disabled={uploadingField === `worksheet_${topic.id}`} />
-                              </label>
-                            </div>
+
+                          {/* Add Item Quick Actions */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleAddItemToTopic(section.id, topic.id, 'video')}
+                              className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                            >
+                              <Video className="w-3.5 h-3.5" /> + Video
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAddItemToTopic(section.id, topic.id, 'quiz')}
+                              className="px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                            >
+                              <HelpCircle className="w-3.5 h-3.5" /> + Quiz
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAddItemToTopic(section.id, topic.id, 'worksheet')}
+                              className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> + Worksheet
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAddItemToTopic(section.id, topic.id, 'notes')}
+                              className="px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                            >
+                              <BookOpen className="w-3.5 h-3.5" /> + Notes
+                            </button>
                           </div>
                         </div>
 
-                        {/* Quiz Builder */}
-                        <div className="pt-6 border-t border-gray-200 mt-6">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                            <div>
-                              <h4 className="font-bold text-base text-text flex items-center gap-2">
-                                Topic Quiz
-                              </h4>
-                              <p className="text-xs text-text/60">Select how to create the quiz for this topic:</p>
-                            </div>
+                        {/* Items List */}
+                        <div className="space-y-4">
+                          {topic.items && topic.items.length > 0 ? (
+                            topic.items.map((item: any, itemIdx: number) => {
+                              const isVideo = item.type === 'video';
+                              const isQuiz = item.type === 'quiz';
+                              const isWorksheet = item.type === 'worksheet';
+                              const isNotes = item.type === 'notes';
 
-                            {/* Mode Switcher Tabs */}
-                            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200/60 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => updateTopicField(section.id, topic.id, 'quizMode', 'manual')}
-                                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
-                                  (topic.quizMode || (topic.quizEmbedCode && (!topic.quizQuestions || topic.quizQuestions.length === 0) ? 'canva' : 'manual')) === 'manual' 
-                                    ? 'bg-white text-text shadow-sm' 
-                                    : 'text-text/60 hover:text-text'
-                                }`}
-                              >
-                                <FileText className="w-4 h-4" /> Create Quiz Manually (MCQ)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateTopicField(section.id, topic.id, 'quizMode', 'canva')}
-                                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
-                                  (topic.quizMode || (topic.quizEmbedCode && (!topic.quizQuestions || topic.quizQuestions.length === 0) ? 'canva' : 'manual')) === 'canva' 
-                                    ? 'bg-purple-600 text-white shadow-sm' 
-                                    : 'text-purple-700 hover:bg-purple-50'
-                                }`}
-                              >
-                                <Sparkles className="w-4 h-4" /> Embed Canva AI Code
-                              </button>
-                            </div>
-                          </div>
-
-                          {(topic.quizMode || (topic.quizEmbedCode && (!topic.quizQuestions || topic.quizQuestions.length === 0) ? 'canva' : 'manual')) === 'canva' ? (
-                            /* CANVA AI MODE */
-                            <div className="bg-gradient-to-br from-purple-50 via-white to-purple-50/40 p-6 rounded-2xl border border-purple-200 shadow-sm">
-                              <div className="flex items-center justify-between mb-3">
-                                <div>
-                                  <h5 className="font-bold text-sm text-text flex items-center gap-2">
-                                    <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase">Canva AI</span>
-                                    Copy & Paste Canva HTML Code
-                                  </h5>
-                                  <p className="text-xs text-text/60 mt-1">Paste the full HTML code generated by Canva AI below (starts with <code className="bg-purple-100 text-purple-800 px-1 rounded">&lt;!doctype html&gt;</code> or <code className="bg-purple-100 text-purple-800 px-1 rounded">&lt;iframe&gt;</code>).</p>
-                                </div>
-                                {topic.quizEmbedCode && (
-                                  <button 
-                                    type="button"
-                                    onClick={() => updateTopicField(section.id, topic.id, 'quizEmbedCode', '')}
-                                    className="text-xs text-red-500 hover:text-red-700 font-medium px-2.5 py-1 rounded-md bg-white border border-red-100 shadow-xs"
-                                  >
-                                    Clear Code
-                                  </button>
-                                )}
-                              </div>
-
-                              <textarea 
-                                value={topic.quizEmbedCode || ''}
-                                onChange={(e) => updateTopicField(section.id, topic.id, 'quizEmbedCode', e.target.value)}
-                                placeholder="<!doctype html>... Paste your Canva AI interactive quiz code here"
-                                className="w-full text-xs font-mono p-4 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none h-36 bg-white shadow-inner resize-y"
-                              />
-
-                              {topic.quizEmbedCode ? (
-                                <div className="mt-4 bg-gray-900 rounded-xl p-4 overflow-hidden border border-gray-800">
-                                  <div className="flex items-center justify-between text-white text-xs mb-3 pb-2 border-b border-gray-800">
-                                    <span className="font-bold flex items-center gap-2 text-purple-400">
-                                      <Sparkles className="w-4 h-4" /> Live Interactive Canva Quiz Preview
-                                    </span>
-                                    <span className="text-[10px] text-gray-400">Student Interactive View</span>
-                                  </div>
-                                  <div className="bg-white rounded-lg overflow-hidden border border-gray-700 h-[70vh] min-h-[550px] max-h-[850px]">
-                                    <iframe 
-                                      srcDoc={(() => {
-                                        const html = topic.quizEmbedCode || '';
-                                        if (!html) return '';
-                                        const isUrl = html.trim().startsWith('http://') || html.trim().startsWith('https://');
-                                        if (isUrl) return '';
-                                        const patchScriptAndStyle = `
-                                          <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
-                                          <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:wght@700;900&display=swap" rel="stylesheet">
-                                          <style id="canva-exact-original-fix">
-                                            html, body {
-                                              background: linear-gradient(135deg, #1e1b4b 0%, #252262 50%, #1e1b4b 100%) !important;
-                                              background-color: #1e1b4b !important;
-                                              color: #ffffff !important;
-                                              margin: 0 !important;
-                                              padding: clamp(16px, 3vh, 32px) clamp(12px, 2vw, 24px) !important;
-                                              min-height: 100vh !important;
-                                              height: auto !important;
-                                              display: flex !important;
-                                              flex-direction: column !important;
-                                              justify-content: flex-start !important;
-                                              align-items: center !important;
-                                              overflow-x: hidden !important;
-                                              overflow-y: auto !important;
-                                              font-family: 'DM Sans', system-ui, sans-serif !important;
-                                            }
-                                            * { box-sizing: border-box !important; }
-                                            header { width: 100% !important; max-width: min(720px, 94vw) !important; text-align: center !important; margin-bottom: 2rem !important; }
-                                            header h1, .heading-font, [data-template-id="quiz-title"] {
-                                              font-family: 'Fraunces', Georgia, serif !important;
-                                              color: #ffffff !important;
-                                              font-size: clamp(1.75rem, 1.2rem + 1.5vw, 2.75rem) !important;
-                                              font-weight: 900 !important;
-                                              margin: 0 0 0.5rem 0 !important;
-                                            }
-                                            header p, [data-template-id="quiz-subtitle"] {
-                                              color: #cbd5e1 !important;
-                                              font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.15rem) !important;
-                                              margin: 0 !important;
-                                            }
-                                            .canva-card, #quiz-card {
-                                              background-color: #ffffff !important;
-                                              color: #1e293b !important;
-                                              border-radius: 1.25rem !important;
-                                              box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4) !important;
-                                              max-width: min(720px, 94vw) !important;
-                                              width: 100% !important;
-                                              padding: clamp(20px, 3.5vh, 32px) clamp(20px, 3.5vw, 32px) !important;
-                                              box-sizing: border-box !important;
-                                            }
-                                            [data-template-id="question-label"] {
-                                              color: #6366f1 !important;
-                                              font-weight: 600 !important;
-                                            }
-                                            #score-display {
-                                              color: #0f172a !important;
-                                              font-weight: 700 !important;
-                                            }
-                                            .canva-card p, #quiz-card p, #question-text {
-                                              color: #0f172a !important;
-                                              font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.3rem) !important;
-                                              font-weight: 500 !important;
-                                            }
-                                            /* Default Option Buttons */
-                                            .opt-btn:not(.correct):not(.incorrect) {
-                                              background-color: #ffffff !important;
-                                              color: #1e293b !important;
-                                              border: 2px solid #cbd5e1 !important;
-                                              border-radius: 0.75rem !important;
-                                              padding: 0.75rem 1rem !important;
-                                              font-weight: 500 !important;
-                                              transition: all 0.2s ease !important;
-                                            }
-                                            .opt-btn:not(.correct):not(.incorrect):hover:not(:disabled) {
-                                              border-color: #818cf8 !important;
-                                              transform: translateY(-2px) !important;
-                                              box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-                                            }
-                                            /* Correct Option Button -> GREEN */
-                                            .correct, .opt-btn.correct, button.correct {
-                                              background: #059669 !important;
-                                              background-color: #059669 !important;
-                                              color: #ffffff !important;
-                                              border-color: #059669 !important;
-                                              opacity: 1 !important;
-                                            }
-                                            .correct *, .opt-btn.correct *, button.correct * {
-                                              color: #ffffff !important;
-                                            }
-                                            /* Incorrect Option Button -> RED */
-                                            .incorrect, .opt-btn.incorrect, button.incorrect {
-                                              background: #dc2626 !important;
-                                              background-color: #dc2626 !important;
-                                              color: #ffffff !important;
-                                              border-color: #dc2626 !important;
-                                              opacity: 1 !important;
-                                            }
-                                            .incorrect *, .opt-btn.incorrect *, button.incorrect * {
-                                              color: #ffffff !important;
-                                            }
-                                            /* Next / Restart Buttons */
-                                            .canva-button, #next-btn, #restart-btn {
-                                              background-color: #4f46e5 !important;
-                                              color: #ffffff !important;
-                                              font-weight: 700 !important;
-                                              border: none !important;
-                                              border-radius: 0.75rem !important;
-                                              padding: 12px 24px !important;
-                                              min-height: 48px !important;
-                                              font-size: 1.125rem !important;
-                                              box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
-                                              width: 100% !important;
-                                              margin-top: 1.5rem !important;
-                                              cursor: pointer !important;
-                                            }
-                                            .canva-button *, #next-btn *, #restart-btn * { color: #ffffff !important; }
-                                            .canva-button.hidden, #next-btn.hidden, #restart-btn.hidden, #results.hidden, #question-area.hidden, #score-bar.hidden {
-                                              display: none !important;
-                                            }
-                                          </style>
-                                          <script>
-                                            document.addEventListener('DOMContentLoaded', function() {
-                                              function fixCanvaOriginal() {
-                                                var nextBtn = document.getElementById('next-btn');
-                                                if (nextBtn && (!nextBtn.textContent || !nextBtn.textContent.trim())) {
-                                                  nextBtn.textContent = 'Next Question →';
-                                                }
-                                                var restartBtn = document.getElementById('restart-btn');
-                                                if (restartBtn && (!restartBtn.textContent || !restartBtn.textContent.trim())) {
-                                                  restartBtn.textContent = 'Restart Quiz ↺';
-                                                }
-                                                var qLabel = document.querySelector('[data-template-id="question-label"]');
-                                                if (qLabel && (!qLabel.textContent || !qLabel.textContent.trim() || qLabel.textContent.trim() === 'Question')) {
-                                                  qLabel.textContent = 'Score';
-                                                }
-                                                var qTitle = document.querySelector('[data-template-id="quiz-title"]');
-                                                if (qTitle && (!qTitle.textContent || !qTitle.textContent.trim())) {
-                                                  qTitle.textContent = 'Quadratic Transformations';
-                                                }
-                                                var qSub = document.querySelector('[data-template-id="quiz-subtitle"]');
-                                                if (qSub && (!qSub.textContent || !qSub.textContent.trim())) {
-                                                  qSub.textContent = 'Test your knowledge of parabola shifts, stretches & reflections';
-                                                }
-                                              }
-                                              fixCanvaOriginal();
-                                              setTimeout(fixCanvaOriginal, 100);
-                                              setTimeout(fixCanvaOriginal, 400);
-
-                                              var observer = new MutationObserver(function() {
-                                                fixCanvaOriginal();
-                                              });
-                                              var card = document.getElementById('quiz-card') || document.body;
-                                              if (card) observer.observe(card, { childList: true, subtree: true, characterData: true });
-                                            });
-                                          </script>
-                                        `;
-                                        if (html.includes('</head>')) return html.replace('</head>', `${patchScriptAndStyle}</head>`);
-                                        return `<!DOCTYPE html><html><head>${patchScriptAndStyle}</head><body>${html}</body></html>`;
-                                      })()}
-                                      className="w-full h-full border-0"
-                                      title="Canva Quiz Preview"
-                                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="mt-3 p-4 bg-purple-50/60 rounded-xl border border-dashed border-purple-200 text-center">
-                                  <p className="text-xs text-purple-700 font-medium">
-                                    Paste your Canva AI code in the box above to generate and preview the interactive quiz widget.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            /* MANUAL MCQ QUIZ MAKER MODE */
-                            <div>
-                              <div className="flex items-center justify-between mb-4">
-                                <div>
-                                  <h5 className="font-bold text-sm text-text">Multiple Choice (MCQ) Questions</h5>
-                                  <p className="text-xs text-text/60">Generate auto-correcting multiple choice questions for this topic.</p>
-                                </div>
-                                <button 
-                                  type="button"
-                                  onClick={() => addQuizQuestion(section.id, topic.id)}
-                                  className="text-xs font-bold text-white bg-text px-4 py-2.5 rounded-xl hover:bg-text/90 shadow-sm flex items-center gap-1"
+                              return (
+                                <div 
+                                  key={item.id || itemIdx} 
+                                  className={`bg-white rounded-xl border p-4 shadow-xs space-y-4 transition-all ${
+                                    isVideo ? 'border-blue-200 border-l-4 border-l-blue-500' :
+                                    isQuiz ? 'border-purple-200 border-l-4 border-l-purple-500' :
+                                    isWorksheet ? 'border-emerald-200 border-l-4 border-l-emerald-500' :
+                                    'border-amber-200 border-l-4 border-l-amber-500'
+                                  }`}
                                 >
-                                  <Plus className="w-4 h-4" /> Add Question
-                                </button>
-                              </div>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                <div>
-                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Time Limit (Min)</label>
-                                  <input 
-                                    type="number" 
-                                    value={topic.quizTimeLimit}
-                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizTimeLimit', e.target.value)}
-                                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary"
-                                    placeholder="None"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Passing Score (%)</label>
-                                  <input 
-                                    type="number" 
-                                    value={topic.quizPassingScore}
-                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizPassingScore', e.target.value)}
-                                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary"
-                                    placeholder="70"
-                                  />
-                                </div>
-                                <div className="flex items-center gap-2 pt-5">
-                                  <input 
-                                    type="checkbox" 
-                                    id={`shuffle-q-${topic.id}`}
-                                    checked={topic.quizShuffleQuestions}
-                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizShuffleQuestions', e.target.checked)}
-                                    className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
-                                  />
-                                  <label htmlFor={`shuffle-q-${topic.id}`} className="text-xs font-medium text-text/70">Shuffle Qs</label>
-                                </div>
-                                <div className="flex items-center gap-2 pt-5">
-                                  <input 
-                                    type="checkbox" 
-                                    id={`shuffle-o-${topic.id}`}
-                                    checked={topic.quizShuffleOptions}
-                                    onChange={(e) => updateTopicField(section.id, topic.id, 'quizShuffleOptions', e.target.checked)}
-                                    className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
-                                  />
-                                  <label htmlFor={`shuffle-o-${topic.id}`} className="text-xs font-medium text-text/70">Shuffle Options</label>
-                                </div>
-                              </div>
-                              
-                              <div className="space-y-4">
-                                {topic.quizQuestions?.map((q: any, qIndex: number) => (
-                                  <div key={qIndex} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative">
-                                    <button 
-                                      type="button"
-                                      onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'delete', null)}
-                                      className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors"
-                                      title="Delete Question"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                    <div className="flex gap-4 mb-4 pr-8">
-                                      <div className="flex-1">
-                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Text (Optional if using image) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
-                                        <textarea 
-                                          value={q.question}
-                                          onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'question', e.target.value)}
-                                          placeholder={`Enter question ${qIndex + 1} here... Use $x^2$ for math`}
-                                          className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none font-bold text-text resize-none h-16" 
+                                  {/* Item Header & Title */}
+                                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                                    <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+                                      <span className={`px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0 ${
+                                        isVideo ? 'bg-blue-100 text-blue-800' :
+                                        isQuiz ? 'bg-purple-100 text-purple-800' :
+                                        isWorksheet ? 'bg-emerald-100 text-emerald-800' :
+                                        'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {isVideo && <Video className="w-3 h-3" />}
+                                        {isQuiz && <HelpCircle className="w-3 h-3" />}
+                                        {isWorksheet && <FileText className="w-3 h-3" />}
+                                        {isNotes && <BookOpen className="w-3 h-3" />}
+                                        {item.type}
+                                      </span>
+
+                                      <input 
+                                        type="text" 
+                                        value={item.title}
+                                        onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'title', e.target.value)}
+                                        placeholder={`Enter ${item.type} title...`}
+                                        className="font-bold text-sm text-text border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary w-full"
+                                      />
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button 
+                                        type="button" 
+                                        disabled={itemIdx === 0}
+                                        onClick={() => handleMoveItemInTopic(section.id, topic.id, itemIdx, 'up')}
+                                        className="p-1.5 text-gray-400 hover:text-text disabled:opacity-30 rounded hover:bg-gray-100"
+                                      >
+                                        <ArrowUp className="w-4 h-4" />
+                                      </button>
+                                      <button 
+                                        type="button" 
+                                        disabled={itemIdx === topic.items.length - 1}
+                                        onClick={() => handleMoveItemInTopic(section.id, topic.id, itemIdx, 'down')}
+                                        className="p-1.5 text-gray-400 hover:text-text disabled:opacity-30 rounded hover:bg-gray-100"
+                                      >
+                                        <ArrowDown className="w-4 h-4" />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => handleDeleteItemFromTopic(section.id, topic.id, item.id)}
+                                        className="p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-red-50 ml-1"
+                                        title="Delete section item"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Item Body: VIDEO */}
+                                  {isVideo && (
+                                    <div className="space-y-2 pt-2 border-t border-gray-100">
+                                      <label className="block text-xs font-semibold text-text/70">Video Link (YouTube, Google Drive) or Video Upload</label>
+                                      <div className="flex gap-2">
+                                        <input 
+                                          type="text" 
+                                          value={item.url || ''}
+                                          onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'url', e.target.value)}
+                                          className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                                          placeholder="https://youtube.com/watch?... or https://drive.google.com/..."
                                         />
-                                        {q.question && /\$/.test(q.question) && (
-                                          <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
-                                            <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
-                                            <MathText text={q.question} className="text-sm font-bold text-text" block />
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="w-1/3">
-                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question Image (Optional)</label>
-                                        <div className="flex gap-2">
-                                          <input 
-                                            type="text" 
-                                            value={q.imageUrl || ''}
-                                            onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', e.target.value)}
-                                            placeholder={`Image URL`}
-                                            className="w-full text-sm px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                          />
-                                          <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-md font-medium transition-colors flex items-center justify-center text-sm shrink-0">
-                                            {uploadingField === `q_img_${topic.id}_${qIndex}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4" />}
-                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `q_img_${topic.id}_${qIndex}`, (url) => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', url))} disabled={uploadingField === `q_img_${topic.id}_${qIndex}`} />
-                                          </label>
-                                          {q.imageUrl && (
-                                            <button 
-                                              type="button"
-                                              onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'imageUrl', '')}
-                                              className="text-gray-400 hover:text-red-500 p-2"
-                                              title="Remove Question Image"
-                                            >
-                                              <Trash2 className="w-4 h-4" />
-                                            </button>
-                                          )}
-                                        </div>
+                                        <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[110px] shrink-0">
+                                          {uploadingField === `vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
+                                          <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url))} disabled={uploadingField === `vid_${item.id}`} />
+                                        </label>
                                       </div>
                                     </div>
-                                    {q.imageUrl && (
-                                      <div className="mb-4">
-                                        <img src={q.imageUrl} alt={`Question ${qIndex + 1}`} className="max-h-48 rounded-md object-contain border border-gray-200" />
+                                  )}
+
+                                  {/* Item Body: WORKSHEET or NOTES */}
+                                  {(isWorksheet || isNotes) && (
+                                    <div className="space-y-2 pt-2 border-t border-gray-100">
+                                      <label className="block text-xs font-semibold text-text/70">{isWorksheet ? 'Worksheet PDF Link or Upload' : 'Notes PDF Link or Upload'}</label>
+                                      <div className="flex gap-2">
+                                        <input 
+                                          type="text" 
+                                          value={item.url || ''}
+                                          onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'url', e.target.value)}
+                                          className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                                          placeholder="https://..."
+                                        />
+                                        <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
+                                          {uploadingField === `pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                          <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url))} disabled={uploadingField === `pdf_${item.id}`} />
+                                        </label>
                                       </div>
-                                    )}
+                                    </div>
+                                  )}
 
-                                    {/* Answer Options */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                      {q.options.map((opt: string, optIndex: number) => (
-                                        <div key={optIndex} className="bg-gray-50 p-2.5 rounded-lg border border-gray-100 space-y-2">
-                                          <div className="flex items-center gap-3">
-                                            <div className="relative flex items-center justify-center">
-                                              <input 
-                                                type="radio" 
-                                                name={`correct-${section.id}-${topic.id}-${qIndex}`}
-                                                checked={q.correctIndex === optIndex}
-                                                onChange={() => updateQuizQuestion(section.id, topic.id, qIndex, 'correctIndex', optIndex)}
-                                                className="w-4 h-4 text-green-500 focus:ring-green-500 border-gray-300 cursor-pointer"
-                                              />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                              <input 
-                                                type="text" 
-                                                value={opt}
-                                                onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'option', e.target.value, optIndex)}
-                                                placeholder={`Option ${optIndex + 1} — use $...$ for math`}
-                                                className="w-full text-xs px-2 py-1.5 border border-gray-200 bg-white rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                              />
-                                              {opt && /\$/.test(opt) && (
-                                                <MathText text={opt} className="block mt-1 text-xs text-text/70 px-2" />
-                                              )}
-                                            </div>
-                                            {q.correctIndex === optIndex && (
-                                              <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-1 rounded">Correct</span>
-                                            )}
-                                          </div>
+                                  {/* Item Body: QUIZ */}
+                                  {isQuiz && (
+                                    <div className="space-y-4 pt-3 border-t border-gray-100">
+                                      {/* Quiz Mode Selector */}
+                                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                                        <span className="text-xs font-bold text-text">Quiz Creation Method:</span>
+                                        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'quizMode', 'manual')}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                              (item.quizMode || 'manual') === 'manual' ? 'bg-white text-text shadow-sm' : 'text-text/60 hover:text-text'
+                                            }`}
+                                          >
+                                            <FileText className="w-3.5 h-3.5" /> Manual MCQ
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'quizMode', 'canva')}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                              item.quizMode === 'canva' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-700 hover:bg-purple-50'
+                                            }`}
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5" /> Canva AI Code
+                                          </button>
+                                        </div>
+                                      </div>
 
-                                          {/* Option Image Field */}
-                                          <div className="pl-7 flex items-center gap-2">
-                                            <input 
-                                              type="text" 
-                                              value={q.optionImages?.[optIndex] || ''}
-                                              onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'optionImage', e.target.value, optIndex)}
-                                              placeholder={`Option ${optIndex + 1} Image URL (Optional)`}
-                                              className="w-full text-[11px] px-2 py-1 border border-gray-200 bg-white rounded-md focus:ring-2 focus:ring-primary outline-none" 
-                                            />
-                                            <label className="cursor-pointer bg-gray-200 hover:bg-gray-300 text-text px-2 py-1 rounded-md font-medium transition-colors flex items-center justify-center text-xs shrink-0" title="Upload Option Image">
-                                              {uploadingField === `opt_img_${topic.id}_${qIndex}_${optIndex}` ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Upload className="w-3.5 h-3.5" />}
-                                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `opt_img_${topic.id}_${qIndex}_${optIndex}`, (url) => updateQuizQuestion(section.id, topic.id, qIndex, 'optionImage', url, optIndex))} disabled={uploadingField === `opt_img_${topic.id}_${qIndex}_${optIndex}`} />
-                                            </label>
-                                            {q.optionImages?.[optIndex] && (
+                                      {/* Settings Row */}
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                        <div>
+                                          <label className="block text-[10px] uppercase font-bold text-text/60 mb-1">Time Limit (Min)</label>
+                                          <input 
+                                            type="number" 
+                                            value={item.quizTimeLimit || ''}
+                                            onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'quizTimeLimit', e.target.value)}
+                                            className="w-full text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary bg-white"
+                                            placeholder="None"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[10px] uppercase font-bold text-text/60 mb-1">Passing Score (%)</label>
+                                          <input 
+                                            type="number" 
+                                            value={item.quizPassingScore || '70'}
+                                            onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'quizPassingScore', e.target.value)}
+                                            className="w-full text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary bg-white"
+                                            placeholder="70"
+                                          />
+                                        </div>
+                                        <div className="flex items-center gap-1.5 pt-4">
+                                          <input 
+                                            type="checkbox" 
+                                            id={`sq_${item.id}`}
+                                            checked={item.quizShuffleQuestions || false}
+                                            onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'quizShuffleQuestions', e.target.checked)}
+                                            className="w-3.5 h-3.5 rounded text-primary focus:ring-primary"
+                                          />
+                                          <label htmlFor={`sq_${item.id}`} className="text-xs font-medium text-text/70">Shuffle Qs</label>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 pt-4">
+                                          <input 
+                                            type="checkbox" 
+                                            id={`so_${item.id}`}
+                                            checked={item.quizShuffleOptions || false}
+                                            onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'quizShuffleOptions', e.target.checked)}
+                                            className="w-3.5 h-3.5 rounded text-primary focus:ring-primary"
+                                          />
+                                          <label htmlFor={`so_${item.id}`} className="text-xs font-medium text-text/70">Shuffle Options</label>
+                                        </div>
+                                      </div>
+
+                                      {/* Mode: CANVA AI */}
+                                      {item.quizMode === 'canva' ? (
+                                        <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-200 space-y-3">
+                                          <div className="flex items-center justify-between">
+                                            <h5 className="font-bold text-xs text-purple-900 flex items-center gap-1.5">
+                                              <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Canva AI HTML Code
+                                            </h5>
+                                            {item.quizEmbedCode && (
                                               <button 
                                                 type="button"
-                                                onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'optionImage', '', optIndex)}
-                                                className="text-gray-400 hover:text-red-500 p-1"
-                                                title="Remove Option Image"
+                                                onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'quizEmbedCode', '')}
+                                                className="text-[11px] text-red-500 font-bold hover:underline"
                                               >
-                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Clear Code
                                               </button>
                                             )}
                                           </div>
-                                          {q.optionImages?.[optIndex] && (
-                                            <div className="pl-7">
-                                              <img src={q.optionImages[optIndex]} alt={`Option ${optIndex + 1}`} className="max-h-24 rounded-md object-contain border border-gray-200 bg-white" />
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-
-                                    {/* Explanation / Feedback */}
-                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                      <div className="md:col-span-2">
-                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Explanation / Feedback (Shown after submission) — <span className="normal-case font-normal">use <code className="bg-gray-100 px-1 rounded">$...$</code> for math</span></label>
-                                        <textarea 
-                                          value={q.explanation}
-                                          onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanation', e.target.value)}
-                                          placeholder="Explain why the correct answer is right... Use $x^2$ for math"
-                                          className="w-full text-xs px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none h-20 resize-none"
-                                        />
-                                        {q.explanation && /\$/.test(q.explanation) && (
-                                          <div className="mt-1.5 p-2 bg-blue-50 border border-blue-100 rounded-md">
-                                            <span className="text-[9px] uppercase font-bold text-blue-400 block mb-0.5">Preview</span>
-                                            <MathText text={q.explanation} className="text-xs text-text/80" block />
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div>
-                                        <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Feedback Image (Optional)</label>
-                                        <div className="flex gap-2">
-                                          <input 
-                                            type="text" 
-                                            value={q.explanationImageUrl || ''}
-                                            onChange={(e) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanationImageUrl', e.target.value)}
-                                            placeholder="Feedback Image URL"
-                                            className="w-full text-xs px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-primary outline-none" 
+                                          <textarea 
+                                            value={item.quizEmbedCode || ''}
+                                            onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'quizEmbedCode', e.target.value)}
+                                            placeholder="Paste your Canva AI interactive HTML code here..."
+                                            className="w-full text-xs font-mono p-3 border border-purple-200 rounded-lg outline-none focus:ring-2 focus:ring-purple-500 h-28 bg-white"
                                           />
-                                          <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-md font-medium transition-colors flex items-center justify-center text-sm shrink-0">
-                                            {uploadingField === `exp_img_${topic.id}_${qIndex}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4" />}
-                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `exp_img_${topic.id}_${qIndex}`, (url) => updateQuizQuestion(section.id, topic.id, qIndex, 'explanationImageUrl', url))} disabled={uploadingField === `exp_img_${topic.id}_${qIndex}`} />
-                                          </label>
-                                          {q.explanationImageUrl && (
+                                        </div>
+                                      ) : (
+                                        /* Mode: MANUAL MCQ */
+                                        <div className="space-y-4">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-text">Questions ({item.quizQuestions?.length || 0})</span>
                                             <button 
                                               type="button"
-                                              onClick={() => updateQuizQuestion(section.id, topic.id, qIndex, 'explanationImageUrl', '')}
-                                              className="text-gray-400 hover:text-red-500 p-2"
-                                              title="Remove Feedback Image"
+                                              onClick={() => handleAddQuestionToItem(section.id, topic.id, item.id)}
+                                              className="text-xs font-bold text-white bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
                                             >
-                                              <Trash2 className="w-4 h-4" />
+                                              <Plus className="w-3.5 h-3.5" /> Add Question
                                             </button>
-                                          )}
-                                        </div>
-                                        {q.explanationImageUrl && (
-                                          <div className="mt-2">
-                                            <img src={q.explanationImageUrl} alt="Feedback explanation" className="max-h-32 rounded-md object-contain border border-gray-200 bg-white" />
                                           </div>
-                                        )}
-                                      </div>
+
+                                          <div className="space-y-3">
+                                            {item.quizQuestions?.map((q: any, qIndex: number) => (
+                                              <div key={qIndex} className="bg-gray-50/70 p-3.5 rounded-lg border border-gray-200 relative space-y-3">
+                                                <button 
+                                                  type="button"
+                                                  onClick={() => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'delete', null)}
+                                                  className="absolute top-3 right-3 text-gray-400 hover:text-red-500 transition-colors"
+                                                  title="Delete question"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+
+                                                <div className="pr-6">
+                                                  <label className="block text-[10px] uppercase font-bold text-text/50 mb-1">Question {qIndex + 1} Text — <span className="normal-case font-normal">use <code className="bg-gray-200 px-1 rounded">$...$</code> for math</span></label>
+                                                  <textarea 
+                                                    value={q.question}
+                                                    onChange={(e) => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'question', e.target.value)}
+                                                    placeholder="Enter question text..."
+                                                    className="w-full text-xs font-bold p-2 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary h-14 bg-white"
+                                                  />
+                                                  {q.question && /\$/.test(q.question) && (
+                                                    <div className="mt-1 p-1.5 bg-blue-50 border border-blue-100 rounded">
+                                                      <MathText text={q.question} className="text-xs font-bold text-text" block />
+                                                    </div>
+                                                  )}
+                                                </div>
+
+                                                {/* Image Upload */}
+                                                <div className="flex gap-2 items-center">
+                                                  <input 
+                                                    type="text" 
+                                                    value={q.imageUrl || ''}
+                                                    onChange={(e) => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'imageUrl', e.target.value)}
+                                                    placeholder="Question Image URL (Optional)"
+                                                    className="w-full text-xs p-1.5 border border-gray-200 rounded-md outline-none bg-white"
+                                                  />
+                                                  <label className="cursor-pointer bg-gray-200 hover:bg-gray-300 text-text p-1.5 rounded-md font-medium text-xs shrink-0">
+                                                    {uploadingField === `q_img_${item.id}_${qIndex}` ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Upload className="w-3.5 h-3.5" />}
+                                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `q_img_${item.id}_${qIndex}`, (url) => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'imageUrl', url))} disabled={uploadingField === `q_img_${item.id}_${qIndex}`} />
+                                                  </label>
+                                                </div>
+
+                                                {/* Options A, B, C, D */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                                  {q.options.map((opt: string, optIndex: number) => (
+                                                    <div key={optIndex} className="bg-white p-2 rounded border border-gray-200 flex items-center gap-2">
+                                                      <input 
+                                                        type="radio" 
+                                                        name={`correct-${item.id}-${qIndex}`}
+                                                        checked={q.correctIndex === optIndex}
+                                                        onChange={() => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'correctIndex', optIndex)}
+                                                        className="w-3.5 h-3.5 text-green-600 focus:ring-green-500 cursor-pointer"
+                                                      />
+                                                      <input 
+                                                        type="text" 
+                                                        value={opt}
+                                                        onChange={(e) => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'option', e.target.value, optIndex)}
+                                                        placeholder={`Option ${optIndex + 1}`}
+                                                        className="w-full text-xs p-1 border border-gray-200 rounded outline-none focus:ring-1 focus:ring-primary"
+                                                      />
+                                                      {q.correctIndex === optIndex && (
+                                                        <span className="text-[9px] font-black text-green-700 bg-green-100 px-1.5 py-0.5 rounded">✓</span>
+                                                      )}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            ))}
+
+                                            {(!item.quizQuestions || item.quizQuestions.length === 0) && (
+                                              <div className="text-center py-4 border border-dashed border-gray-300 rounded-lg bg-gray-50 text-xs text-text/60">
+                                                No questions added yet. Click "+ Add Question" above.
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  </div>
-                                ))}
-                                {(!topic.quizQuestions || topic.quizQuestions.length === 0) && (
-                                  <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-                                    <p className="text-sm text-text/60">No MCQ quiz questions added yet. Click "+ Add Question" above.</p>
-                                  </div>
-                                )}
-                              </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-xl bg-white space-y-3">
+                              <Layers className="w-8 h-8 text-gray-300 mx-auto" />
+                              <p className="text-xs font-semibold text-text/60">No content items added to this lesson yet.</p>
+                              <p className="text-[11px] text-text/40">Use the buttons above to add videos, quizzes, worksheets, or notes.</p>
                             </div>
                           )}
                         </div>
@@ -1138,11 +1094,12 @@ export default function AdminCourseEditor() {
                     )}
                   </div>
                 ))}
+
                 <button 
                   onClick={() => handleAddTopic(section.id)}
-                  className="flex items-center gap-2 text-primary font-medium text-sm p-2 hover:bg-primary/5 rounded-lg w-full mt-2 border border-dashed border-primary/30"
+                  className="flex items-center justify-center gap-2 text-primary font-bold text-sm p-3 hover:bg-primary/5 rounded-xl w-full border border-dashed border-primary/40 transition-colors"
                 >
-                  <Plus className="w-4 h-4" /> Add Topic
+                  <Plus className="w-4 h-4" /> Add Lesson to Section
                 </button>
               </div>
             </div>
@@ -1150,7 +1107,7 @@ export default function AdminCourseEditor() {
 
           <button 
             onClick={handleAddSection}
-            className="flex items-center justify-center gap-2 text-text font-medium bg-white border border-dashed border-gray-300 w-full py-4 rounded-2xl hover:border-primary hover:text-primary transition-colors"
+            className="flex items-center justify-center gap-2 text-text font-bold bg-white border-2 border-dashed border-gray-300 w-full py-4 rounded-2xl hover:border-primary hover:text-primary transition-colors shadow-xs"
           >
             <Plus className="w-5 h-5" /> Add New Section
           </button>

@@ -101,3 +101,7 @@ CREATE POLICY "Admin can manage availability slots."
 ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS keywords text[] DEFAULT '{}'::text[];
 ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS intro_video_url text;
 
+-- 5. Add content_items jsonb to topics table
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS content_items jsonb DEFAULT '[]'::jsonb;
+
+
