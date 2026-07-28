@@ -27,15 +27,15 @@ Built with modern web standards, this platform offers a seamless experience for 
 - **About Page:** Showcase of tutor credentials, teaching methodology, and student testimonials.
 
 ### 👨‍🎓 Student Experience
-- **Course Player:** Interactive sidebar navigation, progress tracking, built-in PDF reader for worksheets, and integrated video player.
+- **Course Player:** Interactive sidebar navigation, progress tracking, built-in PDF reader for worksheets, integrated video player, and automatic background video server open logging (zero metrics/counts shown to students for a clean UI).
 - **Wallet System:** Personal dashboard showing current balances and transaction history for course/section unlocking.
 - **Live Session Booking:** Interactive calendar interface where students can request and book available 1-on-1 tutoring slots.
 - **AI Study Assistant:** In-app chatbot powered by AI to assist students with homework questions and course topics.
 - **Notifications & Reminders:** System notifications and study reminders (ready for WhatsApp integration).
 
 ### 👑 Admin Management Dashboard
-- **Performance Analytics:** Clean dashboard showing total active students, course enrollment statistics, revenue stats, and request queues.
-- **Course Builder:** Fully-featured admin UI to manage courses, drag-and-drop sections, add/edit topics, build quizzes, and upload notes, PDF worksheets, and video lectures.
+- **Performance Analytics:** Clean dashboard showing total active students, course enrollment statistics, revenue stats, request queues, total video opens KPI, and a **Video Opens per Server** load-balancing chart.
+- **Course Builder:** Fully-featured admin UI to manage courses, drag-and-drop sections, add/edit topics, build quizzes, upload notes, PDF worksheets, video lectures, and view real-time open badges (`👁️ X opens`) next to each video server mirror link.
 - **Student Database:** Monitor enrolled students, view transaction logs, manually adjust wallet balances, and manage student accounts.
 - **Live Session Planner:** Scheduler to open tutoring slots, review booking requests from students, and schedule live session links.
 - **Chat Logs & Settings:** Review student chatbot conversations for quality assurance and manage platform configurations.

@@ -13,17 +13,17 @@ To finalize a production-ready LMS web platform utilizing Next.js 14 (App Router
 </project_objective>
 
 <current_state>
-The project is well past initial scaffolding. All components compile without runtime errors. Updated May 2026.
+The project is well past initial scaffolding. All components compile without runtime errors. Updated July 2026.
 
 **Stack**: Next.js 14.2, Tailwind CSS 3, TypeScript, Supabase, Lucide-React icons.
 
-**Database (Supabase Postgres)**: 18+ tables with RLS. Migrations up to date (live sessions, slots, tracking, notifications, course assets bucket, wallet system). Added `keywords` text[] column to `courses` table.
+**Database (Supabase Postgres)**: 19+ tables with RLS. Migrations up to date (live sessions, slots, tracking, notifications, course assets bucket, wallet system, video server opens). Added `keywords` text[] column to `courses` table and `video_server_opens` table for tracking bandwidth load balanced mirrors.
 
 **Features Implemented:**
 - **Public:** Homepage, Courses directory (with keyword filtering and search), About.
 - **Auth:** Login + Signup forms wired to Supabase Auth.
-- **Admin UI:** Dashboard, Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords), Students management, Live Sessions (3-tab design for Sessions, Schedule, Requests), Chat Logs, Settings.
-- **Student UI:** Enrolled Courses, Course Player, Wallet, Live Sessions (Invitations, Booking), Notifications, Reminders, Profile.
+- **Admin UI:** Dashboard Overview & Stats (with Video Opens per Server chart and Total Video Opens KPI), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Students management, Live Sessions (3-tab design for Sessions, Schedule, Requests), Chat Logs, Settings.
+- **Student UI:** Enrolled Courses, Course Player (with seamless background video server open logging, student view clean with no open counts exposed), Wallet, Live Sessions (Invitations, Booking), Notifications, Reminders, Profile.
 - **AI Chatbot**: Basic widget and API route exist, not yet wired to real SDK.
 </current_state>
 

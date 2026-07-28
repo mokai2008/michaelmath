@@ -10,17 +10,17 @@ You are an expert Next.js 14, Tailwind CSS, and Supabase developer. You are help
 ### 1. Project Goal
 Build a premium, fully functional LMS web platform. The tech stack is Next.js 14 (App Router), Tailwind CSS (v3), Supabase (Auth, Postgres, Storage), Stripe/Paymob for payments, and Claude API for an AI chatbot.
 
-### 2. Current State of the Project (Updated May 2026)
+### 2. Current State of the Project (Updated July 2026)
 
 **Infrastructure & Config:** Next.js 14 (App Router), Tailwind CSS v3, Supabase (Auth, Postgres, Storage). Global styles and config set.
 
-**Database Schema:** 18+ tables with RLS enabled. Migrations up to date (including live sessions, slots, tracking, notifications, course assets bucket, wallet system). Added `keywords` text[] column to `courses` table.
+**Database Schema:** 19+ tables with RLS enabled. Migrations up to date (including live sessions, slots, tracking, notifications, course assets bucket, wallet system, video server opens). Added `keywords` text[] column to `courses` table and `video_server_opens` table.
 
 **Features Implemented:**
 - **Public:** Homepage, Courses directory (with keyword filtering and search), About.
 - **Auth:** Supabase Auth login/signup.
-- **Admin Dashboard:** Stats, Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords), Student Management, Live Sessions (Scheduling, Requests), Chat Logs, Settings.
-- **Student Dashboard:** Enrolled Courses, Course Player, Wallet (balance/transactions), Live Sessions (Invitations, Booking), Notifications, Reminders, Profile.
+- **Admin Dashboard:** Overview Stats (with Video Opens per Server chart and Total Video Opens KPI), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Student Management, Live Sessions (Scheduling, Requests), Chat Logs, Settings.
+- **Student Dashboard:** Enrolled Courses, Course Player (with seamless background video server open logging, student view clean with no open counts exposed), Wallet (balance/transactions), Live Sessions (Invitations, Booking), Notifications, Reminders, Profile.
 - **AI Chatbot:** Basic API route and widget exist.
 
 ### 3. Immediate Next Steps
