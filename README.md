@@ -36,7 +36,7 @@ Built with modern web standards, this platform offers a seamless experience for 
 ### 👑 Admin Management Dashboard
 - **Performance Analytics:** Clean dashboard showing total active students, course enrollment statistics, revenue stats, request queues, total video opens KPI, and a **Video Opens per Server** load-balancing chart.
 - **Course Builder:** Fully-featured admin UI to manage courses, drag-and-drop sections, add/edit topics, build quizzes, upload notes, PDF worksheets, video lectures, and view real-time open badges (`👁️ X opens`) next to each video server mirror link.
-- **Student Database:** Monitor enrolled students, view transaction logs, manually adjust wallet balances, and manage student accounts.
+- **Student Database:** Monitor enrolled students, inspect full student profile analytics (enrolled courses %, completed lessons timeline, uploaded & reviewed worksheets with feedback, quiz history), edit student & parent WhatsApp numbers, and send automated WhatsApp progress reports directly to students or parents.
 - **Live Session Planner:** Scheduler to open tutoring slots, review booking requests from students, and schedule live session links.
 - **Chat Logs & Settings:** Review student chatbot conversations for quality assurance and manage platform configurations.
 

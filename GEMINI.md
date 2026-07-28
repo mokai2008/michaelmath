@@ -19,7 +19,7 @@ Build a premium, fully functional LMS web platform. The tech stack is Next.js 14
 **Features Implemented:**
 - **Public:** Homepage, Courses directory (with keyword filtering and search), About.
 - **Auth:** Supabase Auth login/signup.
-- **Admin Dashboard:** Overview Stats (with Video Opens per Server chart and Total Video Opens KPI), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Student Management, Live Sessions (Scheduling, Requests), Chat Logs, Settings.
+- **Admin Dashboard:** Overview Stats (with Video Opens per Server chart and Total Video Opens KPI), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Student Management (interactive student analytics modal with enrolled courses progress, completed lessons history, uploaded/reviewed worksheets with scores and feedback, quiz attempts, editable student/parent WhatsApp numbers, and 1-click WhatsApp progress report generator), Live Sessions (Scheduling, Requests), Chat Logs, Settings.
 - **Student Dashboard:** Enrolled Courses, Course Player (with seamless background video server open logging, student view clean with no open counts exposed), Wallet (balance/transactions), Live Sessions (Invitations, Booking), Notifications, Reminders, Profile.
 - **AI Chatbot:** Basic API route and widget exist.
 

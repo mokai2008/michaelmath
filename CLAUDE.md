@@ -22,7 +22,7 @@ The project is well past initial scaffolding. All components compile without run
 **Features Implemented:**
 - **Public:** Homepage, Courses directory (with keyword filtering and search), About.
 - **Auth:** Login + Signup forms wired to Supabase Auth.
-- **Admin UI:** Dashboard Overview & Stats (with Video Opens per Server chart and Total Video Opens KPI), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Students management, Live Sessions (3-tab design for Sessions, Schedule, Requests), Chat Logs, Settings.
+- **Admin UI:** Dashboard Overview & Stats (with Video Opens per Server chart and Total Video Opens KPI), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Students Directory (interactive student profile analytics drawer with enrolled courses progress, completed lessons timeline, uploaded & reviewed worksheets with feedback, quiz history, editable student/parent WhatsApp numbers, and instant WhatsApp report generator buttons), Live Sessions (3-tab design for Sessions, Schedule, Requests), Chat Logs, Settings.
 - **Student UI:** Enrolled Courses, Course Player (with seamless background video server open logging, student view clean with no open counts exposed), Wallet, Live Sessions (Invitations, Booking), Notifications, Reminders, Profile.
 - **AI Chatbot**: Basic widget and API route exist, not yet wired to real SDK.
 </current_state>
