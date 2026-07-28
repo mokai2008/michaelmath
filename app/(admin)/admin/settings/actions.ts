@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export async function saveApiKeys(stripeKey: string, openaiKey: string) {
+export async function saveApiKeys(stripeKey: string, openaiKey: string, anthropicKey?: string) {
   try {
     const envPath = path.join(process.cwd(), '.env.local');
     let envContent = '';
@@ -34,7 +34,16 @@ export async function saveApiKeys(stripeKey: string, openaiKey: string) {
       process.env.OPENAI_API_KEY = cleanOpenAI;
     }
 
-
+    // Update or append Anthropic Claude
+    if (anthropicKey) {
+      const cleanAnthropic = anthropicKey.replace(/[\u2028\u2029\r\n\s]/g, '').trim();
+      if (envContent.includes('ANTHROPIC_API_KEY=')) {
+        envContent = envContent.replace(/ANTHROPIC_API_KEY=.*/g, `ANTHROPIC_API_KEY="${cleanAnthropic}"`);
+      } else {
+        envContent += `\nANTHROPIC_API_KEY="${cleanAnthropic}"`;
+      }
+      process.env.ANTHROPIC_API_KEY = cleanAnthropic;
+    }
 
     fs.writeFileSync(envPath, envContent.trim() + '\n');
     return { success: true };

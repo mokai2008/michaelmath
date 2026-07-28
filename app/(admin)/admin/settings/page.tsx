@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Save, CheckCircle2 } from "lucide-react";
+import { Settings, Save, CheckCircle2, Sparkles, Bot } from "lucide-react";
 import { saveApiKeys } from "./actions";
 
 export default function AdminSettingsPage() {
   const [stripeKey, setStripeKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
 
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -14,7 +15,7 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     setIsSaving(true);
     setSuccessMessage("");
-    const result = await saveApiKeys(stripeKey, openaiKey);
+    const result = await saveApiKeys(stripeKey, openaiKey, anthropicKey);
     setIsSaving(false);
     if (result.success) {
       setSuccessMessage("Settings saved successfully to .env.local!");
@@ -67,19 +68,45 @@ export default function AdminSettingsPage() {
         </div>
         
         <div className="pt-6 border-t border-gray-100">
-          <h3 className="font-bold text-lg mb-4">AI Assistant</h3>
-          <div className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-lg flex items-center gap-2">
+              <Bot className="w-5 h-5 text-primary" />
+              AI Assistant & Co-Pilot Integrations
+            </h3>
+            <span className="text-xs bg-purple-100 text-purple-700 font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+              <Sparkles className="w-3 h-3" />
+              Dual-Model Balancing Active
+            </span>
+          </div>
+
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-text mb-1">OpenAI (ChatGPT) API Key <span className="text-xs text-text/50 font-normal ml-2">(Powers the AI Chatbot)</span></label>
+              <label className="block text-sm font-medium text-text mb-1">
+                Anthropic (Claude) API Key 
+                <span className="text-xs text-purple-600 font-semibold ml-2">(Powers Claude 3.7 Sonnet & Vision)</span>
+              </label>
+              <input 
+                type="password" 
+                value={anthropicKey}
+                onChange={(e) => setAnthropicKey(e.target.value)}
+                placeholder="sk-ant-api03-..." 
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" 
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">
+                OpenAI (ChatGPT) API Key 
+                <span className="text-xs text-emerald-600 font-semibold ml-2">(Powers GPT-4o & Vision)</span>
+              </label>
               <input 
                 type="password" 
                 value={openaiKey}
                 onChange={(e) => setOpenaiKey(e.target.value)}
                 placeholder="sk-proj-..." 
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none mb-4" 
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" 
               />
             </div>
-
           </div>
         </div>
       </div>
