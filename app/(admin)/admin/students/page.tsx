@@ -134,34 +134,40 @@ export default function AdminStudentsPage() {
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // 1. Fetch profiles directly
+      const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
-        .select(`
-          id,
-          full_name,
-          email,
-          avatar_url,
-          student_code,
-          student_whatsapp,
-          parent_email,
-          parent_whatsapp,
-          wallet_balance,
-          created_at,
-          enrollments (
-            id,
-            created_at,
-            course_id,
-            courses (id, title)
-          )
-        `)
-        .eq("role", "student")
+        .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching students:", error);
-      } else {
-        setStudents(data || []);
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        setIsLoading(false);
+        return;
       }
+
+      // Filter out admin accounts
+      const studentProfiles = (profilesData || []).filter(
+        (p: any) => p.role !== "admin" && p.email !== "mokai2008@gmail.com"
+      );
+
+      // 2. Fetch enrollments for all students
+      const { data: enrollmentsData } = await supabase
+        .from("enrollments")
+        .select("id, created_at, student_id, course_id, courses(id, title)");
+
+      // Merge enrollments into student profiles
+      const merged = studentProfiles.map((student: any) => {
+        const studentEnrs = (enrollmentsData || []).filter(
+          (e: any) => e.student_id === student.id
+        );
+        return {
+          ...student,
+          enrollments: studentEnrs
+        };
+      });
+
+      setStudents(merged);
     } catch (e) {
       console.error("Failed to load students:", e);
     } finally {
