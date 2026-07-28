@@ -118,6 +118,7 @@ export default function AdminStudentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [activeTab, setActiveTab] = useState<"courses" | "lessons" | "worksheets" | "quizzes">("courses");
 
   // Editable WhatsApp Phone state
@@ -132,85 +133,103 @@ export default function AdminStudentsPage() {
 
   const fetchStudents = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(`
-        id,
-        full_name,
-        email,
-        avatar_url,
-        student_code,
-        student_whatsapp,
-        parent_email,
-        parent_whatsapp,
-        wallet_balance,
-        created_at,
-        enrollments (
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(`
           id,
+          full_name,
+          email,
+          avatar_url,
+          student_code,
+          student_whatsapp,
+          parent_email,
+          parent_whatsapp,
+          wallet_balance,
           created_at,
-          courses (
-            id, 
-            title, 
-            total_price, 
-            sections (
-              id, 
-              title, 
-              topics (id, title)
-            )
+          enrollments (
+            id,
+            created_at,
+            course_id,
+            courses (id, title)
           )
-        ),
-        topic_progress (
-          id,
-          topic_id,
-          is_completed,
-          time_spent_seconds,
-          last_accessed_at,
-          topics (id, title)
-        ),
-        manual_submissions (
-          id,
-          topic_id,
-          file_url,
-          reviewed_file_url,
-          status,
-          score,
-          feedback,
-          submitted_at,
-          topics (id, title)
-        ),
-        quiz_submissions (
-          id,
-          quiz_id,
-          score,
-          passed,
-          submitted_at,
-          quizzes (
-            id, 
-            title, 
-            total_marks, 
-            passing_score, 
-            topic_id, 
-            topics (id, title)
-          )
-        )
-      `)
-      .eq("role", "student")
-      .order("created_at", { ascending: false });
+        `)
+        .eq("role", "student")
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Error fetching students:", error);
-    } else {
-      setStudents(data || []);
+      if (error) {
+        console.error("Error fetching students:", error);
+      } else {
+        setStudents(data || []);
+      }
+    } catch (e) {
+      console.error("Failed to load students:", e);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
-  const handleSelectStudent = (student: any) => {
+  const handleSelectStudent = async (student: any) => {
     setSelectedStudent(student);
     setStudentPhoneInput(student.student_whatsapp || "");
     setParentPhoneInput(student.parent_whatsapp || "");
     setActiveTab("courses");
     setCopiedReport(false);
+    setIsLoadingDetails(true);
+
+    try {
+      // 1. Fetch topic progress
+      const { data: tpData } = await supabase
+        .from("topic_progress")
+        .select("*, topics(id, title)")
+        .eq("student_id", student.id);
+
+      // 2. Fetch manual submissions
+      const { data: msData } = await supabase
+        .from("manual_submissions")
+        .select("*, topics(id, title)")
+        .eq("student_id", student.id);
+
+      // 3. Fetch quiz submissions
+      const { data: qsData } = await supabase
+        .from("quiz_submissions")
+        .select("*, quizzes(id, title, total_marks, passing_score, topic_id, topics(id, title))")
+        .eq("student_id", student.id);
+
+      // 4. Fetch detailed course sections/topics
+      const courseIds = student.enrollments?.map((e: any) => e.courses?.id || e.course_id).filter(Boolean) || [];
+      let detailedEnrollments = student.enrollments || [];
+      if (courseIds.length > 0) {
+        const { data: coursesData } = await supabase
+          .from("courses")
+          .select("id, title, total_price, sections(id, title, topics(id, title))")
+          .in("id", courseIds);
+
+        if (coursesData) {
+          detailedEnrollments = student.enrollments.map((enr: any) => {
+            const matchedCourse = coursesData.find((c: any) => c.id === (enr.courses?.id || enr.course_id));
+            return {
+              ...enr,
+              courses: matchedCourse || enr.courses
+            };
+          });
+        }
+      }
+
+      const fullStudentData = {
+        ...student,
+        enrollments: detailedEnrollments,
+        topic_progress: tpData || [],
+        manual_submissions: msData || [],
+        quiz_submissions: qsData || []
+      };
+
+      setSelectedStudent(fullStudentData);
+    } catch (err) {
+      console.error("Error loading student detail:", err);
+    } finally {
+      setIsLoadingDetails(false);
+    }
   };
 
   const handleSavePhoneNumbers = async () => {
@@ -314,8 +333,10 @@ export default function AdminStudentsPage() {
           <div className="divide-y divide-gray-100">
             {filtered.map((student) => {
               const courseCount = student.enrollments?.length || 0;
-              const completedCount = student.topic_progress?.filter((tp: any) => tp.is_completed)?.length || 0;
-              const worksheetCount = student.manual_submissions?.length || 0;
+              const courseNames = student.enrollments
+                ?.map((e: any) => e.courses?.title)
+                .filter(Boolean)
+                .join(", ");
 
               return (
                 <div
@@ -359,12 +380,13 @@ export default function AdminStudentsPage() {
                   <div className="flex items-center gap-6 flex-shrink-0">
                     <div className="hidden md:flex items-center gap-4 text-xs font-semibold">
                       <div className="text-right">
-                        <div className="text-text font-bold">{courseCount} Courses</div>
-                        <div className="text-text/40">{completedCount} Lessons Done</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-primary font-bold">{worksheetCount} Worksheets</div>
-                        <div className="text-text/40">{student.quiz_submissions?.length || 0} Quizzes</div>
+                        <div className="text-text font-bold flex items-center gap-1 justify-end">
+                          <BookOpen className="w-3.5 h-3.5 text-primary" />
+                          {courseCount} Course{courseCount !== 1 ? "s" : ""}
+                        </div>
+                        {courseNames && (
+                          <p className="text-[11px] text-text/40 mt-0.5 max-w-44 truncate">{courseNames}</p>
+                        )}
                       </div>
                     </div>
 
@@ -540,182 +562,191 @@ export default function AdminStudentsPage() {
 
             {/* Modal Tab Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {/* TAB 1: Enrolled Courses */}
-              {activeTab === "courses" && (
-                <div className="space-y-4">
-                  {(!selectedStudent.enrollments || selectedStudent.enrollments.length === 0) ? (
-                    <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
-                      <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                      <p className="text-sm text-text/60 font-medium">Student is not enrolled in any courses yet.</p>
-                    </div>
-                  ) : (
-                    selectedStudent.enrollments.map((enr: any) => {
-                      const course = enr.courses;
-                      if (!course) return null;
-
-                      let totalTopics = 0;
-                      course.sections?.forEach((s: any) => totalTopics += s.topics?.length || 0);
-
-                      const completedTopics = selectedStudent.topic_progress?.filter((tp: any) => {
-                        if (!tp.is_completed) return false;
-                        return course.sections?.some((sec: any) => 
-                          sec.topics?.some((top: any) => top.id === tp.topic_id)
-                        );
-                      })?.length || 0;
-
-                      const pct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
-
-                      return (
-                        <div key={enr.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs">
-                          <div className="flex items-center justify-between gap-4 mb-3">
-                            <h4 className="font-bold text-text text-base">{course.title}</h4>
-                            <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">
-                              {pct}% Completed
-                            </span>
-                          </div>
-                          
-                          {/* Progress Bar */}
-                          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden mb-3">
-                            <div className="bg-primary h-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs text-text/60">
-                            <span>{completedTopics} of {totalTopics} lessons completed</span>
-                            <span>Enrolled: {new Date(enr.created_at || selectedStudent.created_at).toLocaleDateString("en-GB")}</span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+              {isLoadingDetails ? (
+                <div className="p-12 text-center flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <p className="text-xs text-text/60 font-medium">Loading detailed student history & records...</p>
                 </div>
-              )}
+              ) : (
+                <>
+                  {/* TAB 1: Enrolled Courses */}
+                  {activeTab === "courses" && (
+                    <div className="space-y-4">
+                      {(!selectedStudent.enrollments || selectedStudent.enrollments.length === 0) ? (
+                        <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                          <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-text/60 font-medium">Student is not enrolled in any courses yet.</p>
+                        </div>
+                      ) : (
+                        selectedStudent.enrollments.map((enr: any) => {
+                          const course = enr.courses;
+                          if (!course) return null;
 
-              {/* TAB 2: Completed Lessons */}
-              {activeTab === "lessons" && (
-                <div className="space-y-3">
-                  {(!selectedStudent.topic_progress || selectedStudent.topic_progress.filter((tp: any) => tp.is_completed).length === 0) ? (
-                    <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
-                      <CheckCircle2 className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                      <p className="text-sm text-text/60 font-medium">No completed lessons logged yet.</p>
-                    </div>
-                  ) : (
-                    selectedStudent.topic_progress
-                      .filter((tp: any) => tp.is_completed)
-                      .map((tp: any) => (
-                        <div key={tp.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                              <CheckCircle2 className="w-5 h-5" />
+                          let totalTopics = 0;
+                          course.sections?.forEach((s: any) => totalTopics += s.topics?.length || 0);
+
+                          const completedTopics = selectedStudent.topic_progress?.filter((tp: any) => {
+                            if (!tp.is_completed) return false;
+                            return course.sections?.some((sec: any) => 
+                              sec.topics?.some((top: any) => top.id === tp.topic_id)
+                            );
+                          })?.length || 0;
+
+                          const pct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
+
+                          return (
+                            <div key={enr.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs">
+                              <div className="flex items-center justify-between gap-4 mb-3">
+                                <h4 className="font-bold text-text text-base">{course.title}</h4>
+                                <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">
+                                  {pct}% Completed
+                                </span>
+                              </div>
+                              
+                              {/* Progress Bar */}
+                              <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden mb-3">
+                                <div className="bg-primary h-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                              </div>
+
+                              <div className="flex items-center justify-between text-xs text-text/60">
+                                <span>{completedTopics} of {totalTopics} lessons completed</span>
+                                <span>Enrolled: {new Date(enr.created_at || selectedStudent.created_at).toLocaleDateString("en-GB")}</span>
+                              </div>
                             </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 2: Completed Lessons */}
+                  {activeTab === "lessons" && (
+                    <div className="space-y-3">
+                      {(!selectedStudent.topic_progress || selectedStudent.topic_progress.filter((tp: any) => tp.is_completed).length === 0) ? (
+                        <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                          <CheckCircle2 className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-text/60 font-medium">No completed lessons logged yet.</p>
+                        </div>
+                      ) : (
+                        selectedStudent.topic_progress
+                          .filter((tp: any) => tp.is_completed)
+                          .map((tp: any) => (
+                            <div key={tp.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                                  <CheckCircle2 className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h5 className="font-bold text-text text-sm">{tp.topics?.title || "Topic Lesson"}</h5>
+                                  <p className="text-xs text-text/50">Last accessed: {new Date(tp.last_accessed_at).toLocaleDateString("en-GB")}</p>
+                                </div>
+                              </div>
+                              <span className="text-xs font-semibold bg-gray-100 text-text/70 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                {formatTime(tp.time_spent_seconds)}
+                              </span>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 3: Worksheets & Submissions */}
+                  {activeTab === "worksheets" && (
+                    <div className="space-y-4">
+                      {(!selectedStudent.manual_submissions || selectedStudent.manual_submissions.length === 0) ? (
+                        <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                          <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-text/60 font-medium">No worksheet submissions submitted yet.</p>
+                        </div>
+                      ) : (
+                        selectedStudent.manual_submissions.map((sub: any) => (
+                          <div key={sub.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-5 h-5 text-blue-500" />
+                                <h5 className="font-bold text-text text-sm">{sub.topics?.title || "Worksheet Submission"}</h5>
+                              </div>
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                                sub.status === "reviewed"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-orange-100 text-orange-700"
+                              }`}>
+                                {sub.status === "reviewed" ? "Reviewed" : "Pending Review"}
+                              </span>
+                            </div>
+
+                            {sub.status === "reviewed" && (
+                              <div className="bg-green-50/60 border border-green-100 p-3 rounded-xl text-xs space-y-1">
+                                <div className="font-bold text-green-900">Score: {sub.score || "N/A"}</div>
+                                {sub.feedback && <div className="text-green-800 italic">&quot;{sub.feedback}&quot;</div>}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
+                              <span className="text-text/50">Submitted: {new Date(sub.submitted_at).toLocaleDateString("en-GB")}</span>
+                              <div className="flex items-center gap-3">
+                                {sub.file_url && (
+                                  <a
+                                    href={sub.file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline font-semibold flex items-center gap-1"
+                                  >
+                                    View Student File <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                                {sub.reviewed_file_url && (
+                                  <a
+                                    href={sub.reviewed_file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-green-600 hover:underline font-semibold flex items-center gap-1"
+                                  >
+                                    View Admin Feedback File <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 4: Quizzes */}
+                  {activeTab === "quizzes" && (
+                    <div className="space-y-3">
+                      {(!selectedStudent.quiz_submissions || selectedStudent.quiz_submissions.length === 0) ? (
+                        <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                          <Award className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-text/60 font-medium">No quiz attempts logged yet.</p>
+                        </div>
+                      ) : (
+                        selectedStudent.quiz_submissions.map((qs: any) => (
+                          <div key={qs.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs flex items-center justify-between gap-4">
                             <div>
-                              <h5 className="font-bold text-text text-sm">{tp.topics?.title || "Topic Lesson"}</h5>
-                              <p className="text-xs text-text/50">Last accessed: {new Date(tp.last_accessed_at).toLocaleDateString("en-GB")}</p>
+                              <h5 className="font-bold text-text text-sm">
+                                {qs.quizzes?.title || qs.quizzes?.topics?.title || "Quiz Evaluation"}
+                              </h5>
+                              <p className="text-xs text-text/50">Date: {new Date(qs.submitted_at).toLocaleDateString("en-GB")}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-bold text-text">
+                                {qs.score ?? "N/A"} / {qs.quizzes?.total_marks || 100}
+                              </span>
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                qs.passed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
+                              }`}>
+                                {qs.passed ? "Passed" : "Failed"}
+                              </span>
                             </div>
                           </div>
-                          <span className="text-xs font-semibold bg-gray-100 text-text/70 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-gray-400" />
-                            {formatTime(tp.time_spent_seconds)}
-                          </span>
-                        </div>
-                      ))
-                  )}
-                </div>
-              )}
-
-              {/* TAB 3: Worksheets & Submissions */}
-              {activeTab === "worksheets" && (
-                <div className="space-y-4">
-                  {(!selectedStudent.manual_submissions || selectedStudent.manual_submissions.length === 0) ? (
-                    <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
-                      <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                      <p className="text-sm text-text/60 font-medium">No worksheet submissions submitted yet.</p>
+                        ))
+                      )}
                     </div>
-                  ) : (
-                    selectedStudent.manual_submissions.map((sub: any) => (
-                      <div key={sub.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-blue-500" />
-                            <h5 className="font-bold text-text text-sm">{sub.topics?.title || "Worksheet Submission"}</h5>
-                          </div>
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                            sub.status === "reviewed"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-orange-100 text-orange-700"
-                          }`}>
-                            {sub.status === "reviewed" ? "Reviewed" : "Pending Review"}
-                          </span>
-                        </div>
-
-                        {sub.status === "reviewed" && (
-                          <div className="bg-green-50/60 border border-green-100 p-3 rounded-xl text-xs space-y-1">
-                            <div className="font-bold text-green-900">Score: {sub.score || "N/A"}</div>
-                            {sub.feedback && <div className="text-green-800 italic">&quot;{sub.feedback}&quot;</div>}
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
-                          <span className="text-text/50">Submitted: {new Date(sub.submitted_at).toLocaleDateString("en-GB")}</span>
-                          <div className="flex items-center gap-3">
-                            {sub.file_url && (
-                              <a
-                                href={sub.file_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline font-semibold flex items-center gap-1"
-                              >
-                                View Student File <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
-                            {sub.reviewed_file_url && (
-                              <a
-                                href={sub.reviewed_file_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-green-600 hover:underline font-semibold flex items-center gap-1"
-                              >
-                                View Admin Feedback File <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))
                   )}
-                </div>
-              )}
-
-              {/* TAB 4: Quizzes */}
-              {activeTab === "quizzes" && (
-                <div className="space-y-3">
-                  {(!selectedStudent.quiz_submissions || selectedStudent.quiz_submissions.length === 0) ? (
-                    <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
-                      <Award className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                      <p className="text-sm text-text/60 font-medium">No quiz attempts logged yet.</p>
-                    </div>
-                  ) : (
-                    selectedStudent.quiz_submissions.map((qs: any) => (
-                      <div key={qs.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs flex items-center justify-between gap-4">
-                        <div>
-                          <h5 className="font-bold text-text text-sm">
-                            {qs.quizzes?.title || qs.quizzes?.topics?.title || "Quiz Evaluation"}
-                          </h5>
-                          <p className="text-xs text-text/50">Date: {new Date(qs.submitted_at).toLocaleDateString("en-GB")}</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-bold text-text">
-                            {qs.score ?? "N/A"} / {qs.quizzes?.total_marks || 100}
-                          </span>
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                            qs.passed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
-                          }`}>
-                            {qs.passed ? "Passed" : "Failed"}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                </>
               )}
             </div>
           </div>
