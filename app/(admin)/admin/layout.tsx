@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { AdminAiAssistant } from "@/components/AdminAiAssistant";
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -18,7 +19,9 @@ import {
   Wallet,
   Home,
   Menu,
-  X
+  X,
+  Bot,
+  Sparkles
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -31,6 +34,7 @@ export default function AdminLayout({
   const [pendingRequests, setPendingRequests] = useState(0);
   const [isChecking, setIsChecking] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -104,7 +108,7 @@ export default function AdminLayout({
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 relative overflow-hidden">
       {/* Mobile Header */}
       <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14 md:hidden">
         <button
@@ -120,7 +124,13 @@ export default function AdminLayout({
           </div>
           <span className="font-bold text-text tracking-tight">Admin Area</span>
         </Link>
-        <div className="w-10" /> {/* Spacer for centering */}
+        <button
+          onClick={() => setAiAssistantOpen(true)}
+          className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
+          aria-label="Open AI Co-Pilot"
+        >
+          <Bot className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Backdrop overlay (mobile only) */}
@@ -155,6 +165,20 @@ export default function AdminLayout({
         </div>
         
         <div className="flex-1 overflow-y-auto py-4 md:py-6 px-3 md:px-4 space-y-1">
+          {/* AI Admin Co-Pilot Quick Button in Navigation */}
+          <button
+            onClick={() => setAiAssistantOpen(true)}
+            className="w-full flex items-center justify-between px-3 py-3 md:py-2.5 mb-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold transition-all shadow-md group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-1 bg-primary/20 rounded-lg group-hover:scale-110 transition-transform">
+                <Bot className="w-4 h-4 text-primary" />
+              </div>
+              <span className="text-sm">AI Admin Co-Pilot</span>
+            </div>
+            <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+          </button>
+
           {navLinks.map(({ href, icon: Icon, label }) => {
             const isActive = pathname === href || (href !== "/" && pathname?.startsWith(href));
             return (
@@ -207,8 +231,28 @@ export default function AdminLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0">
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0 relative">
         {children}
+
+        {/* Floating AI Admin Assistant Trigger Button */}
+        {!aiAssistantOpen && (
+          <button
+            onClick={() => setAiAssistantOpen(true)}
+            className="fixed bottom-6 right-6 z-40 bg-slate-900 hover:bg-slate-800 text-white p-3.5 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700 hover:scale-105 transition-all group"
+            title="Open AI Admin Co-Pilot"
+          >
+            <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
+              <Bot className="w-5 h-5 text-primary group-hover:rotate-12 transition-transform" />
+            </div>
+            <span className="text-xs font-bold pr-2 hidden sm:inline">AI Co-Pilot</span>
+          </button>
+        )}
+
+        {/* Admin AI Assistant Drawer */}
+        <AdminAiAssistant 
+          isOpen={aiAssistantOpen} 
+          onClose={() => setAiAssistantOpen(false)} 
+        />
       </main>
     </div>
   );

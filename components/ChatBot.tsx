@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { MessageSquare, X, Send, Paperclip, Minimize2, Sparkles, User, BrainCircuit } from "lucide-react";
+import { MessageSquare, X, Send, Paperclip, Minimize2, Sparkles, BrainCircuit } from "lucide-react";
 
 interface Message {
   role: string;
   content: string;
   image?: string | null;
+  model?: string;
 }
 
 export function ChatBot() {
@@ -71,7 +72,7 @@ export function ChatBot() {
     setIsTyping(true);
 
     try {
-      // API call to our route
+      // API call to route with provider balancing
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (session) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
@@ -82,6 +83,8 @@ export function ChatBot() {
         headers,
         body: JSON.stringify({ 
           chatId,
+          provider: 'auto',
+          mode: 'student',
           messages: [...messages, userMessage],
           context: {
             currentPage: pathname || 'dashboard',
@@ -93,7 +96,7 @@ export function ChatBot() {
       if (!response.ok) throw new Error('API Error');
 
       const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, model: data.model }]);
       if (data.chatId && !chatId) {
         setChatId(data.chatId);
       }
@@ -132,7 +135,7 @@ export function ChatBot() {
           </div>
           <div>
             <h3 className="font-bold text-sm leading-tight">Math AI Assistant</h3>
-            <span className="text-xs text-white/80">Online | Powered by ChatGPT</span>
+            <span className="text-xs text-white/80">Online | Claude & ChatGPT Engine</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -164,11 +167,16 @@ export function ChatBot() {
 
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-2xl p-3 ${
+            <div className={`max-w-[80%] rounded-2xl p-3 ${
               msg.role === 'user' 
                 ? 'bg-primary text-white rounded-br-none' 
                 : 'bg-white text-text border border-gray-100 shadow-sm rounded-bl-none'
             }`}>
+              {msg.role === 'assistant' && msg.model && (
+                <div className="text-[10px] font-bold text-primary/70 mb-1">
+                  {msg.model}
+                </div>
+              )}
               {msg.image && (
                 <img src={msg.image} alt="attached" className="max-w-full rounded-md mb-2 border border-white/20" />
               )}
@@ -241,7 +249,7 @@ export function ChatBot() {
           </button>
         </form>
         <div className="text-center mt-2">
-          <span className="text-[10px] text-gray-400">Powered by ChatGPT</span>
+          <span className="text-[10px] text-gray-400">Powered by Claude 3.7 & ChatGPT</span>
         </div>
       </div>
     </div>

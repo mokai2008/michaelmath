@@ -974,7 +974,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         const rawEmbed = quiz.embed_code || quiz.settings?.embed_code || activeTopic?.quizEmbedCode || '';
                         const actualTotalMarks = isCanvaQuiz 
                           ? (getCanvaQuizTotalMarks(rawEmbed) || (quiz.total_marks && quiz.total_marks > 1 ? quiz.total_marks : 8))
-                          : (quiz.total_marks || 10);
+                          : (hasQuestions ? quiz.questions_data.length : (quiz.total_marks || 0));
 
                         if (takingQuiz && takingQuiz.id === quiz.id) {
                           // Interactive Quiz UI

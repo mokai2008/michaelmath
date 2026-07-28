@@ -1,108 +1,149 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
-
-const openai = new OpenAI({
-  // Sanitize the key to remove hidden unicode characters like U+2028 (Line Separator) 
-  // that cause 'Cannot convert argument to a ByteString' errors when copy-pasting.
-  apiKey: (process.env.OPENAI_API_KEY || '').replace(/[\u2028\u2029\r\n\s]/g, '').trim(),
-});
+import { generateAIResponse, AIProvider } from '@/lib/ai-provider';
 
 export async function POST(req: Request) {
   try {
     const reqBody = await req.json();
-    const { messages, context, chatId } = reqBody;
+    const { messages, context = {}, provider = 'auto', mode = 'student', chatId } = reqBody;
 
-    const systemPrompt = `
-      You are a highly intelligent, expert Math Tutor and the official AI Assistant for "Michael Gad Math Academy".
-      Your primary goal is to help the student learn deeply, not just give them the answers.
-      
-      STUDENT CONTEXT:
-      - Student name: ${context.studentName || 'Student'}
-      - Current Page URL: ${context.currentPage || 'dashboard'}
-      
-      CORE BEHAVIOR & PEDAGOGY:
-      1. Socratic Method: If a student asks a math problem, do NOT just give the final answer immediately. Guide them step-by-step. Ask leading questions.
-      2. Encouragement: Always be highly motivating, patient, and warm.
-      3. Clarity: Explain complex mathematical concepts using simple, intuitive analogies.
-      4. Persona: You represent Michael Gad. You are an elite, premium, and friendly tutor.
-      5. Platform Help: If they ask about their current page (URL: ${context.currentPage}), use the URL to infer where they are (e.g. /dashboard/courses means they are in a course). Note: You do NOT have access to the exact text or titles on their screen. If they ask "what is this lesson title", politely explain that while you know they are in the Course Viewer, you cannot see their screen pixels, but you are ready to help them with any math topic they tell you about!
-      6. Formatting: Use clear spacing, short paragraphs, bullet points, and plain text math notation (e.g., x^2, sqrt(x), a/b).
+    let systemPrompt = '';
+    let liveSiteStats: any = null;
 
-      Never break character. Do not introduce yourself as an OpenAI model. You are the Michael Gad Math AI Assistant.
-    `;
-
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ 
-        reply: "This is a mock response. Please add OPENAI_API_KEY to your .env.local file to use the real ChatGPT." 
-      });
-    }
-
-    // Format messages for OpenAI
-    const formattedMessages = [
-      { role: 'system', content: systemPrompt },
-      ...messages.map((m: any) => {
-        if (m.role === 'user' && m.image) {
-          return {
-            role: m.role,
-            content: [
-              { type: "text", text: m.content || "Please look at this image and help me." },
-              { type: "image_url", image_url: { url: m.image } }
-            ]
-          };
-        }
-        return { role: m.role, content: m.content };
-      })
-    ];
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: formattedMessages,
-      temperature: 0.7,
-      max_tokens: 1000,
-    });
-    
-    const replyText = response.choices[0].message.content || 'Sorry, I could not generate a response.';
-    
-    let currentChatId = context.chatId || messages[0]?.chatId || null; // Wait, we passed chatId in the root of the JSON body
-
-    // 1. Check for Auth
+    // Check Supabase authentication
     const authHeader = req.headers.get('authorization');
+    let user: any = null;
+    let supabaseAuth: any = null;
+
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
-      const supabaseAuth = createClient(
+      supabaseAuth = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL || '',
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
         { global: { headers: { Authorization: `Bearer ${token}` } } }
       );
 
-      const { data: { user } } = await supabaseAuth.auth.getUser();
-      if (user) {
-        const fullMessages = [...messages, { role: 'assistant', content: replyText }];
+      const { data: userData } = await supabaseAuth.auth.getUser();
+      user = userData?.user || null;
+    }
+
+    if (mode === 'admin') {
+      // Gather live website insights for Admin Co-Pilot
+      try {
+        const supabaseAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+          process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+        );
+
+        const [studentsRes, coursesRes, pendingSessionsRes] = await Promise.all([
+          supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
+          supabaseAdmin.from('courses').select('id, title, published'),
+          supabaseAdmin.from('booking_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+        ]);
+
+        liveSiteStats = {
+          totalStudents: studentsRes.count || 0,
+          totalCourses: coursesRes.data?.length || 0,
+          publishedCourses: coursesRes.data?.filter(c => c.published).length || 0,
+          draftCourses: coursesRes.data?.filter(c => !c.published).length || 0,
+          courseList: coursesRes.data?.slice(0, 10).map(c => c.title) || [],
+          pendingLiveSessions: pendingSessionsRes.count || 0,
+        };
+      } catch (err) {
+        console.error("Failed fetching admin stats for AI context:", err);
+      }
+
+      systemPrompt = `
+You are the official Admin AI Co-Pilot for "Michael Gad Math Academy". You are talking to the website administrator/owner (Michael Gad).
+
+YOUR ROLE & RESPONSIBILITIES:
+1. Executive Website Assistant: Help Michael manage courses, student progress, live session scheduling, platform settings, marketing, and curriculum design.
+2. Direct Site Intelligence: You have real-time site data available right now:
+   - Total Enrolled Students: ${liveSiteStats?.totalStudents ?? 'N/A'}
+   - Total Courses: ${liveSiteStats?.totalCourses ?? 'N/A'} (${liveSiteStats?.publishedCourses ?? 0} Published, ${liveSiteStats?.draftCourses ?? 0} Drafts)
+   - Recent Course Titles: ${liveSiteStats?.courseList?.join(', ') || 'None listed yet'}
+   - Pending Live Session Requests: ${liveSiteStats?.pendingLiveSessions ?? 0}
+   - Admin Current Page: ${context.currentPage || '/admin/stats'}
+
+3. Actionable Site Navigation & Quick Links:
+   Whenever recommending an action or navigation step, embed actionable Markdown links using the website paths:
+   - Dashboard Overview & Analytics: [View Stats Summary](/admin/stats)
+   - Course Builder / Curriculum: [Open Course Builder](/admin/courses)
+   - Student Directory: [Manage Students](/admin/students)
+   - Live Session Booking Requests: [Manage Live Sessions](/admin/live-sessions)
+   - Submissions & Student Work: [Review Submissions](/admin/submissions)
+   - Platform Wallet & Billing: [Open Wallet Overview](/admin/wallet)
+   - AI Interaction Logs: [View Student Chat Logs](/admin/chat-logs)
+   - Site Settings: [Open Admin Settings](/admin/settings)
+
+4. Tone & Style: Highly professional, proactive, concise, encouraging, and structured. Use Markdown bullet points, bold key metrics, and clean headers.
+      `;
+    } else {
+      // Student Mode System Prompt
+      systemPrompt = `
+You are a highly intelligent, expert Math Tutor and the official AI Assistant for "Michael Gad Math Academy".
+Your primary goal is to help the student learn deeply, not just give them the answers.
+
+STUDENT CONTEXT:
+- Student Name: ${context.studentName || 'Student'}
+- Current Page: ${context.currentPage || 'dashboard'}
+
+CORE BEHAVIOR & PEDAGOGY:
+1. Socratic Method: If a student asks a math problem, do NOT just give the final answer immediately. Guide them step-by-step. Ask leading questions.
+2. Encouragement: Always be highly motivating, patient, and warm.
+3. Clarity: Explain complex mathematical concepts using simple, intuitive analogies.
+4. Persona: You represent Michael Gad. You are an elite, premium, and friendly tutor.
+5. Platform Assistance: You can answer questions about navigating the site or math lessons.
+6. Formatting: Use clear spacing, short paragraphs, bullet points, and plain text math notation (e.g., x^2, sqrt(x), a/b).
+
+Never break character. Do not introduce yourself as an underlying model. You are Michael Gad's Math AI Assistant.
+      `;
+    }
+
+    // Call unified AI provider (Claude / GPT load balancer)
+    const aiResult = await generateAIResponse({
+      messages,
+      systemPrompt,
+      preferredProvider: provider as AIProvider,
+    });
+
+    let currentChatId = chatId || null;
+
+    // Persist chat logs if user session is present
+    if (supabaseAuth && user) {
+      const fullMessages = [...messages, { 
+        role: 'assistant', 
+        content: aiResult.reply,
+        provider: aiResult.provider,
+        model: aiResult.model
+      }];
+      
+      if (chatId) {
+        await supabaseAuth.from('chat_logs').update({
+          messages: fullMessages,
+          context: { ...context, mode, provider: aiResult.provider, model: aiResult.model }
+        }).eq('id', chatId);
+        currentChatId = chatId;
+      } else {
+        const { data: newChat, error } = await supabaseAuth.from('chat_logs').insert({
+          student_id: user.id,
+          messages: fullMessages,
+          context: { ...context, mode, provider: aiResult.provider, model: aiResult.model }
+        }).select().single();
         
-        if (reqBody.chatId) {
-          // Update existing
-          await supabaseAuth.from('chat_logs').update({
-            messages: fullMessages,
-            context: context
-          }).eq('id', reqBody.chatId);
-          currentChatId = reqBody.chatId;
-        } else {
-          // Insert new
-          const { data: newChat, error } = await supabaseAuth.from('chat_logs').insert({
-            student_id: user.id,
-            messages: fullMessages,
-            context: context
-          }).select().single();
-          
-          if (!error && newChat) {
-            currentChatId = newChat.id;
-          }
+        if (!error && newChat) {
+          currentChatId = newChat.id;
         }
       }
     }
 
-    return NextResponse.json({ reply: replyText, chatId: currentChatId });
+    return NextResponse.json({
+      reply: aiResult.reply,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      chatId: currentChatId,
+    });
+
   } catch (error) {
     console.error('Chat API Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
