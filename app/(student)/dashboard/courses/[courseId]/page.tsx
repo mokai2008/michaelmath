@@ -78,6 +78,59 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     return () => window.removeEventListener('message', handleMessage);
   }, [canvaQuizModal]);
 
+  // Track video opens per server mirror
+  useEffect(() => {
+    if (!activeTopic || !sessionUser) return;
+    const contentItems = activeTopic.content_items || [];
+    const videoItems = contentItems.filter((i: any) => i.type === 'video' && (i.url || (Array.isArray(i.urls) && i.urls.some((u: string) => u))));
+    const currentVideoItem = videoItems.length > 0 ? (videoItems[selectedVideoIndex] || videoItems[0]) : null;
+
+    const rawUrls = currentVideoItem 
+      ? (Array.isArray(currentVideoItem.urls) && currentVideoItem.urls.length > 0 ? currentVideoItem.urls : [currentVideoItem.url])
+      : (activeTopic.youtube_url ? [activeTopic.youtube_url] : []);
+    
+    const activeUrls = rawUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
+    if (activeUrls.length === 0) return;
+
+    let autoAssignedIndex = 0;
+    if (sessionUser?.id && activeUrls.length > 1) {
+      let hash = 0;
+      const uid = sessionUser.id;
+      for (let i = 0; i < uid.length; i++) {
+        hash = (hash << 5) - hash + uid.charCodeAt(i);
+        hash |= 0;
+      }
+      autoAssignedIndex = Math.abs(hash) % activeUrls.length;
+    }
+
+    const currentMirrorIndex = selectedMirrorIndex !== null && selectedMirrorIndex < activeUrls.length
+      ? selectedMirrorIndex
+      : autoAssignedIndex;
+
+    const currentVideoUrl = activeUrls[currentMirrorIndex] || activeUrls[0] || '';
+    if (!currentVideoUrl) return;
+
+    const contentItemId = currentVideoItem?.id || 'main_video';
+
+    const trackOpen = async () => {
+      try {
+        await supabase.from('video_server_opens').insert({
+          student_id: sessionUser.id,
+          course_id: params.courseId,
+          topic_id: activeTopic.id,
+          content_item_id: contentItemId,
+          server_index: currentMirrorIndex,
+          server_url: currentVideoUrl
+        });
+      } catch (err) {
+        console.error("Failed to track video server open:", err);
+      }
+    };
+
+    trackOpen();
+  }, [activeTopic?.id, selectedVideoIndex, selectedMirrorIndex, sessionUser?.id, params.courseId]);
+
+
   useEffect(() => {
     const fetchCourseData = async () => {
       try {

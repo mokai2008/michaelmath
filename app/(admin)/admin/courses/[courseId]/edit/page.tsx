@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, 
-  Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers 
+  Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Eye, Server 
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -59,6 +59,7 @@ export default function AdminCourseEditor() {
   const [coursePrice, setCoursePrice] = useState("0.00");
   const [courseKeywords, setCourseKeywords] = useState("");
   const [isPublished, setIsPublished] = useState(false);
+  const [videoOpenStats, setVideoOpenStats] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const fetchCourseData = async () => {
@@ -185,6 +186,23 @@ export default function AdminCourseEditor() {
         }));
 
         setSections(mappedSections);
+
+        // Fetch video server opens for this course
+        const { data: opensData } = await supabase
+          .from('video_server_opens')
+          .select('topic_id, content_item_id, server_index')
+          .eq('course_id', courseId);
+
+        if (opensData) {
+          const statsMap: Record<string, number> = {};
+          opensData.forEach((row: any) => {
+            const keyWithItem = `${row.topic_id}_${row.content_item_id}_${row.server_index}`;
+            const keyTopicServer = `${row.topic_id}_${row.server_index}`;
+            statsMap[keyWithItem] = (statsMap[keyWithItem] || 0) + 1;
+            statsMap[keyTopicServer] = (statsMap[keyTopicServer] || 0) + 1;
+          });
+          setVideoOpenStats(statsMap);
+        }
       } catch (e: any) {
         console.error(e);
         alert("Error loading course: " + e.message);
@@ -957,40 +975,50 @@ export default function AdminCourseEditor() {
                                       </div>
 
                                       <div className="space-y-2">
-                                        {(item.urls && item.urls.length > 0 ? item.urls : [item.url || '']).map((mirrorUrl: string, mIdx: number) => (
-                                          <div key={mIdx} className="flex items-center gap-2">
-                                            <span className="text-[11px] font-bold text-gray-500 min-w-[75px] shrink-0">
-                                              {mIdx === 0 ? 'Link 1 (Main):' : `Link ${mIdx + 1}:`}
-                                            </span>
-                                            <input 
-                                              type="text" 
-                                              value={mirrorUrl}
-                                              onChange={(e) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, e.target.value)}
-                                              className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
-                                              placeholder={mIdx === 0 ? "https://drive.google.com/..., https://onedrive.live.com/..., or YouTube URL" : `Alternative Link ${mIdx + 1} (Google Drive / OneDrive)`}
-                                            />
-                                            <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
-                                              {uploadingField === `vid_${item.id}_${mIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                        {(item.urls && item.urls.length > 0 ? item.urls : [item.url || '']).map((mirrorUrl: string, mIdx: number) => {
+                                          const opens = videoOpenStats[`${topic.id}_${item.id}_${mIdx}`] || videoOpenStats[`${topic.id}_${mIdx}`] || 0;
+                                          return (
+                                            <div key={mIdx} className="flex items-center gap-2">
+                                              <span className="text-[11px] font-bold text-gray-500 min-w-[95px] shrink-0">
+                                                {mIdx === 0 ? 'Server 1 (Main):' : `Server ${mIdx + 1}:`}
+                                              </span>
                                               <input 
-                                                type="file" 
-                                                accept="video/*" 
-                                                className="hidden" 
-                                                onChange={(e) => handleFileUpload(e, `vid_${item.id}_${mIdx}`, (url) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, url))} 
-                                                disabled={uploadingField === `vid_${item.id}_${mIdx}`} 
+                                                type="text" 
+                                                value={mirrorUrl}
+                                                onChange={(e) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, e.target.value)}
+                                                className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                                                placeholder={mIdx === 0 ? "https://drive.google.com/..., https://onedrive.live.com/..., or YouTube URL" : `Server ${mIdx + 1} (Google Drive / OneDrive)`}
                                               />
-                                            </label>
-                                            {mIdx > 0 && (
-                                              <button
-                                                type="button"
-                                                onClick={() => handleDeleteMirrorUrl(section.id, topic.id, item.id, mIdx)}
-                                                className="p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-red-50 shrink-0"
-                                                title="Remove mirror link"
+                                              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[75px] shrink-0">
+                                                {uploadingField === `vid_${item.id}_${mIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                                <input 
+                                                  type="file" 
+                                                  accept="video/*" 
+                                                  className="hidden" 
+                                                  onChange={(e) => handleFileUpload(e, `vid_${item.id}_${mIdx}`, (url) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, url))} 
+                                                  disabled={uploadingField === `vid_${item.id}_${mIdx}`} 
+                                                />
+                                              </label>
+                                              <span 
+                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-200/80 rounded-lg text-xs font-black shrink-0 shadow-2xs"
+                                                title="Total video opens on this server (Admin only)"
                                               >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            )}
-                                          </div>
-                                        ))}
+                                                <Eye className="w-3.5 h-3.5 text-amber-600" />
+                                                {opens} {opens === 1 ? 'open' : 'opens'}
+                                              </span>
+                                              {mIdx > 0 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteMirrorUrl(section.id, topic.id, item.id, mIdx)}
+                                                  className="p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-red-50 shrink-0"
+                                                  title="Remove mirror link"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
                                       </div>
                                       <p className="text-[11px] text-gray-500 italic">
                                         💡 Tip: Add multiple Google Drive / OneDrive links. The LMS automatically balances student traffic across these links to prevent bandwidth/quota limits.
