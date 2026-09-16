@@ -23,6 +23,8 @@ import {
   Wallet
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { DownloadReportButton } from "@/components/reports/DownloadReportButton";
+import { ReportPreviewModal } from "@/components/reports/ReportPreviewModal";
 
 function formatTime(seconds: number): string {
   if (!seconds || seconds <= 0) return "0m";
@@ -126,6 +128,7 @@ export default function AdminStudentsPage() {
   const [parentPhoneInput, setParentPhoneInput] = useState("");
   const [isSavingPhones, setIsSavingPhones] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -515,6 +518,21 @@ export default function AdminStudentsPage() {
                   <Copy className="w-3.5 h-3.5" />
                   {copiedReport ? "Copied!" : "Copy Report"}
                 </button>
+
+                <DownloadReportButton
+                  student={selectedStudent}
+                  variant="secondary"
+                  label="Download PDF"
+                />
+
+                <button
+                  onClick={() => setIsPdfModalOpen(true)}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                  title="Customize PDF template & preview"
+                >
+                  <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  PDF Template
+                </button>
               </div>
             </div>
 
@@ -756,6 +774,13 @@ export default function AdminStudentsPage() {
               )}
             </div>
           </div>
+
+          {/* Report Customizer & PDF Template Modal */}
+          <ReportPreviewModal
+            student={selectedStudent}
+            isOpen={isPdfModalOpen}
+            onClose={() => setIsPdfModalOpen(false)}
+          />
         </div>
       )}
     </div>

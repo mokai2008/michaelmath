@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { User, Mail, Phone, Camera, Save, Loader2, CheckCircle2, Hash } from "lucide-react";
+import { User, Mail, Phone, Camera, Save, Loader2, CheckCircle2, Hash, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { DownloadReportButton } from "@/components/reports/DownloadReportButton";
 
 export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [fullStudentData, setFullStudentData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState({
@@ -18,6 +20,7 @@ export default function ProfilePage() {
     parent_whatsapp: "",
     avatar_url: "",
     student_code: "",
+    wallet_balance: 0,
   });
 
   useEffect(() => {
@@ -25,31 +28,49 @@ export default function ProfilePage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
+      const userId = session.user.id;
+
       // Get profile from profiles table
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("id", session.user.id)
+        .eq("id", userId)
         .maybeSingle();
 
-      if (data) {
-        setProfile({
-          full_name: data.full_name || "",
-          email: data.email || session.user.email || "",
-          parent_email: data.parent_email || "",
-          parent_whatsapp: data.parent_whatsapp || "",
-          avatar_url: data.avatar_url || "",
-          student_code: data.student_code || "",
+      const profileData = {
+        id: userId,
+        full_name: data?.full_name || session.user.user_metadata?.full_name || "",
+        email: data?.email || session.user.email || "",
+        parent_email: data?.parent_email || "",
+        parent_whatsapp: data?.parent_whatsapp || "",
+        avatar_url: data?.avatar_url || "",
+        student_code: data?.student_code || "",
+        wallet_balance: data?.wallet_balance || 0,
+      };
+
+      setProfile(profileData);
+
+      // Fetch student data for PDF report
+      try {
+        const [{ data: enrollments }, { data: tp }, { data: ms }, { data: qs }] = await Promise.all([
+          supabase.from("enrollments").select("*, courses(id, title, sections(id, title, topics(id, title)))").eq("student_id", userId),
+          supabase.from("topic_progress").select("*, topics(id, title)").eq("student_id", userId),
+          supabase.from("manual_submissions").select("*, topics(id, title)").eq("student_id", userId),
+          supabase.from("quiz_submissions").select("*, quizzes(id, title, total_marks, topics(id, title))").eq("student_id", userId),
+        ]);
+
+        setFullStudentData({
+          ...profileData,
+          enrollments: enrollments || [],
+          topic_progress: tp || [],
+          manual_submissions: ms || [],
+          quiz_submissions: qs || [],
         });
-      } else {
-        // Profile doesn't exist yet, use auth data
-        setProfile(prev => ({
-          ...prev,
-          email: session.user.email || "",
-          full_name: session.user.user_metadata?.full_name || "",
-        }));
+      } catch (err) {
+        console.error("Error fetching report data:", err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchProfile();
@@ -132,9 +153,19 @@ export default function ProfilePage() {
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-text">My Profile</h1>
-        <p className="text-text/60 text-sm">Manage your account information.</p>
+      <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-text">My Profile</h1>
+          <p className="text-text/60 text-sm">Manage your account information.</p>
+        </div>
+        {fullStudentData && (
+          <DownloadReportButton
+            student={fullStudentData}
+            variant="primary"
+            label="Download Academic Report (PDF)"
+            className="px-5 py-2.5 shadow-md shadow-emerald-600/20 text-sm"
+          />
+        )}
       </div>
 
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
