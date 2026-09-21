@@ -64,7 +64,7 @@ export function Navbar() {
           </div>
 
           {/* Desktop nav links */}
-          <div className="hidden md:flex items-center space-x-4 lg:space-x-8 shrink-0">
+          <div className="hidden lg:flex items-center space-x-8 shrink-0">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -89,7 +89,7 @@ export function Navbar() {
               <>
                 <Link 
                   href="/login" 
-                  className="text-text hover:text-primary font-medium transition-colors hidden md:block whitespace-nowrap shrink-0"
+                  className="text-text hover:text-primary font-medium transition-colors hidden lg:block whitespace-nowrap shrink-0"
                 >
                   Log in
                 </Link>
@@ -105,7 +105,7 @@ export function Navbar() {
             {/* Mobile menu toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg text-text hover:bg-gray-100 transition-colors"
+              className="lg:hidden p-2 rounded-lg text-text hover:bg-gray-100 transition-colors"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
@@ -120,7 +120,7 @@ export function Navbar() {
 
       {/* Mobile menu panel */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-100 bg-white shadow-lg">
+        <div className="lg:hidden border-t border-gray-100 bg-white shadow-lg">
           <div className="px-4 py-4 space-y-1">
             {navLinks.map((link) => (
               <Link
