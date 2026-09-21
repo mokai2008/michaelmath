@@ -52,7 +52,7 @@ export function Navbar() {
               <div className="bg-primary/10 p-2 rounded-lg group-hover:bg-primary/20 transition-colors">
                 <Leaf className="w-5 h-5 md:w-6 md:h-6 text-primary" />
               </div>
-              <span className="font-bold text-base md:text-xl text-text tracking-tight">
+              <span className="font-bold text-base md:text-xl text-text tracking-tight whitespace-nowrap shrink-0">
                 <span className="hidden sm:inline">Michael Gad </span>
                 <span className="sm:hidden">MG </span>
                 <span className="text-primary font-normal">
@@ -64,12 +64,12 @@ export function Navbar() {
           </div>
 
           {/* Desktop nav links */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-4 lg:space-x-8 shrink-0">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-text hover:text-primary font-medium transition-colors"
+                className="text-text hover:text-primary font-medium transition-colors whitespace-nowrap"
               >
                 {link.label}
               </Link>
@@ -77,11 +77,11 @@ export function Navbar() {
           </div>
 
           {/* Desktop auth buttons + mobile hamburger */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
             {isLoggedIn ? (
               <Link 
                 href={isAdmin ? "/admin/courses" : "/dashboard"} 
-                className="bg-primary text-white px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold hover:bg-primary/90 transition-all hover:shadow-md hover:-translate-y-0.5 text-sm md:text-base"
+                className="bg-primary text-white px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold hover:bg-primary/90 transition-all hover:shadow-md hover:-translate-y-0.5 text-sm md:text-base whitespace-nowrap shrink-0"
               >
                 Dashboard
               </Link>
@@ -89,13 +89,13 @@ export function Navbar() {
               <>
                 <Link 
                   href="/login" 
-                  className="text-text hover:text-primary font-medium transition-colors hidden md:block"
+                  className="text-text hover:text-primary font-medium transition-colors hidden md:block whitespace-nowrap shrink-0"
                 >
                   Log in
                 </Link>
                 <Link 
                   href="/signup" 
-                  className="bg-accent text-white px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold hover:bg-accent/90 transition-all hover:shadow-md hover:-translate-y-0.5 text-sm md:text-base"
+                  className="bg-accent text-white px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold hover:bg-accent/90 transition-all hover:shadow-md hover:-translate-y-0.5 text-sm md:text-base whitespace-nowrap shrink-0"
                 >
                   Sign Up
                 </Link>
