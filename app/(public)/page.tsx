@@ -75,14 +75,7 @@ export default function Home() {
                   href="/courses" 
                   className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-full font-bold text-lg transition-all hover:shadow-lg hover:-translate-y-1 text-center"
                 >
-                  Book Online
-                </Link>
-                <Link 
-                  href="#video" 
-                  className="border-2 border-primary text-primary hover:bg-primary/5 px-8 py-4 rounded-full font-bold text-lg flex items-center justify-center gap-2 transition-all"
-                >
-                  <PlayCircle className="w-5 h-5" />
-                  Watch Video
+                  Enroll course
                 </Link>
               </motion.div>
             </motion.div>
