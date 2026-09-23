@@ -50,10 +50,12 @@ export default function AboutPage() {
             
             <div className="order-1 lg:order-2 relative">
               <div className="aspect-[3/4] bg-background-alt rounded-3xl overflow-hidden border-8 border-white shadow-2xl relative">
-                {/* Photo Placeholder */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-6xl">📸</span>
-                </div>
+                {/* Michael Gad Photo */}
+                <img 
+                  src="/michael-gad.jpg" 
+                  alt="Michael Gad"
+                  className="w-full h-full object-cover object-top"
+                />
               </div>
               {/* Decorative elements */}
               <div className="mt-4 lg:mt-0 lg:absolute lg:-bottom-8 lg:-left-8 bg-white p-4 lg:p-6 rounded-2xl shadow-xl flex items-center gap-4 w-fit">
