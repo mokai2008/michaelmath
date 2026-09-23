@@ -52,7 +52,7 @@ export default function AboutPage() {
               <div className="aspect-[3/4] bg-background-alt rounded-3xl overflow-hidden border-8 border-white shadow-2xl relative">
                 {/* Michael Gad Photo */}
                 <img 
-                  src="/michael-gad.jpg" 
+                  src="/michael-expert.jpeg" 
                   alt="Michael Gad"
                   className="w-full h-full object-cover object-top"
                 />
