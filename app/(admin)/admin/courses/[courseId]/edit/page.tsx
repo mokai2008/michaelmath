@@ -640,14 +640,16 @@ export default function AdminCourseEditor() {
             if (item.type === 'quiz') {
               const hasQuestions = item.quizQuestions && item.quizQuestions.length > 0;
               const hasEmbed = item.quizEmbedCode && item.quizEmbedCode.trim().length > 0;
-              if (hasQuestions || hasEmbed) {
+              const hasPdf = item.quizPdfUrl && item.quizPdfUrl.trim().length > 0;
+              if (hasQuestions || hasEmbed || hasPdf) {
                 const quizPayload: any = {
                   topic_id: dbTopicId,
                   section_id: dbSectionId,
                   type: 'topic',
                   questions_data: hasQuestions ? item.quizQuestions : null,
                   embed_code: hasEmbed ? item.quizEmbedCode : null,
-                  total_marks: hasQuestions ? item.quizQuestions.length : (hasEmbed ? 10 : 0),
+                  quiz_pdf_url: hasPdf ? item.quizPdfUrl : null,
+                  total_marks: hasQuestions ? item.quizQuestions.length : (hasEmbed || hasPdf ? 10 : 0),
                   time_limit_minutes: parseInt(item.quizTimeLimit) || null,
                   passing_score: parseInt(item.quizPassingScore) || null,
                   settings: {
@@ -1117,6 +1119,15 @@ export default function AdminCourseEditor() {
                                           >
                                             <Sparkles className="w-3.5 h-3.5" /> Canva AI Code
                                           </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'quizMode', 'pdf')}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                              item.quizMode === 'pdf' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-700 hover:bg-blue-50'
+                                            }`}
+                                          >
+                                            <FileText className="w-3.5 h-3.5" /> Upload PDF
+                                          </button>
                                         </div>
                                       </div>
 
@@ -1187,6 +1198,25 @@ export default function AdminCourseEditor() {
                                             placeholder="Paste your Canva AI interactive HTML code here..."
                                             className="w-full text-xs font-mono p-3 border border-purple-200 rounded-lg outline-none focus:ring-2 focus:ring-purple-500 h-28 bg-white"
                                           />
+                                        </div>
+                                      ) : item.quizMode === 'pdf' ? (
+                                        <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-3">
+                                          <h5 className="font-bold text-xs text-blue-900 flex items-center gap-1.5">
+                                            <FileText className="w-3.5 h-3.5 text-blue-600" /> Quiz PDF Document
+                                          </h5>
+                                          <div className="flex gap-2">
+                                            <input 
+                                              type="text" 
+                                              value={item.quizPdfUrl || ''}
+                                              onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'quizPdfUrl', e.target.value)}
+                                              className="w-full text-xs px-3 py-2 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                              placeholder="Quiz PDF link or upload..."
+                                            />
+                                            <label className="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
+                                              {uploadingField === `quiz_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `quiz_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'quizPdfUrl', url))} disabled={uploadingField === `quiz_pdf_${item.id}`} />
+                                            </label>
+                                          </div>
                                         </div>
                                       ) : (
                                         /* Mode: MANUAL MCQ */
