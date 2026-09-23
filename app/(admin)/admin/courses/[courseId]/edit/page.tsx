@@ -26,24 +26,25 @@ export default function AdminCourseEditor() {
 
     setUploadingField(fieldId);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const fileExt = file.name.split('.').pop() || 'bin';
+      const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `uploads/${filename}`;
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const { error: uploadError } = await supabase.storage
+        .from('course-assets')
+        .upload(filePath, file, {
+          upsert: true,
+        });
 
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {},
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Upload failed");
+      if (uploadError) {
+        throw new Error(uploadError.message);
       }
 
-      const data = await res.json();
-      callback(data.url);
+      const { data: { publicUrl } } = supabase.storage
+        .from('course-assets')
+        .getPublicUrl(filePath);
+
+      callback(publicUrl);
     } catch (err: any) {
       console.error("Upload error:", err);
       alert("Failed to upload: " + err.message);
