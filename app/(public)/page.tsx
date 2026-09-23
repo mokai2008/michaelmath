@@ -106,7 +106,7 @@ export default function Home() {
                 transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
                 className="absolute -top-10 -left-10 bg-white p-4 rounded-xl shadow-lg transform -rotate-12 hidden lg:block"
               >
-                <span className="text-2xl font-bold text-accent">E = mc²</span>
+                <span className="text-2xl font-bold text-accent">a² + b² = c²</span>
               </motion.div>
               <motion.div 
                 animate={{ y: [10, -10, 10] }}
