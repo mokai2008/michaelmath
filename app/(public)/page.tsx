@@ -88,7 +88,7 @@ export default function Home() {
               {/* Michael Gad Photo */}
               <div className="absolute inset-0 bg-primary/10 rounded-[3rem] overflow-hidden border-8 border-white shadow-2xl transform rotate-3 hover:rotate-0 transition-transform duration-500 cursor-pointer">
                  <img 
-                   src="/michael-gad.jpg" 
+                   src="/michael-gad.jpeg" 
                    alt="Michael Gad - Math Tutor"
                    className="w-full h-full object-cover object-top"
                  />
