@@ -58,7 +58,7 @@ export default function AboutPage() {
                 />
               </div>
               {/* Decorative elements */}
-              <div className="mt-4 lg:mt-0 lg:absolute lg:-bottom-8 lg:-left-8 bg-white p-4 lg:p-6 rounded-2xl shadow-xl flex items-center gap-4 w-fit">
+              <div className="mt-4 lg:mt-0 lg:absolute lg:-bottom-8 lg:-left-24 bg-white p-4 lg:p-6 rounded-2xl shadow-xl flex items-center gap-4 w-fit z-10">
                 <div className="w-12 lg:w-16 h-12 lg:h-16 bg-accent/10 rounded-full flex items-center justify-center">
                   <Award className="w-6 lg:w-8 h-6 lg:h-8 text-accent" />
                 </div>
