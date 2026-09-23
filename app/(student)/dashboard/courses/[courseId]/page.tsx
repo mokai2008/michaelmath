@@ -1006,6 +1006,39 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           )}
                         </div>
                       )}
+
+                      {/* Model Answer - shown only after student submits worksheet */}
+                      {manualSubmissions[`${activeTopic.id}_worksheet`] && (() => {
+                        const worksheetItem = contentItems.find((i: any) => i.type === 'worksheet');
+                        const hasAnswerPdf = worksheetItem?.answerPdfUrl;
+                        const hasAnswerVideo = worksheetItem?.answerVideoUrl;
+                        if (!hasAnswerPdf && !hasAnswerVideo) return null;
+                        return (
+                          <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-200 space-y-4">
+                            <h5 className="text-xs font-bold text-teal-900 uppercase tracking-wider flex items-center gap-2">
+                              📝 Model Answer
+                            </h5>
+                            {hasAnswerPdf && (
+                              <a 
+                                href={worksheetItem.answerPdfUrl} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-teal-200 text-teal-700 rounded-lg text-sm font-bold hover:bg-teal-50 transition-colors shadow-sm"
+                              >
+                                <FileText className="w-4 h-4" /> View Answer Sheet
+                              </a>
+                            )}
+                            {hasAnswerVideo && (
+                              <div className="space-y-2">
+                                <label className="block text-xs font-bold text-teal-800/70">Answer Video Explanation</label>
+                                <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
+                                  <VideoPlayer url={worksheetItem.answerVideoUrl} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1090,6 +1123,39 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       {quizResult.passed ? 'Great job! You have mastered this topic.' : `You need at least ${Math.ceil((takingQuiz.passing_score/100)*quizResult.total)} correct answers to pass.`}
                     </p>
                   </div>
+
+                  {/* Model Answer for MCQ Quiz - shown after submission */}
+                  {(() => {
+                    const quizItem = contentItems.find((i: any) => i.type === 'quiz');
+                    const hasAnswerPdf = quizItem?.answerPdfUrl;
+                    const hasAnswerVideo = quizItem?.answerVideoUrl;
+                    if (!hasAnswerPdf && !hasAnswerVideo) return null;
+                    return (
+                      <div className="p-5 bg-teal-50 rounded-2xl border border-teal-200 space-y-4">
+                        <h5 className="text-xs font-bold text-teal-900 uppercase tracking-wider flex items-center gap-2">
+                          📝 Model Answer
+                        </h5>
+                        {hasAnswerPdf && (
+                          <a 
+                            href={quizItem.answerPdfUrl} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-teal-200 text-teal-700 rounded-xl text-sm font-bold hover:bg-teal-50 transition-colors shadow-sm"
+                          >
+                            <FileText className="w-4 h-4" /> View Mark Scheme / Answer Sheet
+                          </a>
+                        )}
+                        {hasAnswerVideo && (
+                          <div className="space-y-2">
+                            <label className="block text-xs font-bold text-teal-800/70">Answer Video Explanation</label>
+                            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
+                              <VideoPlayer url={quizItem.answerVideoUrl} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="space-y-6">
                     <h3 className="font-bold text-text flex items-center gap-2">
@@ -1301,6 +1367,39 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   )}
                                 </div>
                               )}
+
+                              {/* Model Answer for Quiz - shown after any submission */}
+                              {submission && (() => {
+                                const quizItem = contentItems.find((i: any) => i.type === 'quiz');
+                                const hasAnswerPdf = quizItem?.answerPdfUrl;
+                                const hasAnswerVideo = quizItem?.answerVideoUrl;
+                                if (!hasAnswerPdf && !hasAnswerVideo) return null;
+                                return (
+                                  <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-200 space-y-4 w-full">
+                                    <h5 className="text-xs font-bold text-teal-900 uppercase tracking-wider flex items-center gap-2">
+                                      📝 Model Answer
+                                    </h5>
+                                    {hasAnswerPdf && (
+                                      <a 
+                                        href={quizItem.answerPdfUrl} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-teal-200 text-teal-700 rounded-lg text-sm font-bold hover:bg-teal-50 transition-colors shadow-sm"
+                                      >
+                                        <FileText className="w-4 h-4" /> View Mark Scheme / Answer Sheet
+                                      </a>
+                                    )}
+                                    {hasAnswerVideo && (
+                                      <div className="space-y-2">
+                                        <label className="block text-xs font-bold text-teal-800/70">Answer Video Explanation</label>
+                                        <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
+                                          <VideoPlayer url={quizItem.answerVideoUrl} />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
 
                               </div>
                             </div>

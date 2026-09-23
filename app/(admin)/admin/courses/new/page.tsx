@@ -151,7 +151,9 @@ export default function AdminNewCourse() {
                 quizTimeLimit: '',
                 quizPassingScore: '70',
                 quizShuffleQuestions: false,
-                quizShuffleOptions: false
+                quizShuffleOptions: false,
+                answerPdfUrl: '',
+                answerVideoUrl: ''
               };
 
               return {
@@ -881,21 +883,64 @@ export default function AdminNewCourse() {
 
                                   {/* Item Body: WORKSHEET or NOTES */}
                                   {(isWorksheet || isNotes) && (
-                                    <div className="space-y-2 pt-2 border-t border-gray-100">
-                                      <label className="block text-xs font-semibold text-text/70">{isWorksheet ? 'Worksheet PDF Link or Upload' : 'Notes PDF Link or Upload'}</label>
-                                      <div className="flex gap-2">
-                                        <input 
-                                          type="text" 
-                                          value={item.url || ''}
-                                          onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'url', e.target.value)}
-                                          className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
-                                          placeholder="https://..."
-                                        />
-                                        <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
-                                          {uploadingField === `pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-                                          <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url))} disabled={uploadingField === `pdf_${item.id}`} />
-                                        </label>
+                                    <div className="space-y-4 pt-2 border-t border-gray-100">
+                                      <div className="space-y-2">
+                                        <label className="block text-xs font-semibold text-text/70">{isWorksheet ? 'Worksheet PDF Link or Upload' : 'Notes PDF Link or Upload'}</label>
+                                        <div className="flex gap-2">
+                                          <input 
+                                            type="text" 
+                                            value={item.url || ''}
+                                            onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'url', e.target.value)}
+                                            className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                                            placeholder="https://..."
+                                          />
+                                          <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
+                                            {uploadingField === `pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url))} disabled={uploadingField === `pdf_${item.id}`} />
+                                          </label>
+                                        </div>
                                       </div>
+
+                                      {/* Answer PDF & Video (shown to student after submission) */}
+                                      {isWorksheet && (
+                                        <div className="bg-teal-50/60 p-3.5 rounded-xl border border-teal-200 space-y-3">
+                                          <h5 className="font-bold text-xs text-teal-900 flex items-center gap-1.5">
+                                            📝 Model Answer (shown to student after they submit)
+                                          </h5>
+                                          <div className="space-y-2">
+                                            <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer PDF</label>
+                                            <div className="flex gap-2">
+                                              <input 
+                                                type="text" 
+                                                value={item.answerPdfUrl || ''}
+                                                onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', e.target.value)}
+                                                className="w-full text-xs px-3 py-2 border border-teal-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                                                placeholder="Answer PDF link or upload..."
+                                              />
+                                              <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
+                                                {uploadingField === `ans_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url))} disabled={uploadingField === `ans_pdf_${item.id}`} />
+                                              </label>
+                                            </div>
+                                          </div>
+                                          <div className="space-y-2">
+                                            <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer Video (Google Drive / YouTube / OneDrive)</label>
+                                            <div className="flex gap-2">
+                                              <input 
+                                                type="text" 
+                                                value={item.answerVideoUrl || ''}
+                                                onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', e.target.value)}
+                                                className="w-full text-xs px-3 py-2 border border-teal-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                                                placeholder="https://drive.google.com/... or YouTube URL"
+                                              />
+                                              <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
+                                                {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                                <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url))} disabled={uploadingField === `ans_vid_${item.id}`} />
+                                              </label>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
 
@@ -1086,6 +1131,45 @@ export default function AdminNewCourse() {
                                           </div>
                                         </div>
                                       )}
+
+                                      {/* Answer PDF & Video for Quiz (shown to student after submission) */}
+                                      <div className="bg-teal-50/60 p-3.5 rounded-xl border border-teal-200 space-y-3 mt-2">
+                                        <h5 className="font-bold text-xs text-teal-900 flex items-center gap-1.5">
+                                          📝 Model Answer (shown to student after they submit the quiz)
+                                        </h5>
+                                        <div className="space-y-2">
+                                          <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer / Mark Scheme PDF</label>
+                                          <div className="flex gap-2">
+                                            <input 
+                                              type="text" 
+                                              value={item.answerPdfUrl || ''}
+                                              onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', e.target.value)}
+                                              className="w-full text-xs px-3 py-2 border border-teal-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                                              placeholder="Mark scheme PDF link or upload..."
+                                            />
+                                            <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
+                                              {uploadingField === `ans_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url))} disabled={uploadingField === `ans_pdf_${item.id}`} />
+                                            </label>
+                                          </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                          <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer Video (Google Drive / YouTube / OneDrive)</label>
+                                          <div className="flex gap-2">
+                                            <input 
+                                              type="text" 
+                                              value={item.answerVideoUrl || ''}
+                                              onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', e.target.value)}
+                                              className="w-full text-xs px-3 py-2 border border-teal-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                                              placeholder="https://drive.google.com/... or YouTube URL"
+                                            />
+                                            <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
+                                              {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                              <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url))} disabled={uploadingField === `ans_vid_${item.id}`} />
+                                            </label>
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                 </div>
