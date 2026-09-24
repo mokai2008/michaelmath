@@ -168,47 +168,82 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           setManualSubmissions(subMap);
         }
 
-        // Fetch course with sections and topics
-        const { data: courseData, error } = await supabase
+        // Fetch course with sections and topics (flat queries to avoid PostgREST schema cache join issues)
+        const { data: courseData, error: courseError } = await supabase
           .from('courses')
-          .select(`
-            *,
-            sections (
-              id, title, order_index, price,
-              topics (
-                id, title, order_index, youtube_url, content_items, 
-                topic_pdfs (id, type, file_url),
-                quizzes (*, quiz_submissions(*)),
-                topic_progress (is_completed)
-              )
-            )
-          `)
+          .select('*')
           .eq('id', params.courseId)
           .single();
 
-        if (error) {
-          console.error("Error fetching course:", error);
+        if (courseError || !courseData) {
+          console.error("Error fetching course:", courseError);
+          setIsLoading(false);
+          return;
         }
 
-        if (courseData) {
-          // Sort sections and topics
-          const progMap: Record<string, boolean> = {};
-          const sections = courseData.sections || [];
-          sections.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
-          sections.forEach((s: any) => {
-            s.topics = s.topics || [];
-            s.topics.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
-            s.topics.forEach((t: any) => {
-              t.topic_pdfs = t.topic_pdfs || [];
-              t.quizzes = t.quizzes || [];
-              if (t.topic_progress && t.topic_progress.length > 0) {
-                progMap[t.id] = t.topic_progress[0].is_completed;
-              }
-            });
-          });
-          setProgress(progMap);
+        const { data: sectionsData } = await supabase
+          .from('sections')
+          .select('*')
+          .eq('course_id', params.courseId)
+          .order('order_index', { ascending: true });
 
-          setCourse({ ...courseData, sections });
+        const sections = sectionsData || [];
+        const sectionIds = sections.map((s: any) => s.id);
+
+        let topics: any[] = [];
+        if (sectionIds.length > 0) {
+          const { data: tData } = await supabase
+            .from('topics')
+            .select('*')
+            .in('section_id', sectionIds)
+            .order('order_index', { ascending: true });
+          topics = tData || [];
+        }
+
+        const topicIds = topics.map((t: any) => t.id);
+
+        let pdfs: any[] = [];
+        let quizzes: any[] = [];
+        let quizSubs: any[] = [];
+        let topicProg: any[] = [];
+
+        if (topicIds.length > 0) {
+          const [pdfsRes, quizzesRes, quizSubsRes, progRes] = await Promise.all([
+            supabase.from('topic_pdfs').select('*').in('topic_id', topicIds),
+            supabase.from('quizzes').select('*').in('topic_id', topicIds),
+            supabase.from('quiz_submissions').select('*').eq('student_id', session.user.id),
+            supabase.from('topic_progress').select('*').eq('student_id', session.user.id)
+          ]);
+
+          pdfs = pdfsRes.data || [];
+          quizzes = quizzesRes.data || [];
+          quizSubs = quizSubsRes.data || [];
+          topicProg = progRes.data || [];
+        }
+
+        const progMap: Record<string, boolean> = {};
+
+        topics.forEach((t: any) => {
+          t.topic_pdfs = pdfs.filter((p: any) => p.topic_id === t.id);
+          
+          const tQuizzes = quizzes.filter((q: any) => q.topic_id === t.id);
+          tQuizzes.forEach((q: any) => {
+            q.quiz_submissions = quizSubs.filter((qs: any) => qs.quiz_id === q.id);
+          });
+          t.quizzes = tQuizzes;
+
+          const prog = topicProg.find((tp: any) => tp.topic_id === t.id);
+          if (prog) {
+            progMap[t.id] = prog.is_completed;
+          }
+        });
+
+        sections.forEach((s: any) => {
+          s.topics = topics.filter((t: any) => t.section_id === s.id);
+        });
+
+        setProgress(progMap);
+        setCourse({ ...courseData, sections });
 
           // Fetch section purchases
           const { data: purchases } = await supabase
