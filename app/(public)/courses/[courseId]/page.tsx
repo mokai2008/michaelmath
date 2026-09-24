@@ -20,6 +20,7 @@ export default async function CourseSalesPage({ params }: { params: { courseId: 
     .single();
 
   if (error || !course) {
+    console.error("Course fetch error:", error, "course data:", course);
     notFound();
   }
 

@@ -19,18 +19,13 @@ export default function CourseList({ courses }: { courses: any[] }) {
     return Array.from(keywords).sort();
   }, [courses]);
 
-  // Use predefined categories if no keywords are present in DB yet
   const filters = ['All', ...allKeywords];
-  if (filters.length === 1) {
-    filters.push('Algebra', 'Calculus', 'Geometry', 'Statistics');
-  }
 
   const filteredCourses = useMemo(() => {
     return courses.filter(course => {
       // 1. Keyword Filter
       const matchesFilter = selectedFilter === "All" || 
-        (course.keywords && course.keywords.includes(selectedFilter)) || 
-        (!course.keywords && ['Algebra', 'Calculus', 'Geometry', 'Statistics'].includes(selectedFilter) && course.title?.includes(selectedFilter));
+        (course.keywords && course.keywords.includes(selectedFilter));
 
       // 2. Search Filter (by title, description, or keyword)
       const query = searchQuery.toLowerCase();
