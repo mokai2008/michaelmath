@@ -271,7 +271,6 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               setActiveTopic(sections[0].topics[0]);
             }
           }
-        }
       } catch (err) {
         console.error("CoursePlayer fetch error:", err);
       } finally {
