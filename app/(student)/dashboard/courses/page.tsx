@@ -17,54 +17,96 @@ export default function MyCoursesPage() {
         return;
       }
 
+      // 1. Fetch user enrollments
       const { data: enrollments, error } = await supabase
         .from('enrollments')
-        .select(`
-          id,
-          enrolled_at,
-          course_id,
-          courses (
-            id,
-            title,
-            description,
-            thumbnail_url,
-            total_price,
-            sections ( topics ( id ) )
-          )
-        `)
+        .select('id, enrolled_at, course_id')
         .eq('student_id', session.user.id)
         .order('enrolled_at', { ascending: false });
 
+      if (error) {
+        console.error('Error fetching enrollments:', error);
+        setEnrolledCourses([]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!enrollments || enrollments.length === 0) {
+        setEnrolledCourses([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const courseIds = enrollments.map((e: any) => e.course_id);
+
+      // 2. Fetch courses
+      const { data: coursesData } = await supabase
+        .from('courses')
+        .select('id, title, description, thumbnail_url, total_price')
+        .in('id', courseIds);
+
+      const coursesMap = new Map((coursesData || []).map((c: any) => [c.id, c]));
+
+      // 3. Fetch sections & topics to calculate progress
+      const { data: sectionsData } = await supabase
+        .from('sections')
+        .select('id, course_id')
+        .in('course_id', courseIds);
+
+      const sectionIds = (sectionsData || []).map((s: any) => s.id);
+
+      let topicsData: any[] = [];
+      if (sectionIds.length > 0) {
+        const { data: tData } = await supabase
+          .from('topics')
+          .select('id, section_id')
+          .in('section_id', sectionIds);
+        topicsData = tData || [];
+      }
+
+      const sectionToCourseMap = new Map((sectionsData || []).map((s: any) => [s.id, s.course_id]));
+
+      const courseTopicCounts: Record<string, number> = {};
+      topicsData.forEach((t: any) => {
+        const cId = sectionToCourseMap.get(t.section_id);
+        if (cId) {
+          courseTopicCounts[cId] = (courseTopicCounts[cId] || 0) + 1;
+        }
+      });
+
+      // 4. Fetch completed topics
       const { data: compData } = await supabase
         .from('topic_progress')
         .select('topic_id')
         .eq('student_id', session.user.id)
         .eq('is_completed', true);
+
       const compSet = new Set(compData?.map(d => d.topic_id) || []);
 
-      if (error) {
-        console.error('Error fetching enrolled courses:', error);
-      } else if (enrollments) {
-        const coursesData = enrollments
-          .filter((e: any) => e.courses)
-          .map((e: any) => {
-            let total = 0;
-            let comp = 0;
-            e.courses.sections?.forEach((s: any) => {
-              s.topics?.forEach((t: any) => {
-                total++;
-                if (compSet.has(t.id)) comp++;
-              });
-            });
-            const progress = total > 0 ? Math.round((comp / total) * 100) : 0;
-            return {
-              ...e.courses,
-              enrolled_at: e.enrolled_at,
-              progress,
-            };
-          });
-        setEnrolledCourses(coursesData);
-      }
+      const courseCompletedCounts: Record<string, number> = {};
+      topicsData.forEach((t: any) => {
+        const cId = sectionToCourseMap.get(t.section_id);
+        if (cId && compSet.has(t.id)) {
+          courseCompletedCounts[cId] = (courseCompletedCounts[cId] || 0) + 1;
+        }
+      });
+
+      const finalEnrolledCourses = enrollments
+        .map((e: any) => {
+          const c = coursesMap.get(e.course_id);
+          if (!c) return null;
+          const total = courseTopicCounts[c.id] || 0;
+          const comp = courseCompletedCounts[c.id] || 0;
+          const progress = total > 0 ? Math.round((comp / total) * 100) : 0;
+          return {
+            ...c,
+            enrolled_at: e.enrolled_at,
+            progress
+          };
+        })
+        .filter(Boolean);
+
+      setEnrolledCourses(finalEnrolledCourses);
 
       setIsLoading(false);
     };
