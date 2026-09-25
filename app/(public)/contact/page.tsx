@@ -17,24 +17,20 @@ export default function ContactPage() {
     setIsSubmitting(true);
 
     const payload = {
-      customer_email: email,
-      subject: `Platform Support: ${firstName} ${lastName}`,
-      message: message,
+      firstName,
+      lastName,
+      email,
+      message,
     };
 
     try {
-      // Send as text/plain so n8n receives raw body as a string,
-      // matching Postman behavior for JSON.parse($json.body).message
-      const response = await fetch(
-        "https://spoon-audacity-runway.ngrok-free.dev/webhook/c94ee385-df03-4acf-aa43-f2dcdbec4964",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "text/plain",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (response.ok) {
         setIsSuccess(true);

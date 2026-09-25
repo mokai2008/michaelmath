@@ -11,23 +11,53 @@ UPDATE public.profiles
 SET student_code = 'MG-' || UPPER(SUBSTR(md5(id::text), 1, 6))
 WHERE student_code IS NULL;
 
--- 3. Update signup trigger: $5 welcome bonus + student code
+-- 3. Update signup trigger: $5 welcome bonus + student code + parent & student whatsapp
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS trigger AS $$
+DECLARE
+  generated_code TEXT;
 BEGIN
-  INSERT INTO public.profiles (id, full_name, email, wallet_balance, student_code, role)
+  generated_code := 'MG-' || UPPER(SUBSTR(md5(new.id::text), 1, 6));
+
+  INSERT INTO public.profiles (
+    id, 
+    full_name, 
+    email, 
+    wallet_balance, 
+    student_code, 
+    role,
+    student_whatsapp,
+    parent_email,
+    parent_whatsapp
+  )
   VALUES (
     new.id, 
-    new.raw_user_meta_data->>'full_name', 
+    COALESCE(new.raw_user_meta_data->>'full_name', ''),
     new.email, 
     5.00,
-    'MG-' || UPPER(SUBSTR(md5(new.id::text), 1, 6)),
-    CASE WHEN new.email = 'mokai2008@gmail.com' THEN 'admin'::user_role ELSE 'student'::user_role END
-  );
+    generated_code,
+    CASE WHEN new.email = 'mokai2008@gmail.com' THEN 'admin'::user_role ELSE 'student'::user_role END,
+    COALESCE(new.raw_user_meta_data->>'student_whatsapp', ''),
+    new.raw_user_meta_data->>'parent_email',
+    COALESCE(new.raw_user_meta_data->>'parent_whatsapp', '')
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    email = EXCLUDED.email,
+    student_whatsapp = CASE WHEN EXCLUDED.student_whatsapp <> '' THEN EXCLUDED.student_whatsapp ELSE public.profiles.student_whatsapp END,
+    parent_email = CASE WHEN EXCLUDED.parent_email IS NOT NULL THEN EXCLUDED.parent_email ELSE public.profiles.parent_email END,
+    parent_whatsapp = CASE WHEN EXCLUDED.parent_whatsapp <> '' THEN EXCLUDED.parent_whatsapp ELSE public.profiles.parent_whatsapp END;
   
-  INSERT INTO public.wallet_transactions (student_id, type, amount, description)
-  VALUES (new.id, 'topup', 5.00, 'Welcome bonus - free $5 on signup');
-  
+  BEGIN
+    INSERT INTO public.wallet_transactions (student_id, type, amount, description)
+    VALUES (new.id, 'topup', 5.00, 'Welcome bonus - free $5 on signup');
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Welcome bonus transaction insert failed for %: %', new.id, SQLERRM;
+  END;
+
+  RETURN new;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'handle_new_user failed for %: %', new.id, SQLERRM;
   RETURN new;
 END;
 $$ LANGUAGE plpgsql security definer;

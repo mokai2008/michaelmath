@@ -39,6 +39,37 @@ function SignupForm() {
     }
     
     try {
+      // 1. Try server-side signup via /api/auth/signup (bypasses confirmation email sending)
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          studentWhatsapp,
+          parentEmail,
+          parentWhatsapp
+        })
+      });
+
+      const resData = await res.json();
+
+      if (!res.ok) {
+        throw new Error(resData.error || "Signup failed");
+      }
+
+      if (resData.session) {
+        // Set session on client side
+        await supabase.auth.setSession({
+          access_token: resData.session.access_token,
+          refresh_token: resData.session.refresh_token
+        });
+        router.push(redirectTo || "/dashboard");
+        return;
+      }
+
+      // Fallback to client signup
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -54,19 +85,7 @@ function SignupForm() {
 
       if (error) throw error;
 
-      // Automatically log the user in or wait for email confirmation
       if (data.session && data.user) {
-        // Update the newly created profile with the parent info and student whatsapp
-        try {
-          await supabase.from('profiles').update({
-            student_whatsapp: studentWhatsapp,
-            parent_email: parentEmail,
-            parent_whatsapp: parentWhatsapp
-          }).eq('id', data.user.id);
-        } catch (profileErr) {
-          console.error("Profile update error (non-critical):", profileErr);
-        }
-        
         router.push(redirectTo || "/dashboard");
       } else {
         setIsSuccess(true);
