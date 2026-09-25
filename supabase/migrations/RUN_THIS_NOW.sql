@@ -202,5 +202,35 @@ CREATE POLICY "Admin and users can view quiz submissions"
   ON public.quiz_submissions FOR SELECT
   USING (public.is_admin() OR auth.uid() = student_id);
 
+-- 8. Create contact_messages table for contact form inquiries
+CREATE TABLE IF NOT EXISTS public.contact_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    first_name TEXT NOT NULL,
+    last_name TEXT,
+    email TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT DEFAULT 'unread',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.contact_messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public insert on contact_messages" ON public.contact_messages;
+CREATE POLICY "Allow public insert on contact_messages"
+    ON public.contact_messages FOR INSERT TO public WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow admin read on contact_messages" ON public.contact_messages;
+CREATE POLICY "Allow admin read on contact_messages"
+    ON public.contact_messages FOR SELECT USING (public.is_admin() OR auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Allow admin update on contact_messages" ON public.contact_messages;
+CREATE POLICY "Allow admin update on contact_messages"
+    ON public.contact_messages FOR UPDATE USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin delete on contact_messages" ON public.contact_messages;
+CREATE POLICY "Allow admin delete on contact_messages"
+    ON public.contact_messages FOR DELETE USING (public.is_admin());
+
+
 
 
