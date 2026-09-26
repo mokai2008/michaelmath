@@ -8,7 +8,8 @@ export interface ProgressTopic {
  * Extracts a numeric progress percentage weight from a topic.
  * Checks both `progress_percentage` column and fallback inside `content_items`.
  */
-export function getTopicWeight(t: ProgressTopic): number {
+export function getTopicWeight(t?: ProgressTopic | null): number {
+  if (!t) return 0;
   if (t.progress_percentage !== undefined && t.progress_percentage !== null && t.progress_percentage !== '') {
     const parsed = parseFloat(String(t.progress_percentage).replace('%', '').trim());
     if (!isNaN(parsed) && parsed >= 0) return parsed;
@@ -33,21 +34,25 @@ export function getTopicWeight(t: ProgressTopic): number {
  * - If no custom weights are defined (all 0 or unset), it falls back to equal weighting: (completed / total) * 100.
  */
 export function calculateCourseProgress(
-  topics: ProgressTopic[],
-  completedTopicIds: Set<string> | string[]
+  topics: ProgressTopic[] = [],
+  completedTopicIds: Set<string> | string[] = []
 ): {
   progressPercentage: number;
   completedCount: number;
   totalCount: number;
 } {
-  const compSet = completedTopicIds instanceof Set ? completedTopicIds : new Set(completedTopicIds);
-  const totalCount = topics.length;
+  if (!Array.isArray(topics)) {
+    return { progressPercentage: 0, completedCount: 0, totalCount: 0 };
+  }
+  const validTopics = topics.filter((t) => t && t.id);
+  const compSet = completedTopicIds instanceof Set ? completedTopicIds : new Set(Array.isArray(completedTopicIds) ? completedTopicIds : []);
+  const totalCount = validTopics.length;
 
   if (totalCount === 0) {
     return { progressPercentage: 0, completedCount: 0, totalCount: 0 };
   }
 
-  const completedTopics = topics.filter((t) => compSet.has(t.id));
+  const completedTopics = validTopics.filter((t) => compSet.has(t.id));
   const completedCount = completedTopics.length;
 
   // If all topics in the course are completed, guaranteed 100%
@@ -56,7 +61,7 @@ export function calculateCourseProgress(
   }
 
   // Check if course uses custom admin topic weighting
-  const hasCustomWeights = topics.some((t) => getTopicWeight(t) > 0);
+  const hasCustomWeights = validTopics.some((t) => getTopicWeight(t) > 0);
 
   if (hasCustomWeights) {
     // Strictly sum the explicit weights configured by the admin

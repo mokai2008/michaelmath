@@ -39,16 +39,20 @@ function getCanvaQuizTotalMarks(rawCode?: string): number {
 
 function checkTopicRequirementsMet(
   topic: any, 
-  subMap: Record<string, any>, 
+  subMap: Record<string, any> = {}, 
   quizSubsList: any[] = []
 ): boolean {
   if (!topic) return false;
   
-  const contentItems = topic.content_items || [];
+  const contentItems = Array.isArray(topic.content_items)
+    ? topic.content_items
+    : (typeof topic.content_items === 'string'
+        ? (() => { try { return JSON.parse(topic.content_items); } catch { return []; } })()
+        : []);
   
   // 1. Extract and check Worksheets
-  const contentWorksheets = contentItems.filter((i: any) => i.type === 'worksheet' && (i.url || i.file_url || i.title));
-  const legacyWorksheets = (topic.topic_pdfs || []).filter((p: any) => p.type === 'worksheet');
+  const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
+  const legacyWorksheets = (Array.isArray(topic.topic_pdfs) ? topic.topic_pdfs : []).filter((p: any) => p && p.type === 'worksheet');
   const allWorksheets: any[] = contentWorksheets.length > 0 
     ? contentWorksheets.map((cw: any, idx: number) => ({
         id: cw.id || `ws_${idx}`,
@@ -61,22 +65,23 @@ function checkTopicRequirementsMet(
         title: p.title || (legacyWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework')
       }));
 
+  const safeSubMap = subMap || {};
   if (allWorksheets.length > 0) {
     const allWsSubmitted = allWorksheets.every((ws: any, idx: number) => {
       const subType = allWorksheets.length === 1 
         ? 'worksheet' 
         : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
-      const sub = subMap[`${topic.id}_${subType}`]
-        || (idx === 0 ? subMap[`${topic.id}_worksheet`] : null)
-        || subMap[`${topic.id}_worksheet_${idx}`];
+      const sub = safeSubMap[`${topic.id}_${subType}`]
+        || (idx === 0 ? safeSubMap[`${topic.id}_worksheet`] : null)
+        || safeSubMap[`${topic.id}_worksheet_${idx}`];
       return !!sub;
     });
     if (!allWsSubmitted) return false;
   }
 
   // 2. Extract and check Quizzes
-  const contentQuizzes = contentItems.filter((i: any) => i.type === 'quiz');
-  const rawDbQuizzes = topic.quizzes || [];
+  const contentQuizzes = contentItems.filter((i: any) => i && i.type === 'quiz');
+  const rawDbQuizzes = Array.isArray(topic.quizzes) ? topic.quizzes : [];
 
   let allQuizzes: any[] = [];
   if (rawDbQuizzes.length > 0) {
@@ -91,7 +96,7 @@ function checkTopicRequirementsMet(
       return {
         id: dbQ.id,
         matchedCqId: matchedCq?.id,
-        quiz_submissions: dbQ.quiz_submissions || []
+        quiz_submissions: Array.isArray(dbQ.quiz_submissions) ? dbQ.quiz_submissions : (dbQ.quiz_submissions ? [dbQ.quiz_submissions] : [])
       };
     });
   } else if (contentQuizzes.length > 0) {
@@ -102,15 +107,16 @@ function checkTopicRequirementsMet(
     }));
   }
 
+  const safeQuizSubs = Array.isArray(quizSubsList) ? quizSubsList : [];
   if (allQuizzes.length > 0) {
     const allQzCompleted = allQuizzes.every((quiz: any) => {
-      if (quiz.quiz_submissions && quiz.quiz_submissions.length > 0) return true;
-      if (quizSubsList && quizSubsList.some((s: any) => s.quiz_id === quiz.id || (quiz.matchedCqId && s.quiz_id === quiz.matchedCqId))) {
+      if (Array.isArray(quiz.quiz_submissions) && quiz.quiz_submissions.length > 0) return true;
+      if (safeQuizSubs.some((s: any) => s && (s.quiz_id === quiz.id || (quiz.matchedCqId && s.quiz_id === quiz.matchedCqId)))) {
         return true;
       }
-      if (subMap[`${topic.id}_pdf_quiz_${quiz.id}`] || 
-          (quiz.matchedCqId && subMap[`${topic.id}_pdf_quiz_${quiz.matchedCqId}`]) || 
-          subMap[`${topic.id}_pdf_quiz`]) {
+      if (safeSubMap[`${topic.id}_pdf_quiz_${quiz.id}`] || 
+          (quiz.matchedCqId && safeSubMap[`${topic.id}_pdf_quiz_${quiz.matchedCqId}`]) || 
+          safeSubMap[`${topic.id}_pdf_quiz`]) {
         return true;
       }
       return false;
@@ -502,7 +508,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     if (checkTopicRequirementsMet(activeTopic, manualSubmissions, allQuizSubmissions)) {
       handleMarkComplete(activeTopic.id, true);
     }
-  }, [activeTopic, manualSubmissions, allQuizSubmissions, progress, sessionUser, isLoading]);
+  }, [activeTopic?.id, manualSubmissions, allQuizSubmissions, progress, sessionUser?.id, isLoading]);
 
   const handleQuizSubmit = async (quizId: string, interactiveScore: number, interactiveAnswers: any) => {
     if (!sessionUser) return;
@@ -1068,8 +1074,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             const currentVideoUrl = activeUrls[currentMirrorIndex] || activeUrls[0] || '';
 
             // Extract all worksheets and notes (from content_items or legacy topic_pdfs)
-            const contentWorksheets = contentItems.filter((i: any) => i.type === 'worksheet' && (i.url || i.file_url || i.title));
-            const legacyWorksheets = (activeTopic.topic_pdfs || []).filter((p: any) => p.type === 'worksheet');
+            const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
+            const legacyWorksheets = (Array.isArray(activeTopic.topic_pdfs) ? activeTopic.topic_pdfs : []).filter((p: any) => p && p.type === 'worksheet');
             const allWorksheets: any[] = contentWorksheets.length > 0 
               ? contentWorksheets.map((cw: any, idx: number) => ({
                   id: cw.id || `ws_${idx}`,
@@ -1088,13 +1094,13 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   answerVideoUrl: p.answerVideoUrl
                 }));
 
-            const contentNotes = contentItems.filter((i: any) => i.type === 'notes' && (i.url || i.file_url));
-            const legacyNotes = (activeTopic.topic_pdfs || []).filter((p: any) => p.type === 'notes');
+            const contentNotes = contentItems.filter((i: any) => i && i.type === 'notes' && (i.url || i.file_url));
+            const legacyNotes = (Array.isArray(activeTopic.topic_pdfs) ? activeTopic.topic_pdfs : []).filter((p: any) => p && p.type === 'notes');
             const allNotes: any[] = contentNotes.length > 0 ? contentNotes : legacyNotes;
 
             // Extract all quizzes (from content_items and quizzes table)
-            const contentQuizzes = contentItems.filter((i: any) => i.type === 'quiz');
-            const rawDbQuizzes = activeTopic.quizzes || [];
+            const contentQuizzes = contentItems.filter((i: any) => i && i.type === 'quiz');
+            const rawDbQuizzes = Array.isArray(activeTopic.quizzes) ? activeTopic.quizzes : [];
 
             let allQuizzes: any[] = [];
             if (rawDbQuizzes.length > 0) {
@@ -1113,9 +1119,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   contentQuizzes[qIdx]?.title || 
                   (rawDbQuizzes.length > 1 ? `Quiz ${qIdx + 1}` : 'Topic Quiz');
 
-                const existingSubs = dbQ.quiz_submissions || [];
-                const stateSubs = allQuizSubmissions.filter((qs: any) => qs.quiz_id === dbQ.id || (matchedCq?.id && qs.quiz_id === matchedCq.id));
-                const mergedSubs = [...existingSubs, ...stateSubs.filter(s => !existingSubs.some((es: any) => (es.id && s.id && es.id === s.id) || (es.submitted_at && s.submitted_at && es.submitted_at === s.submitted_at)))];
+                const existingSubs = Array.isArray(dbQ.quiz_submissions) ? dbQ.quiz_submissions : (dbQ.quiz_submissions ? [dbQ.quiz_submissions] : []);
+                const safeQuizSubs = Array.isArray(allQuizSubmissions) ? allQuizSubmissions : [];
+                const stateSubs = safeQuizSubs.filter((qs: any) => qs && (qs.quiz_id === dbQ.id || (matchedCq?.id && qs.quiz_id === matchedCq.id)));
+                const mergedSubs = [...existingSubs, ...stateSubs.filter(s => s && !existingSubs.some((es: any) => es && ((es.id && s.id && es.id === s.id) || (es.submitted_at && s.submitted_at && es.submitted_at === s.submitted_at))))];
 
                 return {
                   ...dbQ,
@@ -1148,7 +1155,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   shuffle_options: cq.quizShuffleOptions,
                   embed_code: cq.quizEmbedCode
                 },
-                quiz_submissions: allQuizSubmissions.filter((qs: any) => qs.quiz_id === cq.id || qs.quiz_id === `quiz_${activeTopic.id}_${qIdx}`)
+                quiz_submissions: (Array.isArray(allQuizSubmissions) ? allQuizSubmissions : []).filter((qs: any) => qs && (qs.quiz_id === cq.id || qs.quiz_id === `quiz_${activeTopic.id}_${qIdx}`))
               }));
             }
 
@@ -1170,13 +1177,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     let lockReason = "";
                     
                     if (allWorksheets.length > 0) {
+                      const safeManualSubs = manualSubmissions || {};
                       const allSubmitted = allWorksheets.every((ws: any, idx: number) => {
                         const subType = allWorksheets.length === 1 
                           ? 'worksheet' 
                           : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
-                        const sub = manualSubmissions[`${activeTopic.id}_${subType}`]
-                          || (idx === 0 ? manualSubmissions[`${activeTopic.id}_worksheet`] : null)
-                          || manualSubmissions[`${activeTopic.id}_worksheet_${idx}`];
+                        const sub = safeManualSubs[`${activeTopic.id}_${subType}`]
+                          || (idx === 0 ? safeManualSubs[`${activeTopic.id}_worksheet`] : null)
+                          || safeManualSubs[`${activeTopic.id}_worksheet_${idx}`];
                         return !!sub;
                       });
                       if (!allSubmitted) {
@@ -1187,10 +1195,13 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                     const hasQuiz = allQuizzes.length > 0;
                     if (hasQuiz && canComplete) {
+                      const safeQuizSubs = Array.isArray(allQuizSubmissions) ? allQuizSubmissions : [];
+                      const safeManualSubs = manualSubmissions || {};
                       const incompleteQuiz = allQuizzes.find((q: any) => {
-                        const hasDirectSubs = q.quiz_submissions && q.quiz_submissions.length > 0;
-                        const hasStateSubs = allQuizSubmissions.some((s: any) => s.quiz_id === q.id || (q.matchedCqId && s.quiz_id === q.matchedCqId));
-                        const hasPdfSub = !!(manualSubmissions[`${activeTopic.id}_pdf_quiz_${q.id}`] || (q.matchedCqId && manualSubmissions[`${activeTopic.id}_pdf_quiz_${q.matchedCqId}`]) || manualSubmissions[`${activeTopic.id}_pdf_quiz`]);
+                        const directSubs = Array.isArray(q.quiz_submissions) ? q.quiz_submissions : (q.quiz_submissions ? [q.quiz_submissions] : []);
+                        const hasDirectSubs = directSubs.length > 0;
+                        const hasStateSubs = safeQuizSubs.some((s: any) => s && (s.quiz_id === q.id || (q.matchedCqId && s.quiz_id === q.matchedCqId)));
+                        const hasPdfSub = !!(safeManualSubs[`${activeTopic.id}_pdf_quiz_${q.id}`] || (q.matchedCqId && safeManualSubs[`${activeTopic.id}_pdf_quiz_${q.matchedCqId}`]) || safeManualSubs[`${activeTopic.id}_pdf_quiz`]);
                         return !hasDirectSubs && !hasStateSubs && !hasPdfSub;
                       });
                       if (incompleteQuiz) {
