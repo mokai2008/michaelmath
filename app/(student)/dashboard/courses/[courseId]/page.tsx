@@ -905,14 +905,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             const currentVideoUrl = activeUrls[currentMirrorIndex] || activeUrls[0] || '';
 
             // Extract all worksheets and notes (from content_items or legacy topic_pdfs)
-            const contentWorksheets = contentItems.filter((i: any) => i.type === 'worksheet' && (i.url || i.file_url));
+            const contentWorksheets = contentItems.filter((i: any) => i.type === 'worksheet' && (i.url || i.file_url || i.title));
             const legacyWorksheets = (activeTopic.topic_pdfs || []).filter((p: any) => p.type === 'worksheet');
             const allWorksheets: any[] = contentWorksheets.length > 0 
-              ? contentWorksheets 
+              ? contentWorksheets.map((cw: any, idx: number) => ({
+                  id: cw.id || `ws_${idx}`,
+                  type: 'worksheet',
+                  title: cw.title || (contentWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework'),
+                  url: cw.url || cw.file_url,
+                  answerPdfUrl: cw.answerPdfUrl,
+                  answerVideoUrl: cw.answerVideoUrl
+                }))
               : legacyWorksheets.map((p: any, idx: number) => ({
                   id: p.id || `legacy_ws_${idx}`,
                   type: 'worksheet',
-                  title: p.title || (legacyWorksheets.length > 1 ? `Worksheet ${idx + 1}` : 'Worksheet'),
+                  title: p.title || (legacyWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework'),
                   url: p.file_url || p.url,
                   answerPdfUrl: p.answerPdfUrl,
                   answerVideoUrl: p.answerVideoUrl
@@ -1202,42 +1209,47 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       const isUploadingThis = isUploadingWorksheet === subType;
 
                       return (
-                        <div key={ws.id || wsIdx} className="space-y-4 pt-5 first:pt-0 border-t first:border-t-0 border-gray-100">
-                          {allWorksheets.length > 1 && (
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-lg bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center">
-                                  {wsIdx + 1}
-                                </span>
-                                <h3 className="text-base font-bold text-text">{wsTitle}</h3>
-                              </div>
-                              {sub && (
-                                <span className={`px-2.5 py-0.5 font-bold text-xs rounded-full ${sub.status === 'reviewed' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
-                                  {sub.status === 'reviewed' ? `Graded ${sub.score !== null && sub.score !== undefined ? `(${sub.score})` : ''}` : 'Pending Review'}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
+                        <div key={ws.id || wsIdx} className="space-y-5">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            {/* Box 1: Download & Upload for this worksheet */}
+                            {/* Box 1: Questions & Attempt/Submission */}
                             <div className="bg-gray-50/80 border border-gray-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
                               <div>
-                                <div className="text-xs font-extrabold text-text/40 uppercase tracking-wider mb-3">Step 1 & 2: Worksheet & Submission</div>
-                                
-                                {/* Download this specific worksheet */}
-                                <a 
-                                  href={ws.url || ws.file_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group mb-4"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-orange-500" />
-                                    <span>Download {wsTitle}</span>
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="text-xs font-extrabold text-text/40 uppercase tracking-wider">
+                                    Step 1 & 2: Worksheet & Submission
                                   </div>
-                                  <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium">Download →</span>
-                                </a>
+                                  <span className="text-[11px] font-bold px-2 py-0.5 bg-orange-100 text-orange-700 rounded-md">
+                                    Handwritten HW
+                                  </span>
+                                </div>
+
+                                {/* Custom Worksheet Title */}
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="text-base md:text-lg font-black text-text tracking-tight">
+                                    {wsTitle}
+                                  </h3>
+                                </div>
+                                <div className="text-xs font-semibold text-text/50 mb-4 flex items-center gap-2">
+                                  <span>Worksheet {allWorksheets.length > 1 ? `${wsIdx + 1} of ${allWorksheets.length}` : 'Assignment'}</span>
+                                  <span>•</span>
+                                  <span>PDF Submission</span>
+                                </div>
+
+                                {/* Download this specific worksheet */}
+                                {(ws.url || ws.file_url) && (
+                                  <a 
+                                    href={ws.url || ws.file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group mb-4"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <FileText className="w-4 h-4 text-orange-500 shrink-0" />
+                                      <span className="truncate">Download {wsTitle} PDF</span>
+                                    </div>
+                                    <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium shrink-0">Download →</span>
+                                  </a>
+                                )}
 
                                 {/* Upload Status Card for this worksheet */}
                                 {sub ? (
@@ -1246,24 +1258,24 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                       <div className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
                                       <div className="truncate">
                                         <a href={sub.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
-                                          View Uploaded Homework PDF
+                                          View Uploaded {wsTitle} PDF
                                         </a>
                                         <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
                                       </div>
                                     </div>
                                     {sub.status !== 'reviewed' && (
-                                      <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50">
+                                      <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50 shrink-0">
                                         {isUploadingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
                                         <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
                                       </label>
                                     )}
                                   </div>
                                 ) : (
-                                  <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-primary/50 transition-colors">
+                                  <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-orange-400/50 transition-colors">
                                     <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
-                                    <div className="text-xs font-bold text-text">Upload Your Answer PDF for {wsTitle}</div>
-                                    <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution</p>
-                                    <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary/90 transition-all shadow-sm">
+                                    <div className="text-xs font-bold text-text">Upload Your {wsTitle} Answer PDF</div>
+                                    <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution to be reviewed</p>
+                                    <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold hover:bg-orange-600 transition-all shadow-sm">
                                       <Upload className="w-3.5 h-3.5" /> Select PDF File
                                       <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
                                     </label>
@@ -1273,45 +1285,59 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               </div>
                             </div>
 
-                            {/* Box 2: Teacher Grading Feedback for this worksheet */}
-                            <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                            {/* Box 2: Teacher Review & Result */}
+                            <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
                               <div>
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">Step 3: Teacher Review</span>
-                                  {sub?.score !== undefined && sub?.score !== null && (
-                                    <span className="text-xs font-black text-primary bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200">
-                                      Score: {sub.score}
+                                  <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">Step 3: Teacher Review & Score</span>
+                                  {sub ? (
+                                    <span className={`text-xs font-black bg-white px-2.5 py-0.5 rounded-lg border shadow-sm ${sub.status === 'reviewed' ? 'text-emerald-700 border-emerald-200' : 'text-orange-600 border-orange-200'}`}>
+                                      {sub.status === 'reviewed' 
+                                        ? (sub.score !== null && sub.score !== undefined ? `Score: ${sub.score}` : 'Reviewed') 
+                                        : 'Pending Review'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs font-bold text-text/40 bg-white px-2.5 py-0.5 rounded-lg border border-gray-200">
+                                      Not Submitted
                                     </span>
                                   )}
                                 </div>
-                                {sub?.status === 'reviewed' ? (
+
+                                {sub ? (
                                   <div className="space-y-3">
-                                    <p className="text-xs text-gray-700 bg-white p-3 rounded-xl border border-emerald-100 italic">
-                                      "{sub.feedback_text || 'No written feedback provided.'}"
-                                    </p>
+                                    <div className="bg-white p-3.5 rounded-xl border border-emerald-100 space-y-1">
+                                      <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                        {sub.status === 'reviewed' ? 'Homework Reviewed & Graded' : 'Worksheet Submitted for Grading'}
+                                      </div>
+                                      <p className="text-xs text-text/70 italic">
+                                        {sub.feedback_text ? `"${sub.feedback_text}"` : (sub.status === 'reviewed' ? 'No written feedback provided.' : 'Your submission is being reviewed by Michael Gad. Feedback and scores will appear here.')}
+                                      </p>
+                                    </div>
+
                                     {sub.feedback_file_url && (
                                       <a 
                                         href={sub.feedback_file_url} 
                                         target="_blank" 
                                         rel="noreferrer"
-                                        className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
                                       >
                                         <FileText className="w-4 h-4" /> Download Corrected PDF File
                                       </a>
                                     )}
                                   </div>
                                 ) : (
-                                  <p className="text-xs text-text/60 italic bg-white p-3 rounded-xl border border-emerald-100/60">
-                                    {sub ? 'Your submission is being reviewed by Michael Gad. Feedback and scores will appear here.' : 'Submit your worksheet PDF to receive personalized teacher feedback.'}
+                                  <p className="text-xs text-text/60 italic bg-white p-3.5 rounded-xl border border-emerald-100/60">
+                                    Submit your completed {wsTitle} to receive personalized teacher feedback and scoring.
                                   </p>
                                 )}
                               </div>
                             </div>
                           </div>
 
-                          {/* Model Answer for this worksheet */}
+                          {/* Model Answer / Video Solution for this worksheet */}
                           {sub && (ws.answerPdfUrl || ws.answerVideoUrl) && (
-                            <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                            <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
                               <div className="flex items-center gap-2.5">
                                 <span className="text-xl">📝</span>
                                 <div>
