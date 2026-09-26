@@ -461,27 +461,6 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex h-[calc(100vh-5rem)] items-center justify-center">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (!course) {
-    return (
-      <div className="flex h-[calc(100vh-5rem)] items-center justify-center flex-col">
-        <h2 className="text-2xl font-bold mb-4">Course not found</h2>
-        <Link href="/dashboard/courses" className="text-primary hover:underline">Back to My Courses</Link>
-      </div>
-    );
-  }
-
-  const toggleSection = (id: string) => {
-    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
   const handleMarkComplete = async (topicId: string, forceStatus?: boolean) => {
     if (!sessionUser) return;
     const isComp = forceStatus !== undefined ? forceStatus : !progress[topicId];
@@ -509,6 +488,27 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       handleMarkComplete(activeTopic.id, true);
     }
   }, [activeTopic?.id, manualSubmissions, allQuizSubmissions, progress, sessionUser?.id, isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[calc(100vh-5rem)] items-center justify-center">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="flex h-[calc(100vh-5rem)] items-center justify-center flex-col">
+        <h2 className="text-2xl font-bold mb-4">Course not found</h2>
+        <Link href="/dashboard/courses" className="text-primary hover:underline">Back to My Courses</Link>
+      </div>
+    );
+  }
+
+  const toggleSection = (id: string) => {
+    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const handleQuizSubmit = async (quizId: string, interactiveScore: number, interactiveAnswers: any) => {
     if (!sessionUser) return;
