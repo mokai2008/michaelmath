@@ -1419,131 +1419,184 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         }
 
                         return (
-                          <div key={quiz.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                              <div className="font-bold text-text flex items-center gap-2">
-                                {isCanvaQuiz ? 'Interactive Quiz' : (hasQuestions ? 'Interactive MCQ Quiz' : 'Past Paper Quiz')}
-                              </div>
-                              <div className="text-sm text-text/60">Total Marks: {actualTotalMarks}</div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {quiz.quiz_pdf_url && (
-                                <a href={quiz.quiz_pdf_url} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 text-text shadow-sm">View PDF Questions</a>
-                              )}
-                              
-                              <div className="flex items-center gap-2 ml-auto flex-wrap justify-end w-full md:w-auto mt-4 md:mt-0">
-                                {submission && (
-                                  <div className="flex flex-col gap-2 w-full md:w-auto mr-4">
-                                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-                                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                      {hasQuestions || isCanvaQuiz ? (
-                                        <span className="font-bold text-green-700">Score: {submission.score} / {actualTotalMarks}</span>
-                                      ) : (
-                                        <span className="font-bold text-green-700">Answers Submitted</span>
-                                      )}
+                          <div key={quiz.id} className="space-y-5">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                              {/* Box 1: Questions & Attempt/Submission */}
+                              <div className="bg-gray-50/80 border border-gray-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                                <div>
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="text-xs font-extrabold text-text/40 uppercase tracking-wider">
+                                      Step 1 & 2: Quiz & Submission
                                     </div>
+                                    <span className="text-[11px] font-bold px-2 py-0.5 bg-purple-100 text-purple-700 rounded-md">
+                                      {isCanvaQuiz ? 'Interactive Canva' : (hasQuestions ? 'Interactive MCQ' : 'Past Paper Quiz')}
+                                    </span>
                                   </div>
-                                )}
 
-                                {isCanvaQuiz ? (
-                                  <button 
-                                    onClick={() => setCanvaQuizModal(quiz)}
-                                    className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-sm shadow-sm transition-all flex items-center gap-2"
-                                  >
-                                    {submission ? 'Retake Quiz' : 'Start Quiz'}
-                                  </button>
-                                ) : hasQuestions ? (
-                                  <button onClick={() => startQuiz(quiz)} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 flex items-center gap-1 shadow-sm">
-                                    {submission ? 'Retake Quiz' : 'Take Quiz Now'}
-                                  </button>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    {submission && submission.answers_data?.file_url ? (
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex flex-col items-end">
-                                          <a href={submission.answers_data.file_url} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 text-text shadow-sm flex items-center gap-1">
-                                            <FileText className="w-4 h-4"/> View Upload
-                                          </a>
-                                          {manualSubmissions[`${activeTopic.id}_pdf_quiz`] && (
-                                            <span className={`text-[10px] font-bold uppercase mt-1 ${manualSubmissions[`${activeTopic.id}_pdf_quiz`].status === 'reviewed' ? 'text-green-600' : 'text-orange-500'}`}>
-                                              {manualSubmissions[`${activeTopic.id}_pdf_quiz`].status === 'reviewed' ? 'Reviewed' : 'Pending Review'}
-                                            </span>
-                                          )}
-                                        </div>
-                                        {manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.status !== 'reviewed' && (
-                                          <label className="cursor-pointer px-5 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 flex items-center gap-1 shadow-sm">
-                                            {isUploadingQuiz === quiz.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
-                                            Re-upload
-                                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id)} disabled={isUploadingQuiz === quiz.id} />
-                                          </label>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <label className="cursor-pointer px-5 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 flex items-center gap-1 shadow-sm">
-                                        {isUploadingQuiz === quiz.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
-                                        Upload Answers
-                                        <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id)} disabled={isUploadingQuiz === quiz.id} />
-                                      </label>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {!hasQuestions && manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.status === 'reviewed' && (
-                                <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-100 w-full">
-                                  <h5 className="text-xs font-bold text-green-800 uppercase tracking-wider mb-2">Admin Feedback</h5>
-                                  {manualSubmissions[`${activeTopic.id}_pdf_quiz`].score !== null && (
-                                    <div className="mb-2 font-bold text-text">Score: <span className="text-primary">{manualSubmissions[`${activeTopic.id}_pdf_quiz`].score}</span></div>
-                                  )}
-                                  <p className="text-sm text-text/80 mb-3">{manualSubmissions[`${activeTopic.id}_pdf_quiz`].feedback_text || 'No written feedback provided.'}</p>
-                                  {manualSubmissions[`${activeTopic.id}_pdf_quiz`].feedback_file_url && (
+                                  <div className="text-sm font-bold text-text mb-1">{quiz.title || 'Topic Quiz'}</div>
+                                  <div className="text-xs text-text/50 mb-4">Total Marks: {actualTotalMarks}</div>
+
+                                  {/* Download Quiz PDF button */}
+                                  {quiz.quiz_pdf_url && (
                                     <a 
-                                      href={manualSubmissions[`${activeTopic.id}_pdf_quiz`].feedback_file_url} 
+                                      href={quiz.quiz_pdf_url} 
                                       target="_blank" 
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-green-200 text-green-700 rounded-lg text-sm font-bold hover:bg-green-50 transition-colors shadow-sm"
+                                      rel="noreferrer" 
+                                      className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-purple-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group mb-4"
                                     >
-                                      <FileText className="w-4 h-4" /> Download Reviewed File
+                                      <div className="flex items-center gap-2">
+                                        <FileText className="w-4 h-4 text-purple-600" />
+                                        <span>Download Quiz Questions PDF</span>
+                                      </div>
+                                      <span className="text-[10px] text-text/40 group-hover:text-purple-600 font-medium">Download →</span>
                                     </a>
                                   )}
-                                </div>
-                              )}
 
-                              {/* Model Answer for Quiz - shown after any submission */}
-                              {submission && (() => {
-                                const quizItem = contentItems.find((i: any) => i.type === 'quiz');
-                                const hasAnswerPdf = quizItem?.answerPdfUrl;
-                                const hasAnswerVideo = quizItem?.answerVideoUrl;
-                                if (!hasAnswerPdf && !hasAnswerVideo) return null;
-                                return (
-                                  <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-200 space-y-4 w-full">
-                                    <h5 className="text-xs font-bold text-teal-900 uppercase tracking-wider flex items-center gap-2">
-                                      📝 Model Answer
-                                    </h5>
+                                  {/* Interactive / Canva Quiz Start Buttons */}
+                                  {isCanvaQuiz ? (
+                                    <button 
+                                      onClick={() => setCanvaQuizModal(quiz)}
+                                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-md shadow-purple-600/20 transition-all flex items-center justify-center gap-2"
+                                    >
+                                      <PlayCircle className="w-4 h-4" />
+                                      {submission ? 'Retake Canva Quiz' : 'Start Interactive Quiz'}
+                                    </button>
+                                  ) : hasQuestions ? (
+                                    <button 
+                                      onClick={() => startQuiz(quiz)} 
+                                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-md shadow-purple-600/20 transition-all flex items-center justify-center gap-2"
+                                    >
+                                      <PlayCircle className="w-4 h-4" />
+                                      {submission ? 'Retake Quiz' : 'Take Quiz Now'}
+                                    </button>
+                                  ) : (
+                                    /* Past Paper PDF Quiz Answer Upload */
+                                    <div>
+                                      {submission && submission.answers_data?.file_url ? (
+                                        <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
+                                            <div className="truncate">
+                                              <a href={submission.answers_data.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
+                                                View Uploaded Quiz Answers
+                                              </a>
+                                              <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
+                                            </div>
+                                          </div>
+                                          {manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.status !== 'reviewed' && (
+                                            <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50">
+                                              {isUploadingQuiz === quiz.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+                                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id)} disabled={isUploadingQuiz === quiz.id} />
+                                            </label>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-purple-400/50 transition-colors">
+                                          <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
+                                          <div className="text-xs font-bold text-text">Upload Your Quiz Answer PDF</div>
+                                          <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution to be reviewed</p>
+                                          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-all shadow-sm">
+                                            <Upload className="w-3.5 h-3.5" /> Select PDF File
+                                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id)} disabled={isUploadingQuiz === quiz.id} />
+                                          </label>
+                                          {isUploadingQuiz === quiz.id && <span className="text-xs text-text/50 flex items-center justify-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Box 2: Teacher Review & Result */}
+                              <div className="bg-purple-50/50 border border-purple-200/80 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-extrabold text-purple-800 uppercase tracking-wider">Step 3: Score & Review</span>
+                                    {submission ? (
+                                      <span className="text-xs font-black text-purple-700 bg-white px-2.5 py-0.5 rounded-lg border border-purple-200 shadow-sm">
+                                        Score: {submission.score} / {actualTotalMarks}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs font-bold text-text/40 bg-white px-2.5 py-0.5 rounded-lg border border-gray-200">
+                                        Not Attempted
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {submission ? (
+                                    <div className="space-y-3">
+                                      <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
+                                        <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                                          <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                                          {hasQuestions || isCanvaQuiz ? 'Quiz Completed & Graded' : 'Answers Submitted'}
+                                        </div>
+                                        <p className="text-xs text-text/70 italic">
+                                          {manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.feedback_text 
+                                            || (submission.score >= actualTotalMarks * 0.7 ? 'Great job! Passing score achieved.' : 'Review your solutions or retake the quiz to improve your score.')}
+                                        </p>
+                                      </div>
+
+                                      {manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.feedback_file_url && (
+                                        <a 
+                                          href={manualSubmissions[`${activeTopic.id}_pdf_quiz`].feedback_file_url} 
+                                          target="_blank" 
+                                          rel="noreferrer"
+                                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                                        >
+                                          <FileText className="w-4 h-4" /> Download Corrected Quiz PDF
+                                        </a>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-text/60 italic bg-white p-3.5 rounded-xl border border-purple-100/60">
+                                      Complete and submit the quiz to see your final score, teacher feedback, and solutions.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Model Answer / Mark Scheme (Unlocked after submission) */}
+                            {submission && (() => {
+                              const quizItem = contentItems.find((i: any) => i.type === 'quiz');
+                              const hasAnswerPdf = quizItem?.answerPdfUrl;
+                              const hasAnswerVideo = quizItem?.answerVideoUrl;
+                              if (!hasAnswerPdf && !hasAnswerVideo) return null;
+                              return (
+                                <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="text-xl">📝</span>
+                                    <div>
+                                      <div className="text-xs font-bold text-teal-950">Official Quiz Mark Scheme & Video Solution</div>
+                                      <div className="text-[10px] text-teal-700">Unlocked after quiz submission</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 w-full sm:w-auto">
                                     {hasAnswerPdf && (
                                       <a 
                                         href={quizItem.answerPdfUrl} 
                                         target="_blank" 
                                         rel="noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-teal-200 text-teal-700 rounded-lg text-sm font-bold hover:bg-teal-50 transition-colors shadow-sm"
+                                        className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
                                       >
-                                        <FileText className="w-4 h-4" /> View Mark Scheme / Answer Sheet
+                                        <FileText className="w-3.5 h-3.5" /> Mark Scheme PDF
                                       </a>
                                     )}
                                     {hasAnswerVideo && (
-                                      <div className="space-y-2">
-                                        <label className="block text-xs font-bold text-teal-800/70">Answer Video Explanation</label>
-                                        <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
-                                          <VideoPlayer url={quizItem.answerVideoUrl} />
-                                        </div>
-                                      </div>
+                                      <a 
+                                        href={quizItem.answerVideoUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                                      >
+                                        <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
+                                      </a>
                                     )}
                                   </div>
-                                );
-                              })()}
-
-                              </div>
-                            </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
                         );
                       })}
                     </div>
