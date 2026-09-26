@@ -60,13 +60,13 @@ export default function MyCoursesPage() {
       if (sectionIds.length > 0) {
         const { data: tData, error: tErr } = await supabase
           .from('topics')
-          .select('id, section_id, progress_percentage')
+          .select('id, section_id, progress_percentage, content_items')
           .in('section_id', sectionIds);
         
-        if (tErr && tErr.message?.includes('progress_percentage')) {
+        if (tErr) {
           const fallback = await supabase
             .from('topics')
-            .select('id, section_id')
+            .select('id, section_id, content_items')
             .in('section_id', sectionIds);
           topicsData = fallback.data || [];
         } else {

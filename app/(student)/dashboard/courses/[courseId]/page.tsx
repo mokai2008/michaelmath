@@ -21,7 +21,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
 import VideoPlayer from "@/components/VideoPlayer";
-import { calculateCourseProgress } from "@/lib/progress";
+import { calculateCourseProgress, getTopicWeight } from "@/lib/progress";
 
 function getCanvaQuizTotalMarks(rawCode?: string): number {
   if (!rawCode) return 0;
@@ -37,6 +37,92 @@ function getCanvaQuizTotalMarks(rawCode?: string): number {
   return 0;
 }
 
+function checkTopicRequirementsMet(
+  topic: any, 
+  subMap: Record<string, any>, 
+  quizSubsList: any[] = []
+): boolean {
+  if (!topic) return false;
+  
+  const contentItems = topic.content_items || [];
+  
+  // 1. Extract and check Worksheets
+  const contentWorksheets = contentItems.filter((i: any) => i.type === 'worksheet' && (i.url || i.file_url || i.title));
+  const legacyWorksheets = (topic.topic_pdfs || []).filter((p: any) => p.type === 'worksheet');
+  const allWorksheets: any[] = contentWorksheets.length > 0 
+    ? contentWorksheets.map((cw: any, idx: number) => ({
+        id: cw.id || `ws_${idx}`,
+        type: 'worksheet',
+        title: cw.title || (contentWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework')
+      }))
+    : legacyWorksheets.map((p: any, idx: number) => ({
+        id: p.id || `legacy_ws_${idx}`,
+        type: 'worksheet',
+        title: p.title || (legacyWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework')
+      }));
+
+  if (allWorksheets.length > 0) {
+    const allWsSubmitted = allWorksheets.every((ws: any, idx: number) => {
+      const subType = allWorksheets.length === 1 
+        ? 'worksheet' 
+        : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
+      const sub = subMap[`${topic.id}_${subType}`]
+        || (idx === 0 ? subMap[`${topic.id}_worksheet`] : null)
+        || subMap[`${topic.id}_worksheet_${idx}`];
+      return !!sub;
+    });
+    if (!allWsSubmitted) return false;
+  }
+
+  // 2. Extract and check Quizzes
+  const contentQuizzes = contentItems.filter((i: any) => i.type === 'quiz');
+  const rawDbQuizzes = topic.quizzes || [];
+
+  let allQuizzes: any[] = [];
+  if (rawDbQuizzes.length > 0) {
+    allQuizzes = rawDbQuizzes.map((dbQ: any, qIdx: number) => {
+      const matchedCq = contentQuizzes.find((cq: any) => 
+        (cq.id && dbQ.id && cq.id === dbQ.id) ||
+        (cq.quizPdfUrl && dbQ.quiz_pdf_url && cq.quizPdfUrl === dbQ.quiz_pdf_url) ||
+        (cq.quizEmbedCode && dbQ.embed_code && cq.quizEmbedCode === dbQ.embed_code) ||
+        (cq.title && dbQ.settings?.title && cq.title === dbQ.settings?.title)
+      ) || contentQuizzes[qIdx];
+
+      return {
+        id: dbQ.id,
+        matchedCqId: matchedCq?.id,
+        quiz_submissions: dbQ.quiz_submissions || []
+      };
+    });
+  } else if (contentQuizzes.length > 0) {
+    allQuizzes = contentQuizzes.map((cq: any, qIdx: number) => ({
+      id: cq.id || `quiz_${topic.id}_${qIdx}`,
+      matchedCqId: cq.id,
+      quiz_submissions: []
+    }));
+  }
+
+  if (allQuizzes.length > 0) {
+    const allQzCompleted = allQuizzes.every((quiz: any) => {
+      if (quiz.quiz_submissions && quiz.quiz_submissions.length > 0) return true;
+      if (quizSubsList && quizSubsList.some((s: any) => s.quiz_id === quiz.id || (quiz.matchedCqId && s.quiz_id === quiz.matchedCqId))) {
+        return true;
+      }
+      if (subMap[`${topic.id}_pdf_quiz_${quiz.id}`] || 
+          (quiz.matchedCqId && subMap[`${topic.id}_pdf_quiz_${quiz.matchedCqId}`]) || 
+          subMap[`${topic.id}_pdf_quiz`]) {
+        return true;
+      }
+      return false;
+    });
+    if (!allQzCompleted) return false;
+  }
+
+  // Topic must have at least one worksheet or quiz to auto-complete!
+  const hasRequirements = allWorksheets.length > 0 || allQuizzes.length > 0;
+  return hasRequirements;
+}
+
 export default function CoursePlayerPage({ params }: { params: { courseId: string } }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [course, setCourse] = useState<any>(null);
@@ -47,6 +133,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [manualSubmissions, setManualSubmissions] = useState<Record<string, any>>({});
+  const [allQuizSubmissions, setAllQuizSubmissions] = useState<any[]>([]);
   const [sessionUser, setSessionUser] = useState<any>(null);
   const [isUploadingWorksheet, setIsUploadingWorksheet] = useState<string | null>(null);
   const [isUploadingQuiz, setIsUploadingQuiz] = useState<string | null>(null);
@@ -168,8 +255,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           .select('*')
           .eq('student_id', session.user.id);
         
+        let subMap: Record<string, any> = {};
         if (subData) {
-          const subMap: Record<string, any> = {};
           subData.forEach((sub: any) => {
             subMap[`${sub.topic_id}_${sub.type}`] = sub;
           });
@@ -229,6 +316,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           topicProg = progRes.data || [];
         }
 
+        setAllQuizSubmissions(quizSubs);
+
         const progMap: Record<string, boolean> = {};
 
         topics.forEach((t: any) => {
@@ -255,6 +344,17 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           const prog = topicProg.find((tp: any) => tp.topic_id === t.id);
           if (prog) {
             progMap[t.id] = prog.is_completed;
+          } else {
+            // Check if topic was already completed via homework + quizzes
+            if (checkTopicRequirementsMet(t, subMap, quizSubs)) {
+              progMap[t.id] = true;
+              supabase.from('topic_progress').upsert({
+                student_id: session.user.id,
+                topic_id: t.id,
+                is_completed: true,
+                last_accessed_at: new Date().toISOString()
+              }, { onConflict: 'student_id,topic_id' });
+            }
           }
         });
 
@@ -376,9 +476,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleMarkComplete = async (topicId: string) => {
+  const handleMarkComplete = async (topicId: string, forceStatus?: boolean) => {
     if (!sessionUser) return;
-    const isComp = !progress[topicId];
+    const isComp = forceStatus !== undefined ? forceStatus : !progress[topicId];
+    if (forceStatus !== undefined && progress[topicId] === forceStatus) return;
+
     setProgress(p => ({ ...p, [topicId]: isComp }));
     const { error } = await supabase.from('topic_progress').upsert({
       student_id: sessionUser.id,
@@ -391,6 +493,16 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       alert("Failed to mark complete.");
     }
   };
+
+  // Auto-mark active topic as complete if requirements are met while on the topic
+  useEffect(() => {
+    if (!activeTopic || !sessionUser || isLoading) return;
+    if (progress[activeTopic.id]) return;
+
+    if (checkTopicRequirementsMet(activeTopic, manualSubmissions, allQuizSubmissions)) {
+      handleMarkComplete(activeTopic.id, true);
+    }
+  }, [activeTopic, manualSubmissions, allQuizSubmissions, progress, sessionUser, isLoading]);
 
   const handleQuizSubmit = async (quizId: string, interactiveScore: number, interactiveAnswers: any) => {
     if (!sessionUser) return;
@@ -409,6 +521,23 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const pct = total > 0 ? Math.round((interactiveScore / total) * 100) : 0;
       const passed = interactiveScore >= ((takingQuiz.passing_score / 100) * total);
       setQuizResult({ score: interactiveScore, total, passed });
+
+      const newSub = {
+        student_id: sessionUser.id,
+        quiz_id: quizId,
+        score: interactiveScore,
+        answers_data: interactiveAnswers,
+        submitted_at: new Date().toISOString()
+      };
+      const updatedQuizSubs = [...allQuizSubmissions, newSub];
+      setAllQuizSubmissions(updatedQuizSubs);
+
+      // Auto-mark topic as complete if all requirements are now satisfied
+      if (activeTopic && checkTopicRequirementsMet(activeTopic, manualSubmissions, updatedQuizSubs)) {
+        if (!progress[activeTopic.id]) {
+          await handleMarkComplete(activeTopic.id, true);
+        }
+      }
 
       // Notify admin about quiz completion
       await supabase.from('admin_notifications').insert({
@@ -471,11 +600,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
          });
       }
 
-      setManualSubmissions(prev => ({ 
-        ...prev, 
+      const updatedManualSubs = {
+        ...manualSubmissions,
         [`${topicId}_${subType}`]: { file_url: finalUrl, status: 'pending' },
         ...(subType.startsWith('worksheet') ? { [`${topicId}_worksheet`]: { file_url: finalUrl, status: 'pending' } } : {})
-      }));
+      };
+      setManualSubmissions(updatedManualSubs);
 
       // Notify admin about worksheet submission
       await supabase.from('admin_notifications').insert({
@@ -491,7 +621,18 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         }
       }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
 
-      alert("Worksheet answers uploaded successfully!");
+      // Auto-mark topic as complete if all requirements are now satisfied
+      const topicObj = (course?.sections || []).flatMap((s: any) => s.topics || []).find((t: any) => t.id === topicId) || activeTopic;
+      if (topicObj && checkTopicRequirementsMet(topicObj, updatedManualSubs, allQuizSubmissions)) {
+        if (!progress[topicId]) {
+          await handleMarkComplete(topicId, true);
+          alert("🎉 Homework uploaded! All topic requirements completed — this topic has been marked complete!");
+        } else {
+          alert("Worksheet answers uploaded successfully!");
+        }
+      } else {
+        alert("Worksheet answers uploaded successfully!");
+      }
     } catch (err: any) {
       console.error(err);
       alert("Error uploading worksheet: " + err.message);
@@ -567,7 +708,28 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         }
       }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
 
-      alert("Quiz answers uploaded successfully!");
+      const updatedManualSubs = {
+        ...manualSubmissions,
+        [`${activeTopic?.id}_${subType}`]: { file_url: finalUrl, status: 'pending' },
+        [`${activeTopic?.id}_pdf_quiz`]: { file_url: finalUrl, status: 'pending' }
+      };
+      const updatedQuizSubs = [
+        ...allQuizSubmissions, 
+        { student_id: sessionUser.id, quiz_id: quizId, score: 0, submitted_at: new Date().toISOString() }
+      ];
+
+      // Auto-mark topic as complete if all requirements are now satisfied
+      if (activeTopic && checkTopicRequirementsMet(activeTopic, updatedManualSubs, updatedQuizSubs)) {
+        await supabase.from('topic_progress').upsert({
+          student_id: sessionUser.id,
+          topic_id: activeTopic.id,
+          is_completed: true,
+          last_accessed_at: new Date().toISOString()
+        }, { onConflict: 'student_id,topic_id' });
+        alert("🎉 Quiz uploaded! All topic requirements completed — this topic has been marked complete!");
+      } else {
+        alert("Quiz answers uploaded successfully!");
+      }
       window.location.reload(); 
     } catch (err: any) {
       console.error(err);
@@ -774,9 +936,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-1">
                                 <div className={`text-sm font-medium ${!isSectionUnlocked ? 'text-text/40' : isActive ? 'text-primary' : 'text-text'} truncate`}>{topic.title}</div>
-                                {Number(topic.progress_percentage) > 0 && (
+                                {getTopicWeight(topic) > 0 && (
                                   <span className="text-[10px] font-bold text-text/50 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
-                                    {topic.progress_percentage}%
+                                    {getTopicWeight(topic)}%
                                   </span>
                                 )}
                               </div>
@@ -951,13 +1113,18 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   contentQuizzes[qIdx]?.title || 
                   (rawDbQuizzes.length > 1 ? `Quiz ${qIdx + 1}` : 'Topic Quiz');
 
+                const existingSubs = dbQ.quiz_submissions || [];
+                const stateSubs = allQuizSubmissions.filter((qs: any) => qs.quiz_id === dbQ.id || (matchedCq?.id && qs.quiz_id === matchedCq.id));
+                const mergedSubs = [...existingSubs, ...stateSubs.filter(s => !existingSubs.some((es: any) => (es.id && s.id && es.id === s.id) || (es.submitted_at && s.submitted_at && es.submitted_at === s.submitted_at)))];
+
                 return {
                   ...dbQ,
                   title: quizTitle,
                   quiz_pdf_url: dbQ.quiz_pdf_url || matchedCq?.quizPdfUrl || matchedCq?.url,
                   answerPdfUrl: matchedCq?.answerPdfUrl || dbQ.markscheme_pdf_url,
                   answerVideoUrl: matchedCq?.answerVideoUrl,
-                  quizMode: matchedCq?.quizMode || (dbQ.questions_data && dbQ.questions_data.length > 0 ? 'manual' : (dbQ.embed_code ? 'canva' : 'upload_pdf'))
+                  quizMode: matchedCq?.quizMode || (dbQ.questions_data && dbQ.questions_data.length > 0 ? 'manual' : (dbQ.embed_code ? 'canva' : 'upload_pdf')),
+                  quiz_submissions: mergedSubs
                 };
               });
             } else if (contentQuizzes.length > 0) {
@@ -981,7 +1148,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   shuffle_options: cq.quizShuffleOptions,
                   embed_code: cq.quizEmbedCode
                 },
-                quiz_submissions: []
+                quiz_submissions: allQuizSubmissions.filter((qs: any) => qs.quiz_id === cq.id || qs.quiz_id === `quiz_${activeTopic.id}_${qIdx}`)
               }));
             }
 
@@ -1020,29 +1187,55 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                     const hasQuiz = allQuizzes.length > 0;
                     if (hasQuiz && canComplete) {
-                      const incompleteQuiz = allQuizzes.find((q: any) => !q.quiz_submissions || q.quiz_submissions.length === 0);
+                      const incompleteQuiz = allQuizzes.find((q: any) => {
+                        const hasDirectSubs = q.quiz_submissions && q.quiz_submissions.length > 0;
+                        const hasStateSubs = allQuizSubmissions.some((s: any) => s.quiz_id === q.id || (q.matchedCqId && s.quiz_id === q.matchedCqId));
+                        const hasPdfSub = !!(manualSubmissions[`${activeTopic.id}_pdf_quiz_${q.id}`] || (q.matchedCqId && manualSubmissions[`${activeTopic.id}_pdf_quiz_${q.matchedCqId}`]) || manualSubmissions[`${activeTopic.id}_pdf_quiz`]);
+                        return !hasDirectSubs && !hasStateSubs && !hasPdfSub;
+                      });
                       if (incompleteQuiz) {
                         canComplete = false;
-                        lockReason = "complete all quizzes";
+                        lockReason = allWorksheets.length > 0 ? "upload homework and complete quiz" : "complete all quizzes";
                       }
+                    }
+
+                    const isTopicCompleted = !!progress[activeTopic.id];
+
+                    if (isTopicCompleted) {
+                      return (
+                        <button 
+                          onClick={() => handleMarkComplete(activeTopic.id)}
+                          title="Topic completed! Click to toggle if needed"
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm bg-green-100 text-green-700 hover:bg-green-200"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <span>Completed {getTopicWeight(activeTopic) > 0 ? `(+${getTopicWeight(activeTopic)}%)` : ''}</span>
+                        </button>
+                      );
+                    }
+
+                    if (!canComplete) {
+                      return (
+                        <div 
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200 select-none shadow-sm"
+                          title="Upload your homework and complete the quiz to automatically finish this topic"
+                        >
+                          <Lock className="w-4 h-4 text-gray-400" />
+                          <span>Auto-completes after {allWorksheets.length > 0 && hasQuiz ? 'homework & quiz' : (allWorksheets.length > 0 ? 'homework' : 'quiz')}</span>
+                        </div>
+                      );
                     }
 
                     return (
                       <button 
                         onClick={() => {
-                          if (!canComplete && !progress[activeTopic.id]) {
-                            alert(`Please ${lockReason} to complete this topic.`);
-                            return;
-                          }
-                          handleMarkComplete(activeTopic.id);
-                          if (!progress[activeTopic.id] && canComplete) {
-                            moveToNextTopic();
-                          }
+                          handleMarkComplete(activeTopic.id, true);
+                          moveToNextTopic();
                         }}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm ${progress[activeTopic.id] ? 'bg-green-100 text-green-700 hover:bg-green-200' : (!canComplete ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90')}`}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm bg-primary text-white hover:bg-primary/90"
                       >
-                        {!progress[activeTopic.id] && !canComplete ? <Lock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />} 
-                        {progress[activeTopic.id] ? 'Completed' : `Mark Topic Complete ${Number(activeTopic.progress_percentage) > 0 ? `(+${activeTopic.progress_percentage}%)` : ''}`}
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Mark Topic Complete {getTopicWeight(activeTopic) > 0 ? `(+${getTopicWeight(activeTopic)}%)` : ''}</span>
                       </button>
                     );
                   })()}
@@ -2215,8 +2408,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     if (subErr) {
                       console.error("Quiz submission error:", subErr);
                     } else {
-                      if (!progress[activeTopic.id]) {
-                        handleMarkComplete(activeTopic.id);
+                      const updatedQuizSubs = [
+                        ...allQuizSubmissions,
+                        { student_id: sessionUser.id, quiz_id: canvaQuizModal.id, score: scoreToSubmit, submitted_at: new Date().toISOString() }
+                      ];
+                      setAllQuizSubmissions(updatedQuizSubs);
+                      if (activeTopic && checkTopicRequirementsMet(activeTopic, manualSubmissions, updatedQuizSubs)) {
+                        if (!progress[activeTopic.id]) {
+                          handleMarkComplete(activeTopic.id, true);
+                        }
                       }
                     }
 

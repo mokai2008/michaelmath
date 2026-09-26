@@ -487,15 +487,18 @@ export default function AdminNewCourse() {
         for (let tIdx = 0; tIdx < section.topics.length; tIdx++) {
           const topic = section.topics[tIdx];
           const items = topic.items || [];
-          const firstVideo = items.find((i: any) => i.type === 'video');
+          const rawWeight = parseFloat(String(topic.progress_percentage || 0)) || 0;
+          const itemsList = (items || []).filter((i: any) => !i?.__topic_meta);
+          const itemsWithMeta = [...itemsList, { __topic_meta: true, progress_percentage: rawWeight }];
+          const firstVideo = itemsList.find((i: any) => i.type === 'video');
 
           const topicPayload: any = {
             section_id: sectionId,
             title: topic.title,
             order_index: tIdx,
             youtube_url: firstVideo?.url || '',
-            content_items: items,
-            progress_percentage: parseFloat(String(topic.progress_percentage || 0)) || 0
+            content_items: itemsWithMeta,
+            progress_percentage: rawWeight
           };
 
           let { data: topicData, error: topicError } = await supabase

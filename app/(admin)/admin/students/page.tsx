@@ -204,13 +204,13 @@ export default function AdminStudentsPage() {
       if (courseIds.length > 0) {
         let { data: coursesData, error: cErr } = await supabase
           .from("courses")
-          .select("id, title, total_price, sections(id, title, topics(id, title, progress_percentage))")
+          .select("id, title, total_price, sections(id, title, topics(id, title, progress_percentage, content_items))")
           .in("id", courseIds);
 
-        if (cErr && cErr.message?.includes('progress_percentage')) {
+        if (cErr) {
           const fallback = await supabase
             .from("courses")
-            .select("id, title, total_price, sections(id, title, topics(id, title))")
+            .select("id, title, total_price, sections(id, title, topics(id, title, content_items))")
             .in("id", courseIds);
           coursesData = fallback.data;
         }

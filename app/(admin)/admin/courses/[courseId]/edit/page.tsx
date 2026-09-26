@@ -113,8 +113,18 @@ export default function AdminCourseEditor() {
             const mcqQuiz = topic.quizzes?.find((q: any) => (q.questions_data && q.questions_data.length > 0) || q.embed_code || q.settings?.embed_code);
 
             let items: any[] = [];
+            let metaWeight: any = null;
             if (Array.isArray(topic.content_items) && topic.content_items.length > 0) {
-              items = topic.content_items.map((it: any) => {
+              const realContentItems = topic.content_items.filter((it: any) => {
+                if (it?.__topic_meta) {
+                  if (it.progress_percentage !== undefined && it.progress_percentage !== null) {
+                    metaWeight = it.progress_percentage;
+                  }
+                  return false;
+                }
+                return true;
+              });
+              items = realContentItems.map((it: any) => {
                 if (it.type === 'video') {
                   const urls = Array.isArray(it.urls) && it.urls.length > 0 
                     ? it.urls.filter((u: string) => u !== undefined && u !== null)
@@ -171,10 +181,14 @@ export default function AdminCourseEditor() {
               }
             }
 
+            const resolvedWeight = (topic.progress_percentage !== undefined && topic.progress_percentage !== null && topic.progress_percentage !== '')
+              ? topic.progress_percentage
+              : (metaWeight !== null ? metaWeight : '');
+
             return {
               id: topic.id,
               title: topic.title,
-              progress_percentage: topic.progress_percentage !== undefined && topic.progress_percentage !== null ? topic.progress_percentage : '',
+              progress_percentage: resolvedWeight,
               isExpanded: false,
               items
             };
@@ -631,7 +645,9 @@ export default function AdminCourseEditor() {
 
         for (let tIdx = 0; tIdx < section.topics.length; tIdx++) {
           const topic = section.topics[tIdx];
-          const items = topic.items || [];
+          const rawWeight = parseFloat(String(topic.progress_percentage || 0)) || 0;
+          const items = (topic.items || []).filter((i: any) => !i?.__topic_meta);
+          const itemsWithMeta = [...items, { __topic_meta: true, progress_percentage: rawWeight }];
           const firstVideo = items.find((i: any) => i.type === 'video');
 
           const topicPayload: any = {
@@ -639,8 +655,8 @@ export default function AdminCourseEditor() {
             title: topic.title,
             order_index: tIdx,
             youtube_url: firstVideo?.url || '',
-            content_items: items,
-            progress_percentage: parseFloat(String(topic.progress_percentage || 0)) || 0
+            content_items: itemsWithMeta,
+            progress_percentage: rawWeight
           };
           
           let dbTopicId = topic.id;
