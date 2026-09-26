@@ -163,9 +163,17 @@ export default function CourseSalesClient({ course }: { course: any }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm">
-                <Star className="w-4 h-4 text-accent fill-accent" />
-                <span>Premium Math Course</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm">
+                  <Star className="w-4 h-4 text-accent fill-accent" />
+                  <span>Premium Math Course</span>
+                </div>
+                {course.spoken_language && (
+                  <div className="inline-flex items-center gap-1.5 bg-white/20 border border-white/20 px-3.5 py-1 rounded-full text-xs font-bold text-white backdrop-blur-sm shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{course.spoken_language}</span>
+                  </div>
+                )}
               </div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
                 {course.title}
@@ -191,6 +199,12 @@ export default function CourseSalesClient({ course }: { course: any }) {
             </div>
             
             <div className="hidden lg:block relative">
+              {course.spoken_language && (
+                <div className="absolute top-4 right-4 z-20 bg-slate-950/85 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/20 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{course.spoken_language}</span>
+                </div>
+              )}
               <div className="aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 bg-black">
                 {course.intro_video_url ? (
                   <VideoPlayer url={course.intro_video_url} poster={course.thumbnail_url} />
@@ -303,6 +317,12 @@ export default function CourseSalesClient({ course }: { course: any }) {
             <div className="lg:col-span-1">
               <div className="sticky top-24 bg-white rounded-3xl shadow-xl shadow-black/5 border border-gray-100 overflow-hidden">
                 <div className="lg:hidden aspect-video relative">
+                  {course.spoken_language && (
+                    <div className="absolute top-3 right-3 z-10 bg-slate-950/85 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>{course.spoken_language}</span>
+                    </div>
+                  )}
                    {course.thumbnail_url ? (
                     <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
                   ) : (

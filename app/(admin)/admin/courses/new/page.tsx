@@ -20,6 +20,7 @@ export default function AdminNewCourse() {
   const [courseIntroVideo, setCourseIntroVideo] = useState("");
   const [coursePrice, setCoursePrice] = useState("0.00");
   const [courseKeywords, setCourseKeywords] = useState("");
+  const [courseSpokenLanguage, setCourseSpokenLanguage] = useState("Arabic Spoken");
 
   const [sections, setSections] = useState([
     {
@@ -445,6 +446,7 @@ export default function AdminNewCourse() {
         description: courseDescription,
         thumbnail_url: courseThumbnail,
         intro_video_url: courseIntroVideo,
+        spoken_language: courseSpokenLanguage.trim(),
         total_price: parseFloat(coursePrice) || 0,
         is_published: publish,
         keywords: courseKeywords.split(',').map(k => k.trim()).filter(Boolean)
@@ -456,9 +458,10 @@ export default function AdminNewCourse() {
         .select()
         .single();
 
-      if (courseError && (courseError.message?.includes('intro_video_url') || courseError.message?.includes('keywords'))) {
+      if (courseError && (courseError.message?.includes('intro_video_url') || courseError.message?.includes('keywords') || courseError.message?.includes('spoken_language'))) {
         if (courseError.message.includes('intro_video_url')) delete coursePayload.intro_video_url;
         if (courseError.message.includes('keywords')) delete coursePayload.keywords;
+        if (courseError.message.includes('spoken_language')) delete coursePayload.spoken_language;
         const retry = await supabase.from('courses').insert(coursePayload).select().single();
         courseData = retry.data;
         courseError = retry.error;
@@ -689,6 +692,76 @@ export default function AdminNewCourse() {
               placeholder="Algebra, A-Level, Edexcel..." 
             />
           </div>
+
+          {/* Spoken Language Picture Badge */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <label className="block text-sm font-bold text-text">
+                  Spoken Instruction Language (Picture Badge)
+                </label>
+                <p className="text-xs text-text/60 mt-0.5">
+                  Displayed as a notification-style badge on the top of the course thumbnail (e.g. Arabic Spoken or English Spoken).
+                </p>
+              </div>
+
+              {/* Live Preview */}
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-xl shadow-2xs self-start sm:self-auto">
+                <span className="text-[10px] uppercase font-bold text-text/40">Preview:</span>
+                {courseSpokenLanguage ? (
+                  <div className="inline-flex items-center gap-1.5 bg-slate-950 text-white text-xs font-bold px-2.5 py-0.5 rounded-full shadow-xs border border-white/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{courseSpokenLanguage}</span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-text/40 italic">No badge</span>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-xs font-bold text-text/50 mr-1">Quick Presets:</span>
+              {[
+                { label: 'Arabic Spoken', flag: '🇸🇦' },
+                { label: 'English Spoken', flag: '🇬🇧' },
+                { label: 'Arabic & English Spoken', flag: '🌐' },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setCourseSpokenLanguage(preset.label)}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 ${
+                    courseSpokenLanguage === preset.label
+                      ? 'bg-primary text-white border-primary shadow-xs'
+                      : 'bg-white text-text/70 border-gray-200 hover:bg-gray-100 hover:text-text'
+                  }`}
+                >
+                  <span>{preset.flag}</span>
+                  <span>{preset.label}</span>
+                </button>
+              ))}
+              {courseSpokenLanguage && (
+                <button
+                  type="button"
+                  onClick={() => setCourseSpokenLanguage('')}
+                  className="text-xs font-semibold text-red-500 hover:bg-red-50 px-2.5 py-1.5 rounded-xl transition-colors border border-transparent"
+                >
+                  Clear Badge
+                </button>
+              )}
+            </div>
+
+            {/* Custom Input */}
+            <input
+              type="text"
+              value={courseSpokenLanguage}
+              onChange={(e) => setCourseSpokenLanguage(e.target.value)}
+              className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm font-medium"
+              placeholder="e.g. Arabic Spoken, English Spoken"
+            />
+          </div>
+
           <div className="pt-4 border-t border-gray-100 flex justify-end">
             <button 
               onClick={() => setStep(2)}

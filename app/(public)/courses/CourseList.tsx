@@ -90,9 +90,15 @@ export default function CourseList({ courses }: { courses: any[] }) {
               {filteredCourses.map((course: any, idx: number) => (
                 <Link href={`/courses/${course.id}`} key={course.id} className="bg-white rounded-3xl overflow-hidden shadow-lg shadow-black/5 border border-gray-100 group flex flex-col hover:-translate-y-1 transition-transform">
                   <div className="aspect-[4/3] bg-background-alt relative overflow-hidden flex-shrink-0">
-                    <div className="absolute top-4 left-4 bg-accent text-white text-xs font-bold px-3 py-1 rounded-full z-10">
+                    <div className="absolute top-4 left-4 bg-accent text-white text-xs font-bold px-3 py-1 rounded-full z-10 shadow-sm">
                       {idx === 0 ? 'NEW' : 'HOT'}
                     </div>
+                    {course.spoken_language && (
+                      <div className="absolute top-4 right-4 z-10 bg-slate-950/85 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>{course.spoken_language}</span>
+                      </div>
+                    )}
                     {course.thumbnail_url ? (
                       <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     ) : (

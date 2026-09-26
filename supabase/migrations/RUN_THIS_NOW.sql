@@ -247,3 +247,7 @@ EXCEPTION
     NULL;
 END $$;
 
+-- 11. Add spoken_language column to courses table
+ALTER TABLE public.courses 
+ADD COLUMN IF NOT EXISTS spoken_language text DEFAULT 'Arabic Spoken';
+
