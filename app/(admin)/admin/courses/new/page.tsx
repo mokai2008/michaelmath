@@ -56,26 +56,60 @@ export default function AdminNewCourse() {
       const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `uploads/${filename}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('course-assets')
-        .upload(filePath, file, {
-          upsert: true,
-        });
+      let uploadedUrl: string | null = null;
 
-      if (uploadError) {
-        throw new Error(uploadError.message);
+      // 1. Direct Supabase Storage Upload
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from('course-assets')
+          .upload(filePath, file, {
+            upsert: true,
+          });
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('course-assets')
+            .getPublicUrl(filePath);
+          uploadedUrl = publicUrl;
+        } else {
+          console.warn("Direct upload error, falling back to /api/upload:", uploadError.message);
+        }
+      } catch (directErr: any) {
+        console.warn("Direct upload exception, trying /api/upload:", directErr);
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('course-assets')
-        .getPublicUrl(filePath);
+      // 2. Fallback to /api/upload if direct upload didn't succeed
+      if (!uploadedUrl) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const formData = new FormData();
+        formData.append("file", file);
 
-      callback(publicUrl);
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          headers: session?.access_token ? {
+            Authorization: `Bearer ${session.access_token}`
+          } : {},
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (!res.ok || data.error || !data.url) {
+          throw new Error(data.error || "Upload failed via all methods.");
+        }
+        uploadedUrl = data.url;
+      }
+
+      if (uploadedUrl) {
+        callback(uploadedUrl);
+      }
     } catch (err: any) {
       console.error("Upload error:", err);
       alert("Failed to upload: " + err.message);
     } finally {
       setUploadingField(null);
+      if (e.target) {
+        e.target.value = '';
+      }
     }
   };
 
@@ -290,7 +324,7 @@ export default function AdminNewCourse() {
   };
 
   const handleUpdateItemField = (sectionId: number, topicId: number, itemId: string | number, field: string, value: any) => {
-    setSections(sections.map(section => {
+    setSections(prevSections => prevSections.map(section => {
       if (section.id === sectionId) {
         return {
           ...section,
@@ -301,6 +335,31 @@ export default function AdminNewCourse() {
                 items: (topic.items || []).map((item: any) => {
                   if (item.id === itemId) {
                     return { ...item, [field]: value };
+                  }
+                  return item;
+                })
+              };
+            }
+            return topic;
+          })
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleUpdateItemFields = (sectionId: number, topicId: number, itemId: string | number, fieldsObj: Record<string, any>) => {
+    setSections(prevSections => prevSections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.map((topic: any) => {
+            if (topic.id === topicId) {
+              return {
+                ...topic,
+                items: (topic.items || []).map((item: any) => {
+                  if (item.id === itemId) {
+                    return { ...item, ...fieldsObj };
                   }
                   return item;
                 })
@@ -1090,10 +1149,10 @@ export default function AdminNewCourse() {
                                                 checked={Boolean(item.hasWorksheetPdf || item.worksheetPdfUrl)}
                                                 onChange={(e) => {
                                                   const checked = e.target.checked;
-                                                  handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', checked);
-                                                  if (!checked) {
-                                                    handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', '');
-                                                  }
+                                                  handleUpdateItemFields(section.id, topic.id, item.id, {
+                                                    hasWorksheetPdf: checked,
+                                                    worksheetPdfUrl: checked ? (item.worksheetPdfUrl || '') : ''
+                                                  });
                                                 }}
                                                 className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-gray-300"
                                               />
@@ -1117,23 +1176,33 @@ export default function AdminNewCourse() {
                                                   type="text"
                                                   value={item.worksheetPdfUrl || ''}
                                                   onChange={(e) => {
-                                                    handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', e.target.value);
-                                                    if (e.target.value) {
-                                                      handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', true);
-                                                    }
+                                                    const val = e.target.value;
+                                                    handleUpdateItemFields(section.id, topic.id, item.id, {
+                                                      worksheetPdfUrl: val,
+                                                      hasWorksheetPdf: Boolean(val)
+                                                    });
                                                   }}
                                                   className="w-full text-xs px-3 py-2 border border-amber-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                                                   placeholder="Paste Worksheet PDF link or upload ->"
                                                 />
-                                                <label className="cursor-pointer bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
-                                                  {uploadingField === `video_worksheet_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                                <label className="cursor-pointer bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[110px] shrink-0">
+                                                  {uploadingField === `video_worksheet_${item.id}` ? (
+                                                    <span className="flex items-center gap-1.5 text-amber-800">
+                                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                      <span>Uploading...</span>
+                                                    </span>
+                                                  ) : (
+                                                    'Upload PDF'
+                                                  )}
                                                   <input
                                                     type="file"
                                                     accept="application/pdf"
                                                     className="hidden"
                                                     onChange={(e) => handleFileUpload(e, `video_worksheet_${item.id}`, (url) => {
-                                                      handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', url);
-                                                      handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', true);
+                                                      handleUpdateItemFields(section.id, topic.id, item.id, {
+                                                        worksheetPdfUrl: url,
+                                                        hasWorksheetPdf: true
+                                                      });
                                                     })}
                                                     disabled={uploadingField === `video_worksheet_${item.id}`}
                                                   />
@@ -1142,8 +1211,10 @@ export default function AdminNewCourse() {
                                                   <button
                                                     type="button"
                                                     onClick={() => {
-                                                      handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', '');
-                                                      handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', false);
+                                                      handleUpdateItemFields(section.id, topic.id, item.id, {
+                                                        worksheetPdfUrl: '',
+                                                        hasWorksheetPdf: false
+                                                      });
                                                     }}
                                                     className="p-2 text-red-500 hover:bg-red-50 rounded-lg shrink-0 transition-colors"
                                                     title="Remove PDF"
