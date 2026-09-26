@@ -227,8 +227,20 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           t.topic_pdfs = pdfs.filter((p: any) => p.topic_id === t.id);
           
           const tQuizzes = quizzes.filter((q: any) => q.topic_id === t.id);
-          tQuizzes.forEach((q: any) => {
+          const tContentQuizzes = (t.content_items || []).filter((i: any) => i.type === 'quiz');
+
+          tQuizzes.forEach((q: any, qIdx: number) => {
             q.quiz_submissions = quizSubs.filter((qs: any) => qs.quiz_id === q.id);
+            const matchedCq = tContentQuizzes.find((cq: any) => 
+              (cq.id && q.id && cq.id === q.id) ||
+              (cq.quizPdfUrl && q.quiz_pdf_url && cq.quizPdfUrl === q.quiz_pdf_url) ||
+              (cq.quizEmbedCode && q.embed_code && cq.quizEmbedCode === q.embed_code) ||
+              (cq.title && q.settings?.title && cq.title === q.settings?.title)
+            ) || tContentQuizzes[qIdx];
+
+            q.title = q.settings?.title || matchedCq?.title || q.title || `Topic Quiz ${tQuizzes.length > 1 ? qIdx + 1 : ''}`.trim();
+            q.answerPdfUrl = matchedCq?.answerPdfUrl || q.markscheme_pdf_url;
+            q.answerVideoUrl = matchedCq?.answerVideoUrl;
           });
           t.quizzes = tQuizzes;
 
@@ -480,7 +492,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     }
   };
 
-  const handlePdfQuizUpload = async (e: any, quizId: string) => {
+  const handlePdfQuizUpload = async (e: any, quizId: string, quizTitle?: string) => {
     const file = e.target.files?.[0];
     if (!file || !sessionUser) return;
     
@@ -502,21 +514,22 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
       const finalUrl = publicUrl + `?t=${Date.now()}`;
 
-      // Insert or update manual_submissions for PDF Quiz
+      // Insert or update manual_submissions for PDF Quiz (per-quiz key with backward compatibility)
+      const subType = `pdf_quiz_${quizId}`;
       const { data: existing } = await supabase.from('manual_submissions')
          .select('id')
          .eq('student_id', sessionUser.id)
          .eq('topic_id', activeTopic?.id)
-         .eq('type', 'pdf_quiz')
+         .in('type', [subType, 'pdf_quiz'])
          .maybeSingle();
 
       if (existing) {
-         await supabase.from('manual_submissions').update({ file_url: finalUrl, status: 'pending', submitted_at: new Date().toISOString() }).eq('id', existing.id);
+         await supabase.from('manual_submissions').update({ file_url: finalUrl, status: 'pending', submitted_at: new Date().toISOString(), type: subType }).eq('id', existing.id);
       } else {
          await supabase.from('manual_submissions').insert({
            student_id: sessionUser.id,
            topic_id: activeTopic?.id,
-           type: 'pdf_quiz',
+           type: subType,
            file_url: finalUrl
          });
       }
@@ -531,17 +544,18 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
       if (dbError) throw dbError;
 
-      // Notify admin about PDF quiz submission
+      // Notify admin about PDF quiz submission with specific quiz title
       await supabase.from('admin_notifications').insert({
         student_id: sessionUser.id,
         type: 'pdf_quiz_submitted',
-        title: `PDF Quiz Submitted: ${activeTopic?.title || 'Unknown Topic'}`,
-        message: 'uploaded PDF quiz answers for review',
+        title: `Quiz Submitted: ${quizTitle || activeTopic?.title || 'Unknown Quiz'}`,
+        message: `uploaded PDF quiz answers for ${quizTitle || 'Quiz'}`,
         metadata: {
           course_id: params.courseId,
           topic_id: activeTopic?.id,
           topic_title: activeTopic?.title,
-          quiz_id: quizId
+          quiz_id: quizId,
+          quiz_title: quizTitle
         }
       }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
 
@@ -870,6 +884,61 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             const legacyNotes = (activeTopic.topic_pdfs || []).filter((p: any) => p.type === 'notes');
             const allNotes: any[] = contentNotes.length > 0 ? contentNotes : legacyNotes;
 
+            // Extract all quizzes (from content_items and quizzes table)
+            const contentQuizzes = contentItems.filter((i: any) => i.type === 'quiz');
+            const rawDbQuizzes = activeTopic.quizzes || [];
+
+            let allQuizzes: any[] = [];
+            if (rawDbQuizzes.length > 0) {
+              allQuizzes = rawDbQuizzes.map((dbQ: any, qIdx: number) => {
+                const matchedCq = contentQuizzes.find((cq: any) => 
+                  (cq.id && dbQ.id && cq.id === dbQ.id) ||
+                  (cq.quizPdfUrl && dbQ.quiz_pdf_url && cq.quizPdfUrl === dbQ.quiz_pdf_url) ||
+                  (cq.quizEmbedCode && dbQ.embed_code && cq.quizEmbedCode === dbQ.embed_code) ||
+                  (cq.title && dbQ.settings?.title && cq.title === dbQ.settings?.title)
+                ) || contentQuizzes[qIdx];
+
+                const quizTitle = 
+                  dbQ.title || 
+                  dbQ.settings?.title || 
+                  matchedCq?.title || 
+                  contentQuizzes[qIdx]?.title || 
+                  (rawDbQuizzes.length > 1 ? `Quiz ${qIdx + 1}` : 'Topic Quiz');
+
+                return {
+                  ...dbQ,
+                  title: quizTitle,
+                  quiz_pdf_url: dbQ.quiz_pdf_url || matchedCq?.quizPdfUrl || matchedCq?.url,
+                  answerPdfUrl: matchedCq?.answerPdfUrl || dbQ.markscheme_pdf_url,
+                  answerVideoUrl: matchedCq?.answerVideoUrl,
+                  quizMode: matchedCq?.quizMode || (dbQ.questions_data && dbQ.questions_data.length > 0 ? 'manual' : (dbQ.embed_code ? 'canva' : 'upload_pdf'))
+                };
+              });
+            } else if (contentQuizzes.length > 0) {
+              allQuizzes = contentQuizzes.map((cq: any, qIdx: number) => ({
+                id: cq.id || `quiz_${activeTopic.id}_${qIdx}`,
+                topic_id: activeTopic.id,
+                type: 'topic',
+                title: cq.title || (contentQuizzes.length > 1 ? `Quiz ${qIdx + 1}` : 'Topic Quiz'),
+                quiz_pdf_url: cq.quizPdfUrl || cq.url,
+                markscheme_pdf_url: cq.answerPdfUrl,
+                answerPdfUrl: cq.answerPdfUrl,
+                answerVideoUrl: cq.answerVideoUrl,
+                embed_code: cq.quizEmbedCode,
+                questions_data: cq.quizQuestions,
+                total_marks: (cq.quizQuestions && cq.quizQuestions.length) || 10,
+                time_limit_minutes: parseInt(cq.quizTimeLimit) || null,
+                passing_score: parseInt(cq.quizPassingScore) || 70,
+                settings: {
+                  title: cq.title,
+                  shuffle_questions: cq.quizShuffleQuestions,
+                  shuffle_options: cq.quizShuffleOptions,
+                  embed_code: cq.quizEmbedCode
+                },
+                quiz_submissions: []
+              }));
+            }
+
             return (
             <>
               {/* TOPIC HEADER BAR */}
@@ -903,9 +972,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       }
                     }
 
-                    const hasQuiz = activeTopic.quizzes && activeTopic.quizzes.length > 0;
+                    const hasQuiz = allQuizzes.length > 0;
                     if (hasQuiz && canComplete) {
-                      const incompleteQuiz = activeTopic.quizzes.find((q: any) => !q.quiz_submissions || q.quiz_submissions.length === 0);
+                      const incompleteQuiz = allQuizzes.find((q: any) => !q.quiz_submissions || q.quiz_submissions.length === 0);
                       if (incompleteQuiz) {
                         canComplete = false;
                         lockReason = "complete all quizzes";
@@ -1245,8 +1314,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 )}
               </div>
 
-                {activeTopic.quizzes && activeTopic.quizzes.length > 0 && (
-                  <div className="bg-white rounded-3xl border border-gray-200/80 p-6 md:p-8 shadow-sm space-y-4 mb-8">
+                {allQuizzes && allQuizzes.length > 0 && (
+                  <div className="bg-white rounded-3xl border border-gray-200/80 p-6 md:p-8 shadow-sm space-y-6 mb-8">
                     <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
                       <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black text-xl shadow-md shadow-purple-600/20">
                         ✍️
@@ -1256,8 +1325,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         <p className="text-xs text-text/50">Test your understanding with instant auto-graded quizzes</p>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      {(activeTopic.quizzes || []).map((quiz: any) => {
+                    <div className="space-y-6">
+                      {allQuizzes.map((quiz: any, qIdx: number) => {
                         const rawSubmissions = Array.isArray(quiz.quiz_submissions) 
                           ? quiz.quiz_submissions 
                           : (quiz.quiz_submissions ? [quiz.quiz_submissions] : []);
@@ -1270,6 +1339,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         const actualTotalMarks = isCanvaQuiz 
                           ? (getCanvaQuizTotalMarks(rawEmbed) || (quiz.total_marks && quiz.total_marks > 1 ? quiz.total_marks : 8))
                           : (hasQuestions ? quiz.questions_data.length : (quiz.total_marks || 0));
+                        const quizTitle = quiz.title || (allQuizzes.length > 1 ? `Quiz ${qIdx + 1}` : 'Topic Quiz');
 
                         if (takingQuiz && takingQuiz.id === quiz.id) {
                           // Interactive Quiz UI
@@ -1278,7 +1348,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-4">
                                 <div className="flex justify-between items-center">
                                   <div>
-                                    <h4 className="font-bold text-lg text-text">Taking Topic Quiz</h4>
+                                    <h4 className="font-bold text-lg text-text">Taking: {quizTitle}</h4>
                                     <p className="text-sm text-text/60">{(quiz.questions_data || []).length} Questions</p>
                                   </div>
                                 </div>
@@ -1288,7 +1358,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             {/* Header */}
             <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
               <div>
-                <h2 className="text-xl font-bold text-text">{activeTopic.title}: Quiz</h2>
+                <h2 className="text-xl font-bold text-text">{activeTopic.title}: {quizTitle}</h2>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-xs text-text/60">Passing Score: {takingQuiz.passing_score || 70}%</span>
                   {timeLeft !== null && (
@@ -1486,6 +1556,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           );
                         }
 
+                        const quizManualSub = manualSubmissions[`${activeTopic.id}_pdf_quiz_${quiz.id}`] || (qIdx === 0 ? manualSubmissions[`${activeTopic.id}_pdf_quiz`] : null);
+
                         return (
                           <div key={quiz.id} className="space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1501,8 +1573,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     </span>
                                   </div>
 
-                                  <div className="text-sm font-bold text-text mb-1">{quiz.title || 'Topic Quiz'}</div>
-                                  <div className="text-xs text-text/50 mb-4">Total Marks: {actualTotalMarks}</div>
+                                  {/* Custom Quiz Title */}
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="text-base md:text-lg font-black text-text tracking-tight">
+                                      {quizTitle}
+                                    </h3>
+                                  </div>
+                                  <div className="text-xs font-semibold text-text/50 mb-4 flex items-center gap-2 flex-wrap">
+                                    <span>Total Marks: {actualTotalMarks}</span>
+                                    {quiz.time_limit_minutes && (
+                                      <span className="text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md font-bold">⏱️ {quiz.time_limit_minutes} mins</span>
+                                    )}
+                                    {quiz.passing_score && (
+                                      <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-bold">🎯 Pass: {quiz.passing_score}%</span>
+                                    )}
+                                  </div>
 
                                   {/* Download Quiz PDF button */}
                                   {quiz.quiz_pdf_url && (
@@ -1512,11 +1597,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                       rel="noreferrer" 
                                       className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-purple-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group mb-4"
                                     >
-                                      <div className="flex items-center gap-2">
-                                        <FileText className="w-4 h-4 text-purple-600" />
-                                        <span>Download Quiz Questions PDF</span>
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <FileText className="w-4 h-4 text-purple-600 shrink-0" />
+                                        <span className="truncate">Download {quizTitle} PDF</span>
                                       </div>
-                                      <span className="text-[10px] text-text/40 group-hover:text-purple-600 font-medium">Download →</span>
+                                      <span className="text-[10px] text-text/40 group-hover:text-purple-600 font-medium shrink-0">Download →</span>
                                     </a>
                                   )}
 
@@ -1527,7 +1612,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                       className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-md shadow-purple-600/20 transition-all flex items-center justify-center gap-2"
                                     >
                                       <PlayCircle className="w-4 h-4" />
-                                      {submission ? 'Retake Canva Quiz' : 'Start Interactive Quiz'}
+                                      {submission ? `Retake ${quizTitle}` : `Start ${quizTitle}`}
                                     </button>
                                   ) : hasQuestions ? (
                                     <button 
@@ -1535,7 +1620,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                       className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-md shadow-purple-600/20 transition-all flex items-center justify-center gap-2"
                                     >
                                       <PlayCircle className="w-4 h-4" />
-                                      {submission ? 'Retake Quiz' : 'Take Quiz Now'}
+                                      {submission ? `Retake ${quizTitle}` : `Take ${quizTitle} Now`}
                                     </button>
                                   ) : (
                                     /* Past Paper PDF Quiz Answer Upload */
@@ -1546,26 +1631,26 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                             <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
                                             <div className="truncate">
                                               <a href={submission.answers_data.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
-                                                View Uploaded Quiz Answers
+                                                View Uploaded {quizTitle} Answers
                                               </a>
                                               <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
                                             </div>
                                           </div>
-                                          {manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.status !== 'reviewed' && (
-                                            <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50">
+                                          {quizManualSub?.status !== 'reviewed' && (
+                                            <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50 shrink-0">
                                               {isUploadingQuiz === quiz.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
-                                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id)} disabled={isUploadingQuiz === quiz.id} />
+                                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
                                             </label>
                                           )}
                                         </div>
                                       ) : (
                                         <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-purple-400/50 transition-colors">
                                           <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
-                                          <div className="text-xs font-bold text-text">Upload Your Quiz Answer PDF</div>
+                                          <div className="text-xs font-bold text-text">Upload Your {quizTitle} Answer PDF</div>
                                           <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution to be reviewed</p>
                                           <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-all shadow-sm">
                                             <Upload className="w-3.5 h-3.5" /> Select PDF File
-                                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id)} disabled={isUploadingQuiz === quiz.id} />
+                                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
                                           </label>
                                           {isUploadingQuiz === quiz.id && <span className="text-xs text-text/50 flex items-center justify-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
                                         </div>
@@ -1599,14 +1684,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                           {hasQuestions || isCanvaQuiz ? 'Quiz Completed & Graded' : 'Answers Submitted'}
                                         </div>
                                         <p className="text-xs text-text/70 italic">
-                                          {manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.feedback_text 
+                                          {quizManualSub?.feedback_text 
                                             || (submission.score >= actualTotalMarks * 0.7 ? 'Great job! Passing score achieved.' : 'Review your solutions or retake the quiz to improve your score.')}
                                         </p>
                                       </div>
 
-                                      {manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.feedback_file_url && (
+                                      {quizManualSub?.feedback_file_url && (
                                         <a 
-                                          href={manualSubmissions[`${activeTopic.id}_pdf_quiz`].feedback_file_url} 
+                                          href={quizManualSub.feedback_file_url} 
                                           target="_blank" 
                                           rel="noreferrer"
                                           className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
@@ -1617,7 +1702,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     </div>
                                   ) : (
                                     <p className="text-xs text-text/60 italic bg-white p-3.5 rounded-xl border border-purple-100/60">
-                                      Complete and submit the quiz to see your final score, teacher feedback, and solutions.
+                                      Complete and submit {quizTitle} to see your final score, teacher feedback, and solutions.
                                     </p>
                                   )}
                                 </div>
@@ -1625,45 +1710,39 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                             </div>
 
                             {/* Model Answer / Mark Scheme (Unlocked after submission) */}
-                            {submission && (() => {
-                              const quizItem = contentItems.find((i: any) => i.type === 'quiz');
-                              const hasAnswerPdf = quizItem?.answerPdfUrl;
-                              const hasAnswerVideo = quizItem?.answerVideoUrl;
-                              if (!hasAnswerPdf && !hasAnswerVideo) return null;
-                              return (
-                                <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="text-xl">📝</span>
-                                    <div>
-                                      <div className="text-xs font-bold text-teal-950">Official Quiz Mark Scheme & Video Solution</div>
-                                      <div className="text-[10px] text-teal-700">Unlocked after quiz submission</div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                                    {hasAnswerPdf && (
-                                      <a 
-                                        href={quizItem.answerPdfUrl} 
-                                        target="_blank" 
-                                        rel="noreferrer"
-                                        className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
-                                      >
-                                        <FileText className="w-3.5 h-3.5" /> Mark Scheme PDF
-                                      </a>
-                                    )}
-                                    {hasAnswerVideo && (
-                                      <a 
-                                        href={quizItem.answerVideoUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
-                                      >
-                                        <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
-                                      </a>
-                                    )}
+                            {submission && (quiz.answerPdfUrl || quiz.answerVideoUrl) && (
+                              <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-xl">📝</span>
+                                  <div>
+                                    <div className="text-xs font-bold text-teal-950">Official Model Answers: {quizTitle}</div>
+                                    <div className="text-[10px] text-teal-700">Unlocked after quiz submission</div>
                                   </div>
                                 </div>
-                              );
-                            })()}
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                  {quiz.answerPdfUrl && (
+                                    <a 
+                                      href={quiz.answerPdfUrl} 
+                                      target="_blank" 
+                                      rel="noreferrer"
+                                      className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" /> Mark Scheme PDF
+                                    </a>
+                                  )}
+                                  {quiz.answerVideoUrl && (
+                                    <a 
+                                      href={quiz.answerVideoUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                                    >
+                                      <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1956,7 +2035,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     <PlayCircle className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-bold text-text text-base sm:text-lg truncate">{activeTopic?.title || 'Quiz'}: Quiz</h3>
+                    <h3 className="font-bold text-text text-base sm:text-lg truncate">{canvaQuizModal.title || `${activeTopic?.title || 'Quiz'}: Quiz`}</h3>
                     <p className="text-xs text-text/60 truncate">Complete the interactive questions below</p>
                   </div>
                 </div>
