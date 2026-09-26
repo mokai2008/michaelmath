@@ -14,7 +14,8 @@ import {
   X,
   ZoomIn,
   ShoppingCart,
-  Server
+  Server,
+  ExternalLink
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -1101,6 +1102,36 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     <VideoPlayer url={currentVideoUrl} />
                   </div>
                 ) : null}
+
+                {/* Attached Lesson Worksheet PDF (Optional) */}
+                {currentVideoItem?.worksheetPdfUrl && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+                    <div className="flex items-center gap-3.5 min-w-0 w-full sm:w-auto">
+                      <div className="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>Worksheet Explained in this Video</span>
+                          <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">PDF Handout</span>
+                        </div>
+                        <p className="text-xs text-gray-400 truncate mt-0.5">
+                          Questions &amp; exercises solved in this lesson
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={currentVideoItem.worksheetPdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 shrink-0"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Open Worksheet PDF</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                    </a>
+                  </div>
+                )}
 
                 {/* Integrated Video Playlist Strip */}
                 {videoItems.length > 1 && (

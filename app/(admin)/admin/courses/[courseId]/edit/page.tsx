@@ -323,6 +323,8 @@ export default function AdminCourseEditor() {
                 title: defaultTitle,
                 url: '',
                 urls: type === 'video' ? [''] : undefined,
+                worksheetPdfUrl: '',
+                hasWorksheetPdf: false,
                 quizMode: 'manual',
                 quizQuestions: [],
                 quizEmbedCode: '',
@@ -1144,6 +1146,83 @@ export default function AdminCourseEditor() {
                                       <p className="text-[11px] text-gray-500 italic">
                                         💡 Tip: Add multiple Google Drive / OneDrive links. The LMS automatically balances student traffic across these links to prevent bandwidth/quota limits.
                                       </p>
+
+                                      {/* Optional Worksheet PDF Attached to Video */}
+                                      <div className="pt-3 border-t border-gray-100">
+                                        <div className="bg-amber-50/60 p-3.5 rounded-xl border border-amber-200/80 space-y-3">
+                                          <div className="flex items-center justify-between">
+                                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                              <input
+                                                type="checkbox"
+                                                checked={Boolean(item.hasWorksheetPdf || item.worksheetPdfUrl)}
+                                                onChange={(e) => {
+                                                  const checked = e.target.checked;
+                                                  handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', checked);
+                                                  if (!checked) {
+                                                    handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', '');
+                                                  }
+                                                }}
+                                                className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-gray-300"
+                                              />
+                                              <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                                                <FileText className="w-3.5 h-3.5 text-amber-700" />
+                                                Attach Worksheet PDF Explained in this Video (Optional)
+                                              </span>
+                                            </label>
+                                            <span className="text-[10px] font-semibold text-amber-700/80 bg-amber-100/70 px-2 py-0.5 rounded-full">
+                                              Optional
+                                            </span>
+                                          </div>
+                                          
+                                          {(item.hasWorksheetPdf || item.worksheetPdfUrl) && (
+                                            <div className="space-y-2 pt-1 border-t border-amber-200/50">
+                                              <p className="text-[11px] text-amber-900/80">
+                                                Attach the PDF worksheet solved in this video so students can follow along or download it right under the player.
+                                              </p>
+                                              <div className="flex gap-2">
+                                                <input
+                                                  type="text"
+                                                  value={item.worksheetPdfUrl || ''}
+                                                  onChange={(e) => {
+                                                    handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', e.target.value);
+                                                    if (e.target.value) {
+                                                      handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', true);
+                                                    }
+                                                  }}
+                                                  className="w-full text-xs px-3 py-2 border border-amber-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                                                  placeholder="Paste Worksheet PDF link or upload ->"
+                                                />
+                                                <label className="cursor-pointer bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
+                                                  {uploadingField === `video_worksheet_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                                  <input
+                                                    type="file"
+                                                    accept="application/pdf"
+                                                    className="hidden"
+                                                    onChange={(e) => handleFileUpload(e, `video_worksheet_${item.id}`, (url) => {
+                                                      handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', url);
+                                                      handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', true);
+                                                    })}
+                                                    disabled={uploadingField === `video_worksheet_${item.id}`}
+                                                  />
+                                                </label>
+                                                {item.worksheetPdfUrl && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      handleUpdateItemField(section.id, topic.id, item.id, 'worksheetPdfUrl', '');
+                                                      handleUpdateItemField(section.id, topic.id, item.id, 'hasWorksheetPdf', false);
+                                                    }}
+                                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg shrink-0 transition-colors"
+                                                    title="Remove PDF"
+                                                  >
+                                                    <Trash2 className="w-4 h-4" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
 
