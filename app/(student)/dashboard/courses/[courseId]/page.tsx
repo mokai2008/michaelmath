@@ -850,237 +850,344 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
             return (
             <>
-              {videoItems.length > 1 && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-2">
-                  <span className="text-xs font-bold text-text/60 shrink-0 mr-1 flex items-center gap-1">
-                    <PlayCircle className="w-4 h-4 text-primary" /> Videos:
-                  </span>
-                  {videoItems.map((vid: any, idx: number) => (
-                    <button
-                      key={vid.id || idx}
-                      onClick={() => {
-                        setSelectedVideoIndex(idx);
-                        setSelectedMirrorIndex(null);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
-                        selectedVideoIndex === idx
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'bg-white text-text hover:bg-gray-100 border border-gray-200'
-                      }`}
-                    >
-                      <PlayCircle className="w-3.5 h-3.5" />
-                      {vid.title || `Video ${idx + 1}`}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Bandwidth Load Balancing / Server Mirror Selector */}
-              {activeUrls.length > 1 && (
-                <div className="flex items-center justify-between gap-3 bg-gray-900 text-white px-4 py-2.5 rounded-xl mb-4 text-xs flex-wrap border border-gray-800 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <Server className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="font-bold text-gray-200">Server Mirror:</span>
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
-                      Bandwidth Load Balanced
-                    </span>
+              {/* TOPIC HEADER BAR */}
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider mb-1">
+                    <span>{course?.title || 'Course Player'}</span>
+                    <span>•</span>
+                    <span>Topic Details</span>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {activeUrls.map((_url: string, mIdx: number) => {
-                      const isAuto = mIdx === autoAssignedIndex;
-                      const isSelected = mIdx === currentMirrorIndex;
-                      return (
-                        <button
-                          key={mIdx}
-                          onClick={() => setSelectedMirrorIndex(mIdx)}
-                          className={`px-3 py-1 rounded-lg font-bold transition-all text-xs flex items-center gap-1 ${
-                            isSelected
-                              ? 'bg-primary text-white shadow-sm ring-2 ring-primary/40'
-                              : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white border border-gray-700'
-                          }`}
-                        >
-                          Server {mIdx + 1}
-                          {isAuto && <span className="text-[10px] opacity-75">(Auto)</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <h1 className="text-2xl md:text-3xl font-black text-text tracking-tight">{activeTopic.title}</h1>
                 </div>
-              )}
-
-              {currentVideoUrl ? (
-                <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-xl mb-8 relative">
-                  <VideoPlayer url={currentVideoUrl} />
-                </div>
-              ) : null}
-
-              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-                <h1 className="text-3xl font-bold text-text mb-4">{activeTopic.title}</h1>
-                
-                <div className="flex flex-col gap-4 pt-6 border-t border-gray-100">
-                  <div className="flex flex-wrap gap-4">
-                    {pdfItems.length > 0 ? (
-                      pdfItems.map((pdf: any) => (
-                        <a 
-                          key={pdf.id}
-                          href={pdf.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-text rounded-lg font-medium transition-colors"
-                        >
-                          <FileText className="w-4 h-4" /> {pdf.title || (pdf.type === 'notes' ? 'Notes' : 'Worksheet')}
-                        </a>
-                      ))
-                    ) : (
-                      activeTopic.topic_pdfs && activeTopic.topic_pdfs.map((pdf: any) => (
-                        <a 
-                          key={pdf.id}
-                          href={pdf.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-text rounded-lg font-medium transition-colors"
-                        >
-                          <FileText className="w-4 h-4" /> View {pdf.type === 'notes' ? 'Notes' : 'Worksheet'}
-                        </a>
-                      ))
-                    )}
+                <div>
+                  {(() => {
+                    let canComplete = true;
+                    let lockReason = "";
                     
-                    {(() => {
-                      let canComplete = true;
-                      let lockReason = "";
-                      
-                      const worksheetSub = manualSubmissions[`${activeTopic.id}_worksheet`];
-                      const hasWorksheet = activeTopic.topic_pdfs?.some((pdf: any) => pdf.type === 'worksheet');
-                      if (hasWorksheet && !worksheetSub) {
+                    const worksheetSub = manualSubmissions[`${activeTopic.id}_worksheet`];
+                    const hasWorksheet = activeTopic.topic_pdfs?.some((pdf: any) => pdf.type === 'worksheet');
+                    if (hasWorksheet && !worksheetSub) {
+                      canComplete = false;
+                      lockReason = "upload worksheet answers";
+                    }
+
+                    const hasQuiz = activeTopic.quizzes && activeTopic.quizzes.length > 0;
+                    if (hasQuiz && canComplete) {
+                      const incompleteQuiz = activeTopic.quizzes.find((q: any) => !q.quiz_submissions || q.quiz_submissions.length === 0);
+                      if (incompleteQuiz) {
                         canComplete = false;
-                        lockReason = "upload worksheet answers";
+                        lockReason = "complete all quizzes";
                       }
+                    }
 
-                      const hasQuiz = activeTopic.quizzes && activeTopic.quizzes.length > 0;
-                      if (hasQuiz && canComplete) {
-                        const incompleteQuiz = activeTopic.quizzes.find((q: any) => !q.quiz_submissions || q.quiz_submissions.length === 0);
-                        if (incompleteQuiz) {
-                          canComplete = false;
-                          lockReason = "complete all quizzes";
-                        }
-                      }
+                    return (
+                      <button 
+                        onClick={() => {
+                          if (!canComplete && !progress[activeTopic.id]) {
+                            alert(`Please ${lockReason} to complete this topic.`);
+                            return;
+                          }
+                          handleMarkComplete(activeTopic.id);
+                          if (!progress[activeTopic.id] && canComplete) {
+                            moveToNextTopic();
+                          }
+                        }}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm ${progress[activeTopic.id] ? 'bg-green-100 text-green-700 hover:bg-green-200' : (!canComplete ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90')}`}
+                      >
+                        {!progress[activeTopic.id] && !canComplete ? <Lock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />} 
+                        {progress[activeTopic.id] ? 'Completed' : 'Mark Topic Complete'}
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
 
-                      return (
-                        <button 
-                          onClick={() => {
-                            if (!canComplete && !progress[activeTopic.id]) {
-                              alert(`Please ${lockReason} to complete this topic.`);
-                              return;
-                            }
-                            handleMarkComplete(activeTopic.id);
-                            if (!progress[activeTopic.id] && canComplete) {
-                              moveToNextTopic();
-                            }
-                          }}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ml-auto ${progress[activeTopic.id] ? 'bg-green-100 text-green-700 hover:bg-green-200' : (!canComplete ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90')}`}
-                        >
-                          {!progress[activeTopic.id] && !canComplete ? <Lock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />} 
-                          {progress[activeTopic.id] ? 'Completed' : 'Mark as Complete'}
-                        </button>
-                      );
-                    })()}
+              {/* SESSION & LESSON VIDEOS CONTAINER */}
+              <div className="bg-slate-950 text-white rounded-3xl p-6 md:p-8 shadow-xl border border-slate-900 mb-8 space-y-6">
+                
+                {/* Big Bolder Video Header inside Player Box */}
+                <div className="space-y-3 border-b border-slate-800/80 pb-5">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span className={`px-3 py-1 text-white text-xs font-black rounded-lg uppercase tracking-wider shadow-sm ${selectedVideoIndex === 0 ? 'bg-primary' : (selectedVideoIndex === 1 ? 'bg-blue-600' : 'bg-purple-600')}`}>
+                        {currentVideoItem?.title || (selectedVideoIndex === 0 ? '🍿 Core Concept Lesson' : (selectedVideoIndex === 1 ? '📚 Full Topic Lesson & Worked Examples' : '🎬 Step-by-Step Video Solution'))}
+                      </span>
+                    </div>
+
+                    {/* Bandwidth Load Balancing / Server Mirror Selector */}
+                    {activeUrls.length > 1 && (
+                      <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl text-xs border border-slate-800">
+                        <Server className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="font-bold text-gray-300">CDN Server Mirror:</span>
+                        <div className="flex items-center gap-1">
+                          {activeUrls.map((_url: string, mIdx: number) => {
+                            const isAuto = mIdx === autoAssignedIndex;
+                            const isSelected = mIdx === currentMirrorIndex;
+                            return (
+                              <button
+                                key={mIdx}
+                                onClick={() => setSelectedMirrorIndex(mIdx)}
+                                className={`px-2.5 py-0.5 rounded-md font-bold transition-all text-[11px] ${
+                                  isSelected
+                                    ? 'bg-primary text-white shadow-sm'
+                                    : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                }`}
+                              >
+                                Server {mIdx + 1}
+                                {isAuto && <span className="text-[9px] opacity-75 ml-0.5">(Auto)</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {activeTopic.topic_pdfs && activeTopic.topic_pdfs.some((pdf: any) => pdf.type === 'worksheet') && (
-                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 mt-2">
-                      <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div>
-                          <h4 className="font-bold text-sm text-text">Worksheet Answers</h4>
-                          <p className="text-xs text-text/60">Upload your answers as a PDF to complete this topic.</p>
-                        </div>
-                        {manualSubmissions[`${activeTopic.id}_worksheet`] ? (
-                          <div className="flex items-center gap-3">
-                            <div className="flex flex-col items-end">
-                              <a href={manualSubmissions[`${activeTopic.id}_worksheet`].file_url} target="_blank" rel="noreferrer" className="text-primary hover:underline text-sm font-medium flex items-center gap-1">
-                                <FileText className="w-4 h-4"/> View Submitted
-                              </a>
-                              <span className={`text-[10px] font-bold uppercase mt-1 ${manualSubmissions[`${activeTopic.id}_worksheet`].status === 'reviewed' ? 'text-green-600' : 'text-orange-500'}`}>
-                                {manualSubmissions[`${activeTopic.id}_worksheet`].status === 'reviewed' ? 'Reviewed' : 'Pending Review'}
-                              </span>
+                  {/* BIG VIDEO TITLE */}
+                  <h2 className="text-2xl md:text-3xl font-black tracking-tight text-white leading-tight">
+                    {currentVideoItem?.title || (selectedVideoIndex === 0 ? `1. Core Concept Lesson: ${activeTopic.title}` : `2. Full Topic Lesson & Worked Examples: ${activeTopic.title}`)}
+                  </h2>
+                </div>
+
+                {currentVideoUrl ? (
+                  <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative">
+                    <VideoPlayer url={currentVideoUrl} />
+                  </div>
+                ) : null}
+
+                {/* Integrated Video Playlist Strip */}
+                {videoItems.length > 1 && (
+                  <div className="pt-3 border-t border-slate-800/80">
+                    <div className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <PlayCircle className="w-4 h-4 text-primary" />
+                      Topic Lesson Videos ({videoItems.length})
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {videoItems.map((vid: any, idx: number) => {
+                        const isSelected = selectedVideoIndex === idx;
+                        const defaultLabel = idx === 0 ? '1. Core Concept Lesson' : (idx === 1 ? '2. Full Topic Lesson & Worked Examples' : `3. Video Solution Breakdown ${idx + 1}`);
+                        const displayLabel = vid.title || defaultLabel;
+                        return (
+                          <button
+                            key={vid.id || idx}
+                            onClick={() => {
+                              setSelectedVideoIndex(idx);
+                              setSelectedMirrorIndex(null);
+                            }}
+                            className={`p-4 rounded-2xl text-left transition-all flex items-center gap-3.5 ${
+                              isSelected
+                                ? 'bg-slate-900 border-2 border-primary shadow-md'
+                                : 'bg-slate-900/60 border border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-lg shrink-0 ${isSelected ? 'bg-primary/20 text-primary' : 'bg-slate-800 text-gray-400'}`}>
+                              {idx === 0 ? '🍿' : (idx === 1 ? '📚' : '🎬')}
                             </div>
-                            {manualSubmissions[`${activeTopic.id}_worksheet`].status !== 'reviewed' && (
-                              <label className="cursor-pointer px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg text-xs font-bold transition-colors shadow-sm">
-                                Update File
-                                <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id)} />
-                              </label>
-                            )}
-                          </div>
+                            <div className="min-w-0 flex-1">
+                              <div className={`text-sm font-extrabold truncate ${isSelected ? 'text-white' : 'text-gray-300'}`}>
+                                {displayLabel}
+                              </div>
+                              <div className="text-xs text-gray-400 flex items-center gap-2 mt-0.5">
+                                <span className={isSelected ? 'text-primary font-bold' : 'text-gray-400'}>
+                                  {isSelected ? 'Currently Watching' : 'Click to Play'}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* HOMEWORK PLACE CONTAINER */}
+              <div className="bg-white rounded-3xl border border-gray-200/80 p-6 md:p-8 shadow-sm space-y-6 mb-8">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-4 flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-black text-xl shadow-md shadow-orange-500/20">
+                      📄
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-text">Homework Place</h2>
+                      <p className="text-xs text-text/60">Worksheet PDF download, student submission, & teacher score/feedback</p>
+                    </div>
+                  </div>
+                  {manualSubmissions[`${activeTopic.id}_worksheet`] && (
+                    <span className={`px-3 py-1 font-bold text-xs rounded-full ${manualSubmissions[`${activeTopic.id}_worksheet`].status === 'reviewed' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
+                      {manualSubmissions[`${activeTopic.id}_worksheet`].status === 'reviewed' ? `Graded ${manualSubmissions[`${activeTopic.id}_worksheet`].score !== null ? `(${manualSubmissions[`${activeTopic.id}_worksheet`].score})` : ''}` : 'Pending Review'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Box 1: Worksheet PDF Download & Upload */}
+                  <div className="bg-gray-50/80 border border-gray-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-extrabold text-text/40 uppercase tracking-wider mb-3">Step 1 & 2: Worksheet & Submission</div>
+                      
+                      {/* Download Worksheet Button */}
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {pdfItems.length > 0 ? (
+                          pdfItems.map((pdf: any) => (
+                            <a 
+                              key={pdf.id}
+                              href={pdf.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group"
+                            >
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-orange-500" />
+                                <span>Download {pdf.title || (pdf.type === 'notes' ? 'Notes PDF' : 'Worksheet PDF')}</span>
+                              </div>
+                              <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium">Download →</span>
+                            </a>
+                          ))
                         ) : (
-                          <div className="flex items-center gap-3">
-                            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm">
-                              <Upload className="w-4 h-4" /> Upload PDF
-                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id)} disabled={isUploadingWorksheet} />
-                            </label>
-                            {isUploadingWorksheet && <span className="text-xs text-text/50 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
-                          </div>
+                          activeTopic.topic_pdfs && activeTopic.topic_pdfs.map((pdf: any) => (
+                            <a 
+                              key={pdf.id}
+                              href={pdf.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group"
+                            >
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-orange-500" />
+                                <span>View {pdf.type === 'notes' ? 'Notes PDF' : 'Worksheet PDF'}</span>
+                              </div>
+                              <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium">Download →</span>
+                            </a>
+                          ))
                         )}
                       </div>
-                      
-                      {manualSubmissions[`${activeTopic.id}_worksheet`]?.status === 'reviewed' && (
-                        <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-100">
-                          <h5 className="text-xs font-bold text-green-800 uppercase tracking-wider mb-2">Admin Feedback</h5>
-                          {manualSubmissions[`${activeTopic.id}_worksheet`].score !== null && (
-                            <div className="mb-2 font-bold text-text">Score: <span className="text-primary">{manualSubmissions[`${activeTopic.id}_worksheet`].score}</span></div>
+
+                      {/* Upload Status Card */}
+                      {manualSubmissions[`${activeTopic.id}_worksheet`] ? (
+                        <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
+                            <div className="truncate">
+                              <a href={manualSubmissions[`${activeTopic.id}_worksheet`].file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
+                                View Uploaded Homework PDF
+                              </a>
+                              <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
+                            </div>
+                          </div>
+                          {manualSubmissions[`${activeTopic.id}_worksheet`].status !== 'reviewed' && (
+                            <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50">
+                              Update
+                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id)} />
+                            </label>
                           )}
-                          <p className="text-sm text-text/80 mb-3">{manualSubmissions[`${activeTopic.id}_worksheet`].feedback_text || 'No written feedback provided.'}</p>
+                        </div>
+                      ) : (
+                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-primary/50 transition-colors">
+                          <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
+                          <div className="text-xs font-bold text-text">Upload Your Answer PDF</div>
+                          <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution to complete this topic</p>
+                          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary/90 transition-all shadow-sm">
+                            <Upload className="w-3.5 h-3.5" /> Select PDF File
+                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id)} disabled={isUploadingWorksheet} />
+                          </label>
+                          {isUploadingWorksheet && <span className="text-xs text-text/50 flex items-center justify-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Box 2: Teacher Grading Feedback */}
+                  <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">Step 3: Teacher Review</span>
+                        {manualSubmissions[`${activeTopic.id}_worksheet`]?.score !== undefined && manualSubmissions[`${activeTopic.id}_worksheet`]?.score !== null && (
+                          <span className="text-xs font-black text-primary bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                            Score: {manualSubmissions[`${activeTopic.id}_worksheet`].score}
+                          </span>
+                        )}
+                      </div>
+                      {manualSubmissions[`${activeTopic.id}_worksheet`]?.status === 'reviewed' ? (
+                        <div className="space-y-3">
+                          <p className="text-xs text-gray-700 bg-white p-3 rounded-xl border border-emerald-100 italic">
+                            "{manualSubmissions[`${activeTopic.id}_worksheet`].feedback_text || 'No written feedback provided.'}"
+                          </p>
                           {manualSubmissions[`${activeTopic.id}_worksheet`].feedback_file_url && (
                             <a 
                               href={manualSubmissions[`${activeTopic.id}_worksheet`].feedback_file_url} 
                               target="_blank" 
                               rel="noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-green-200 text-green-700 rounded-lg text-sm font-bold hover:bg-green-50 transition-colors shadow-sm"
+                              className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
                             >
-                              <FileText className="w-4 h-4" /> Download Reviewed File
+                              <FileText className="w-4 h-4" /> Download Corrected PDF File
                             </a>
                           )}
                         </div>
+                      ) : (
+                        <p className="text-xs text-text/60 italic bg-white p-3 rounded-xl border border-emerald-100/60">
+                          {manualSubmissions[`${activeTopic.id}_worksheet`] ? 'Your submission is being reviewed by Michael Gad. Feedback and scores will appear here.' : 'Submit your worksheet PDF to receive personalized teacher feedback.'}
+                        </p>
                       )}
-
-                      {/* Model Answer - shown only after student submits worksheet */}
-                      {manualSubmissions[`${activeTopic.id}_worksheet`] && (() => {
-                        const worksheetItem = contentItems.find((i: any) => i.type === 'worksheet');
-                        const hasAnswerPdf = worksheetItem?.answerPdfUrl;
-                        const hasAnswerVideo = worksheetItem?.answerVideoUrl;
-                        if (!hasAnswerPdf && !hasAnswerVideo) return null;
-                        return (
-                          <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-200 space-y-4">
-                            <h5 className="text-xs font-bold text-teal-900 uppercase tracking-wider flex items-center gap-2">
-                              📝 Model Answer
-                            </h5>
-                            {hasAnswerPdf && (
-                              <a 
-                                href={worksheetItem.answerPdfUrl} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-teal-200 text-teal-700 rounded-lg text-sm font-bold hover:bg-teal-50 transition-colors shadow-sm"
-                              >
-                                <FileText className="w-4 h-4" /> View Answer Sheet
-                              </a>
-                            )}
-                            {hasAnswerVideo && (
-                              <div className="space-y-2">
-                                <label className="block text-xs font-bold text-teal-800/70">Answer Video Explanation</label>
-                                <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
-                                  <VideoPlayer url={worksheetItem.answerVideoUrl} />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
                     </div>
-                  )}
+                  </div>
                 </div>
 
+                {/* Model Answer Section (Unlocked after submission) */}
+                {manualSubmissions[`${activeTopic.id}_worksheet`] && (() => {
+                  const worksheetItem = contentItems.find((i: any) => i.type === 'worksheet');
+                  const hasAnswerPdf = worksheetItem?.answerPdfUrl;
+                  const hasAnswerVideo = worksheetItem?.answerVideoUrl;
+                  if (!hasAnswerPdf && !hasAnswerVideo) return null;
+                  return (
+                    <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xl">📝</span>
+                        <div>
+                          <div className="text-xs font-bold text-teal-950">Official Model Answers & Video Solution</div>
+                          <div className="text-[10px] text-teal-700">Unlocked after homework submission</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        {hasAnswerPdf && (
+                          <a 
+                            href={worksheetItem.answerPdfUrl} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> Answer Sheet PDF
+                          </a>
+                        )}
+                        {hasAnswerVideo && (
+                          <a 
+                            href={worksheetItem.answerVideoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                          >
+                            <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
                 {activeTopic.quizzes && activeTopic.quizzes.length > 0 && (
-                  <div className="mt-8 pt-8 border-t border-gray-100">
-                    <h3 className="font-bold text-lg text-text mb-1">Quizzes</h3>
-                    <p className="text-sm text-text/50 mb-4">Quizzes created by your instructor</p>
+                  <div className="bg-white rounded-3xl border border-gray-200/80 p-6 md:p-8 shadow-sm space-y-4 mb-8">
+                    <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black text-xl shadow-md shadow-purple-600/20">
+                        ✍️
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-text">Topic Quiz Hub</h2>
+                        <p className="text-xs text-text/50">Test your understanding with instant auto-graded quizzes</p>
+                      </div>
+                    </div>
                     <div className="space-y-4">
                       {(activeTopic.quizzes || []).map((quiz: any) => {
                         const rawSubmissions = Array.isArray(quiz.quiz_submissions) 
@@ -1442,7 +1549,6 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     </div>
                   </div>
                 )}
-              </div>
             </>
             );
           })() : (
