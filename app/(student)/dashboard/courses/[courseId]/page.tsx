@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   PlayCircle, 
   FileText, 
@@ -20,6 +20,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
 import VideoPlayer from "@/components/VideoPlayer";
+import { calculateCourseProgress } from "@/lib/progress";
 
 function getCanvaQuizTotalMarks(rawCode?: string): number {
   if (!rawCode) return 0;
@@ -61,6 +62,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [buyingSection, setBuyingSection] = useState<string | null>(null);
   const [canvaQuizModal, setCanvaQuizModal] = useState<any>(null);
   const [canvaLiveScores, setCanvaLiveScores] = useState<Record<string, { score: number; total: number }>>({});
+
+  const courseProgressStats = useMemo(() => {
+    const allTopics = (course?.sections || []).flatMap((s: any) => s.topics || []);
+    const completedIds = Object.keys(progress).filter(id => progress[id]);
+    return calculateCourseProgress(allTopics, completedIds);
+  }, [course, progress]);
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
@@ -694,6 +701,30 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
         {sidebarOpen && (
           <div className="flex-1 overflow-y-auto">
+            {/* Overall Course Progress Card */}
+            <div className="p-4 bg-slate-50 border-b border-gray-100">
+              <div className="flex items-center justify-between text-xs font-bold text-text/70 mb-1.5">
+                <span>Course Progress</span>
+                <span className={courseProgressStats.progressPercentage === 100 ? 'text-green-600 font-black' : 'text-primary font-black'}>
+                  {courseProgressStats.progressPercentage}%
+                </span>
+              </div>
+              <div className="w-full bg-gray-200/80 rounded-full h-2 overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 rounded-full ${courseProgressStats.progressPercentage === 100 ? 'bg-green-500' : 'bg-primary'}`}
+                  style={{ width: `${courseProgressStats.progressPercentage}%` }}
+                />
+              </div>
+              <div className="text-[11px] text-text/50 mt-1.5 flex justify-between items-center">
+                <span>{courseProgressStats.completedCount} of {courseProgressStats.totalCount} lessons completed</span>
+                {courseProgressStats.progressPercentage === 100 && (
+                  <span className="text-green-600 font-bold flex items-center gap-0.5">
+                    <CheckCircle2 className="w-3 h-3" /> Complete
+                  </span>
+                )}
+              </div>
+            </div>
+
             {(course.sections || []).map((section: any, sIdx: number) => {
               const isFreeSection = sIdx === 0;
               const isSectionUnlocked = isFreeSection || purchasedSections[section.id] || (section.price || 0) === 0;
@@ -740,7 +771,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               <PlayCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${isActive ? 'text-primary' : 'text-gray-400'}`} />
                             )}
                             <div className="flex-1 min-w-0">
-                              <div className={`text-sm font-medium ${!isSectionUnlocked ? 'text-text/40' : isActive ? 'text-primary' : 'text-text'} truncate`}>{topic.title}</div>
+                              <div className="flex items-center justify-between gap-1">
+                                <div className={`text-sm font-medium ${!isSectionUnlocked ? 'text-text/40' : isActive ? 'text-primary' : 'text-text'} truncate`}>{topic.title}</div>
+                                {Number(topic.progress_percentage) > 0 && (
+                                  <span className="text-[10px] font-bold text-text/50 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+                                    {topic.progress_percentage}%
+                                  </span>
+                                )}
+                              </div>
                               {progress[topic.id] && <div className="text-xs text-green-600 mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Completed</div>}
                             </div>
                           </div>
@@ -996,7 +1034,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm ${progress[activeTopic.id] ? 'bg-green-100 text-green-700 hover:bg-green-200' : (!canComplete ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90')}`}
                       >
                         {!progress[activeTopic.id] && !canComplete ? <Lock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />} 
-                        {progress[activeTopic.id] ? 'Completed' : 'Mark Topic Complete'}
+                        {progress[activeTopic.id] ? 'Completed' : `Mark Topic Complete ${Number(activeTopic.progress_percentage) > 0 ? `(+${activeTopic.progress_percentage}%)` : ''}`}
                       </button>
                     );
                   })()}

@@ -52,12 +52,20 @@ export default function ProfilePage() {
 
       // Fetch student data for PDF report
       try {
-        const [{ data: enrollments }, { data: tp }, { data: ms }, { data: qs }] = await Promise.all([
-          supabase.from("enrollments").select("*, courses(id, title, sections(id, title, topics(id, title)))").eq("student_id", userId),
+        let [{ data: enrollments, error: enrErr }, { data: tp }, { data: ms }, { data: qs }] = await Promise.all([
+          supabase.from("enrollments").select("*, courses(id, title, sections(id, title, topics(id, title, progress_percentage)))").eq("student_id", userId),
           supabase.from("topic_progress").select("*, topics(id, title)").eq("student_id", userId),
           supabase.from("manual_submissions").select("*, topics(id, title)").eq("student_id", userId),
           supabase.from("quiz_submissions").select("*, quizzes(id, title, total_marks, topics(id, title))").eq("student_id", userId),
         ]);
+
+        if (enrErr && enrErr.message?.includes("progress_percentage")) {
+          const fallback = await supabase
+            .from("enrollments")
+            .select("*, courses(id, title, sections(id, title, topics(id, title)))")
+            .eq("student_id", userId);
+          enrollments = fallback.data;
+        }
 
         setFullStudentData({
           ...profileData,

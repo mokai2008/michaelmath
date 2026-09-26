@@ -4,11 +4,12 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, 
-  Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Eye, Server 
+  Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Eye, Server, Percent 
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import MathText from "@/components/MathText";
+import { distributeEqualPercentages } from "@/lib/progress";
 
 export default function AdminCourseEditor() {
   const { courseId } = useParams();
@@ -173,6 +174,7 @@ export default function AdminCourseEditor() {
             return {
               id: topic.id,
               title: topic.title,
+              progress_percentage: topic.progress_percentage !== undefined && topic.progress_percentage !== null ? topic.progress_percentage : '',
               isExpanded: false,
               items
             };
@@ -234,9 +236,23 @@ export default function AdminCourseEditor() {
           topics: [...section.topics, { 
             id: newTopicId, 
             title: `Lesson ${newTopicId}: New Lesson`,
+            progress_percentage: 0,
             isExpanded: true,
             items: []
           }]
+        };
+      }
+      return section;
+    }));
+  };
+
+  const handleDeleteTopic = (sectionId: string | number, topicId: string | number) => {
+    if (!confirm("Are you sure you want to delete this lesson?")) return;
+    setSections(sections.map(section => {
+      if (section.id === sectionId) {
+        return {
+          ...section,
+          topics: section.topics.filter((t: any) => t.id !== topicId)
         };
       }
       return section;
@@ -256,6 +272,27 @@ export default function AdminCourseEditor() {
       ...s,
       topics: s.topics.map((t: any) => t.id === topicId ? { ...t, title } : t)
     } : s));
+  };
+
+  const updateTopicProgressPercentage = (sectionId: string | number, topicId: string | number, progress_percentage: number | string) => {
+    setSections(sections.map(s => s.id === sectionId ? {
+      ...s,
+      topics: s.topics.map((t: any) => t.id === topicId ? { ...t, progress_percentage } : t)
+    } : s));
+  };
+
+  const handleAutoDistributeProgress = () => {
+    const allTopics = sections.flatMap(s => s.topics || []);
+    if (allTopics.length === 0) return;
+    const percentages = distributeEqualPercentages(allTopics.length);
+    let index = 0;
+    setSections(sections.map(section => ({
+      ...section,
+      topics: (section.topics || []).map((topic: any) => ({
+        ...topic,
+        progress_percentage: percentages[index++]
+      }))
+    })));
   };
 
   const toggleTopicExpand = (sectionId: string | number, topicId: string | number) => {
@@ -600,22 +637,25 @@ export default function AdminCourseEditor() {
             title: topic.title,
             order_index: tIdx,
             youtube_url: firstVideo?.url || '',
-            content_items: items
+            content_items: items,
+            progress_percentage: parseFloat(String(topic.progress_percentage || 0)) || 0
           };
           
           let dbTopicId = topic.id;
           if (typeof topic.id === 'string') {
              // Update existing
              let { error: tErr } = await supabase.from('topics').update(topicPayload).eq('id', topic.id);
-             if (tErr && tErr.message?.includes('content_items')) {
-               delete topicPayload.content_items;
+             if (tErr && (tErr.message?.includes('content_items') || tErr.message?.includes('progress_percentage'))) {
+               if (tErr.message?.includes('content_items')) delete topicPayload.content_items;
+               if (tErr.message?.includes('progress_percentage')) delete topicPayload.progress_percentage;
                await supabase.from('topics').update(topicPayload).eq('id', topic.id);
              }
           } else {
              // Insert new
              let { data, error: tErr } = await supabase.from('topics').insert(topicPayload).select().single();
-             if (tErr && tErr.message?.includes('content_items')) {
-               delete topicPayload.content_items;
+             if (tErr && (tErr.message?.includes('content_items') || tErr.message?.includes('progress_percentage'))) {
+               if (tErr.message?.includes('content_items')) delete topicPayload.content_items;
+               if (tErr.message?.includes('progress_percentage')) delete topicPayload.progress_percentage;
                const retry = await supabase.from('topics').insert(topicPayload).select().single();
                data = retry.data;
              }
@@ -681,6 +721,10 @@ export default function AdminCourseEditor() {
       setIsSaving(false);
     }
   };
+
+  const allCourseTopics = sections.flatMap(s => s.topics || []);
+  const totalAllocatedPercentage = allCourseTopics.reduce((acc, t) => acc + (parseFloat(String(t.progress_percentage || 0)) || 0), 0);
+  const roundedAllocated = Math.round(totalAllocatedPercentage * 10) / 10;
 
   if (isLoading) {
     return (
@@ -792,6 +836,54 @@ export default function AdminCourseEditor() {
 
       {step === 2 && (
         <div className="space-y-4">
+          {/* Progress Weighting Allocation Bar */}
+          <div className="bg-white border border-gray-200/80 rounded-2xl p-4 sm:p-5 shadow-xs mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text/70 flex items-center gap-1.5">
+                    <Percent className="w-3.5 h-3.5 text-primary" /> Overall Course Progress Weighting
+                  </span>
+                  <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
+                    roundedAllocated === 100 
+                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' 
+                      : roundedAllocated > 100 
+                        ? 'bg-red-100 text-red-700 border border-red-300'
+                        : 'bg-amber-100 text-amber-700 border border-amber-300'
+                  }`}>
+                    {roundedAllocated}% / 100% {roundedAllocated === 100 ? '✓ Ready' : roundedAllocated > 100 ? '⚠️ Exceeds 100%' : `(${Math.round((100 - roundedAllocated) * 10) / 10}% remaining)`}
+                  </span>
+                </div>
+                <p className="text-xs text-text/50">
+                  Determine each lesson's percentage contribution to the overall course. When a student completes a lesson, their progress increases by that amount.
+                </p>
+                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 rounded-full ${
+                      roundedAllocated === 100 
+                        ? 'bg-emerald-500' 
+                        : roundedAllocated > 100 
+                          ? 'bg-red-500' 
+                          : 'bg-primary'
+                    }`}
+                    style={{ width: `${Math.min(100, roundedAllocated)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleAutoDistributeProgress}
+                  className="text-xs font-bold text-primary hover:text-primary/90 bg-primary/10 hover:bg-primary/20 px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs border border-primary/20"
+                  title="Evenly distribute 100% across all lessons in the course"
+                >
+                  <Percent className="w-3.5 h-3.5" /> Auto-Distribute 100%
+                </button>
+              </div>
+            </div>
+          </div>
+
           {sections.map(section => (
             <div key={section.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -820,8 +912,8 @@ export default function AdminCourseEditor() {
                 {section.topics.map((topic: any) => (
                   <div key={topic.id} className="bg-gray-50/80 border border-gray-200 rounded-xl overflow-hidden transition-all shadow-xs">
                     {/* Lesson Header */}
-                    <div className="flex items-center justify-between p-3.5 bg-white border-b border-gray-100">
-                      <div className="flex items-center gap-3 w-full max-w-xl">
+                    <div className="flex items-center justify-between p-3.5 bg-white border-b border-gray-100 gap-3 flex-wrap sm:flex-nowrap">
+                      <div className="flex items-center gap-3 flex-1 min-w-[200px]">
                         <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0 cursor-move" />
                         <div className="w-full">
                           <label className="text-[10px] uppercase font-bold text-primary block mb-0.5">Lesson Title</label>
@@ -834,7 +926,23 @@ export default function AdminCourseEditor() {
                           />
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Course Progress Weight Input */}
+                        <div className="flex items-center bg-slate-100 hover:bg-slate-200/80 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary border border-gray-200 rounded-lg px-2.5 py-1 transition-all" title="Percentage of total course progress this lesson contributes">
+                          <span className="text-[11px] font-bold text-text/60 mr-1.5">Weight:</span>
+                          <input 
+                            type="number" 
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={topic.progress_percentage !== undefined && topic.progress_percentage !== null ? topic.progress_percentage : ''}
+                            onChange={(e) => updateTopicProgressPercentage(section.id, topic.id, e.target.value)}
+                            placeholder="0"
+                            className="w-11 text-center text-xs font-black text-primary bg-transparent outline-none"
+                          />
+                          <span className="text-xs font-black text-text/50">%</span>
+                        </div>
+
                         <span className="text-xs font-semibold text-text/50 bg-gray-100 px-2.5 py-1 rounded-full border border-gray-200">
                           {topic.items?.length || 0} Content {topic.items?.length === 1 ? 'Item' : 'Items'}
                         </span>
@@ -843,6 +951,14 @@ export default function AdminCourseEditor() {
                           className="p-1.5 text-gray-500 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
                         >
                           <Settings className="w-4 h-4" /> {topic.isExpanded ? 'Collapse' : 'Edit Content'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTopic(section.id, topic.id)}
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete Lesson"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>

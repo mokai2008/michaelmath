@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { DownloadReportButton } from "@/components/reports/DownloadReportButton";
 import { ReportPreviewModal } from "@/components/reports/ReportPreviewModal";
+import { calculateCourseProgress } from "@/lib/progress";
 
 function formatTime(seconds: number): string {
   if (!seconds || seconds <= 0) return "0m";
@@ -52,20 +53,12 @@ function generateWhatsAppReport(student: any): string {
     student.enrollments.forEach((e: any) => {
       const course = e.courses;
       if (course) {
-        let totalTopicsInCourse = 0;
-        course.sections?.forEach((sec: any) => {
-          totalTopicsInCourse += sec.topics?.length || 0;
-        });
-
-        const completedTopics = student.topic_progress?.filter((tp: any) => {
-          if (!tp.is_completed) return false;
-          return course.sections?.some((sec: any) => 
-            sec.topics?.some((top: any) => top.id === tp.topic_id)
-          );
-        })?.length || 0;
-
-        const pct = totalTopicsInCourse > 0 ? Math.round((completedTopics / totalTopicsInCourse) * 100) : 0;
-        text += `• *${course.title}*: ${pct}% completed (${completedTopics}/${totalTopicsInCourse} lessons)\n`;
+        const courseTopics = course.sections?.flatMap((sec: any) => sec.topics || []) || [];
+        const completedIds = (student.topic_progress || [])
+          .filter((tp: any) => tp.is_completed)
+          .map((tp: any) => tp.topic_id);
+        const { progressPercentage, completedCount, totalCount } = calculateCourseProgress(courseTopics, completedIds);
+        text += `• *${course.title}*: ${progressPercentage}% completed (${completedCount}/${totalCount} lessons)\n`;
       }
     });
   } else {
@@ -209,10 +202,18 @@ export default function AdminStudentsPage() {
       const courseIds = student.enrollments?.map((e: any) => e.courses?.id || e.course_id).filter(Boolean) || [];
       let detailedEnrollments = student.enrollments || [];
       if (courseIds.length > 0) {
-        const { data: coursesData } = await supabase
+        let { data: coursesData, error: cErr } = await supabase
           .from("courses")
-          .select("id, title, total_price, sections(id, title, topics(id, title))")
+          .select("id, title, total_price, sections(id, title, topics(id, title, progress_percentage))")
           .in("id", courseIds);
+
+        if (cErr && cErr.message?.includes('progress_percentage')) {
+          const fallback = await supabase
+            .from("courses")
+            .select("id, title, total_price, sections(id, title, topics(id, title))")
+            .in("id", courseIds);
+          coursesData = fallback.data;
+        }
 
         if (coursesData) {
           detailedEnrollments = student.enrollments.map((enr: any) => {
@@ -606,34 +607,28 @@ export default function AdminStudentsPage() {
                           const course = enr.courses;
                           if (!course) return null;
 
-                          let totalTopics = 0;
-                          course.sections?.forEach((s: any) => totalTopics += s.topics?.length || 0);
-
-                          const completedTopics = selectedStudent.topic_progress?.filter((tp: any) => {
-                            if (!tp.is_completed) return false;
-                            return course.sections?.some((sec: any) => 
-                              sec.topics?.some((top: any) => top.id === tp.topic_id)
-                            );
-                          })?.length || 0;
-
-                          const pct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
+                          const courseTopics = course.sections?.flatMap((s: any) => s.topics || []) || [];
+                          const completedIds = (selectedStudent.topic_progress || [])
+                            .filter((tp: any) => tp.is_completed)
+                            .map((tp: any) => tp.topic_id);
+                          const { progressPercentage, completedCount, totalCount } = calculateCourseProgress(courseTopics, completedIds);
 
                           return (
                             <div key={enr.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs">
                               <div className="flex items-center justify-between gap-4 mb-3">
                                 <h4 className="font-bold text-text text-base">{course.title}</h4>
                                 <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">
-                                  {pct}% Completed
+                                  {progressPercentage}% Completed
                                 </span>
                               </div>
                               
                               {/* Progress Bar */}
                               <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden mb-3">
-                                <div className="bg-primary h-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                                <div className="bg-primary h-full transition-all duration-500" style={{ width: `${progressPercentage}%` }} />
                               </div>
 
                               <div className="flex items-center justify-between text-xs text-text/60">
-                                <span>{completedTopics} of {totalTopics} lessons completed</span>
+                                <span>{completedCount} of {totalCount} lessons completed</span>
                                 <span>Enrolled: {new Date(enr.created_at || selectedStudent.created_at).toLocaleDateString("en-GB")}</span>
                               </div>
                             </div>

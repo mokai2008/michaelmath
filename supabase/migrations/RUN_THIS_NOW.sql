@@ -230,7 +230,7 @@ CREATE POLICY "Allow admin update on contact_messages"
 DROP POLICY IF EXISTS "Allow admin delete on contact_messages" ON public.contact_messages;
 CREATE POLICY "Allow admin delete on contact_messages"
     ON public.contact_messages FOR DELETE USING (public.is_admin());
-
-
-
+-- 9. Add progress_percentage column to topics table
+ALTER TABLE public.topics 
+ADD COLUMN IF NOT EXISTS progress_percentage numeric DEFAULT 0;
 

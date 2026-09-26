@@ -1,5 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { calculateCourseProgress } from '@/lib/progress';
 
 interface StudentReportProps {
   student: {
@@ -409,19 +410,11 @@ export const StudentReportPDF: React.FC<StudentReportProps> = ({
             enrollments.map((enr, i) => {
               const course = enr.courses;
               if (!course) return null;
-              let totalTopics = 0;
-              course.sections?.forEach((sec: any) => {
-                totalTopics += sec.topics?.length || 0;
-              });
-
-              const completedCount = (student.topic_progress || []).filter((tp) => {
-                if (!tp.is_completed) return false;
-                return course.sections?.some((sec: any) =>
-                  sec.topics?.some((top: any) => top.id === tp.topic_id)
-                );
-              }).length;
-
-              const pct = totalTopics > 0 ? Math.round((completedCount / totalTopics) * 100) : 0;
+              const courseTopics = course.sections?.flatMap((sec: any) => sec.topics || []) || [];
+              const completedIds = (student.topic_progress || [])
+                .filter((tp) => tp.is_completed)
+                .map((tp) => tp.topic_id);
+              const { progressPercentage: pct, completedCount, totalCount: totalTopics } = calculateCourseProgress(courseTopics, completedIds);
 
               return (
                 <View

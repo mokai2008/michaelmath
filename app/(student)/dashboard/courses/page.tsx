@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { BookOpen, PlayCircle, Award, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { calculateCourseProgress } from "@/lib/progress";
 
 export default function MyCoursesPage() {
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
@@ -57,20 +58,30 @@ export default function MyCoursesPage() {
 
       let topicsData: any[] = [];
       if (sectionIds.length > 0) {
-        const { data: tData } = await supabase
+        const { data: tData, error: tErr } = await supabase
           .from('topics')
-          .select('id, section_id')
+          .select('id, section_id, progress_percentage')
           .in('section_id', sectionIds);
-        topicsData = tData || [];
+        
+        if (tErr && tErr.message?.includes('progress_percentage')) {
+          const fallback = await supabase
+            .from('topics')
+            .select('id, section_id')
+            .in('section_id', sectionIds);
+          topicsData = fallback.data || [];
+        } else {
+          topicsData = tData || [];
+        }
       }
 
       const sectionToCourseMap = new Map((sectionsData || []).map((s: any) => [s.id, s.course_id]));
 
-      const courseTopicCounts: Record<string, number> = {};
+      const courseTopicsMap: Record<string, any[]> = {};
       topicsData.forEach((t: any) => {
         const cId = sectionToCourseMap.get(t.section_id);
         if (cId) {
-          courseTopicCounts[cId] = (courseTopicCounts[cId] || 0) + 1;
+          if (!courseTopicsMap[cId]) courseTopicsMap[cId] = [];
+          courseTopicsMap[cId].push(t);
         }
       });
 
@@ -83,25 +94,16 @@ export default function MyCoursesPage() {
 
       const compSet = new Set(compData?.map(d => d.topic_id) || []);
 
-      const courseCompletedCounts: Record<string, number> = {};
-      topicsData.forEach((t: any) => {
-        const cId = sectionToCourseMap.get(t.section_id);
-        if (cId && compSet.has(t.id)) {
-          courseCompletedCounts[cId] = (courseCompletedCounts[cId] || 0) + 1;
-        }
-      });
-
       const finalEnrolledCourses = enrollments
         .map((e: any) => {
           const c = coursesMap.get(e.course_id);
           if (!c) return null;
-          const total = courseTopicCounts[c.id] || 0;
-          const comp = courseCompletedCounts[c.id] || 0;
-          const progress = total > 0 ? Math.round((comp / total) * 100) : 0;
+          const courseTopics = courseTopicsMap[c.id] || [];
+          const { progressPercentage } = calculateCourseProgress(courseTopics, compSet);
           return {
             ...c,
             enrolled_at: e.enrolled_at,
-            progress
+            progress: progressPercentage
           };
         })
         .filter(Boolean);
