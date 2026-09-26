@@ -21,7 +21,7 @@ export default function AboutPage() {
               <h2 className="text-3xl md:text-4xl font-bold text-text mb-6">A Passion for Mathematics & Teaching</h2>
               <div className="space-y-4 text-lg text-text/70 leading-relaxed mb-8">
                 <p>
-                  With over a decade of experience in education, I have dedicated my career to demystifying mathematics for students of all levels. I believe that anyone can master math with the right guidance, patience, and resources.
+                  With over 15 years of experience in education, I have dedicated my career to demystifying mathematics for students of all levels. I believe that anyone can master math with the right guidance, patience, and resources.
                 </p>
                 <p>
                   My teaching philosophy revolves around building a strong foundational understanding before tackling complex problems. I focus on the "why" rather than just the "how", ensuring that my students develop critical thinking skills that serve them beyond the classroom.
@@ -30,7 +30,7 @@ export default function AboutPage() {
               
               <div className="grid grid-cols-2 gap-6">
                 {[
-                  { icon: Award, title: "10+ Years", desc: "Teaching Experience" },
+                  { icon: Award, title: "15+ Years", desc: "Teaching Experience" },
                   { icon: Users, title: "500+", desc: "Successful Students" },
                   { icon: BookOpen, title: "20+", desc: "Courses Created" },
                   { icon: CheckCircle2, title: "99%", desc: "Pass Rate" }
