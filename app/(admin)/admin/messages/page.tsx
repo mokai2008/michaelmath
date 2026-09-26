@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Mail, Clock, CheckCircle, Trash2, RefreshCw, Loader2, User, MessageSquare } from "lucide-react";
+import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
+import { Mail, Clock, CheckCircle, Trash2, RefreshCw, Loader2, User, MessageSquare, Bell, X } from "lucide-react";
 
 interface ContactMessage {
   id: string;
@@ -19,6 +20,12 @@ export default function ContactMessagesAdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [desktopNotificationGranted, setDesktopNotificationGranted] = useState(false);
+  const [liveBannerAlert, setLiveBannerAlert] = useState<{
+    name: string;
+    message: string;
+    msg: ContactMessage;
+  } | null>(null);
 
   const fetchMessages = async () => {
     setIsLoading(true);
@@ -47,7 +54,65 @@ export default function ContactMessagesAdminPage() {
 
   useEffect(() => {
     fetchMessages();
+
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setDesktopNotificationGranted(Notification.permission === 'granted');
+    }
+
+    // Subscribe to real-time incoming contact messages
+    const channel = supabase
+      .channel('contact_messages_admin_realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'contact_messages' },
+        (payload: any) => {
+          const newMsg = payload.new as ContactMessage;
+          setMessages((prev) => [newMsg, ...prev.filter((m) => m.id !== newMsg.id)]);
+          playNotificationSound();
+          const sender = `${newMsg.first_name || ''} ${newMsg.last_name || ''}`.trim() || 'Website Visitor';
+          setLiveBannerAlert({
+            name: sender,
+            message: newMsg.message,
+            msg: newMsg,
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'contact_messages' },
+        (payload: any) => {
+          const updated = payload.new as ContactMessage;
+          setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+          setSelectedMessage((curr) => (curr?.id === updated.id ? updated : curr));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'contact_messages' },
+        (payload: any) => {
+          const deleted = payload.old;
+          setMessages((prev) => prev.filter((m) => m.id !== deleted.id));
+          setSelectedMessage((curr) => (curr?.id === deleted.id ? null : curr));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const handleEnableAlerts = async () => {
+    const granted = await requestDesktopNotificationPermission();
+    setDesktopNotificationGranted(granted);
+    playNotificationSound();
+    if (granted) {
+      showDesktopNotification(
+        "Notifications Enabled! 🔔",
+        "You will receive live desktop alerts when students and visitors send contact inquiries."
+      );
+    }
+  };
 
   const markAsRead = async (msg: ContactMessage) => {
     setSelectedMessage(msg);
@@ -59,11 +124,37 @@ export default function ContactMessagesAdminPage() {
           .eq('id', msg.id);
 
         if (!error) {
-          setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'read' } : m));
+          setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, status: 'read' } : m)));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('contact_message_read', { detail: { id: msg.id } }));
+          }
         }
       } catch (err) {
         console.error(err);
       }
+    }
+  };
+
+  const markAllAsRead = async () => {
+    const unreadIds = messages.filter((m) => m.status === 'unread').map((m) => m.id);
+    if (unreadIds.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('contact_messages')
+        .update({ status: 'read' })
+        .in('id', unreadIds);
+
+      if (!error) {
+        setMessages((prev) => prev.map((m) => ({ ...m, status: 'read' })));
+        if (typeof window !== 'undefined') {
+          unreadIds.forEach(() => {
+            window.dispatchEvent(new CustomEvent('contact_message_read'));
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error marking all as read:", err);
     }
   };
 
@@ -76,7 +167,7 @@ export default function ContactMessagesAdminPage() {
         .eq('id', id);
 
       if (!error) {
-        setMessages(prev => prev.filter(m => m.id !== id));
+        setMessages((prev) => prev.filter((m) => m.id !== id));
         if (selectedMessage?.id === id) setSelectedMessage(null);
       }
     } catch (err) {
@@ -84,25 +175,92 @@ export default function ContactMessagesAdminPage() {
     }
   };
 
-  const filteredMessages = messages.filter(m => filter === 'all' || m.status === 'unread');
+  const filteredMessages = messages.filter((m) => filter === 'all' || m.status === 'unread');
+  const unreadCount = messages.filter((m) => m.status === 'unread').length;
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
+      {/* Live Incoming Alert Banner */}
+      {liveBannerAlert && (
+        <div className="mb-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="p-2.5 bg-white/20 rounded-xl">
+              <Mail className="w-5 h-5 animate-bounce" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-black text-sm">🔔 New Message Just Arrived!</p>
+              <p className="text-xs text-white/90 truncate">
+                From <span className="font-bold">{liveBannerAlert.name}</span>: "{liveBannerAlert.message}"
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                markAsRead(liveBannerAlert.msg);
+                setLiveBannerAlert(null);
+              }}
+              className="bg-white text-emerald-800 text-xs font-black px-3.5 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors shadow-xs"
+            >
+              Read Now
+            </button>
+            <button
+              onClick={() => setLiveBannerAlert(null)}
+              className="text-white/70 hover:text-white p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-text flex items-center gap-2">
-            <Mail className="w-7 h-7 text-primary" /> Contact Messages
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-text flex items-center gap-2">
+              <Mail className="w-7 h-7 text-primary" /> Contact Messages
+            </h1>
+            {unreadCount > 0 && (
+              <span className="bg-red-500 text-white text-xs font-black px-2.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                {unreadCount} new
+              </span>
+            )}
+          </div>
           <p className="text-text/60 text-sm mt-1">
             View and manage inquiry messages sent from the Contact Us form.
           </p>
         </div>
-        <button
-          onClick={fetchMessages}
-          className="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-text text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            onClick={handleEnableAlerts}
+            className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2.5 rounded-xl border transition-all shadow-2xs ${
+              desktopNotificationGranted
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+            }`}
+            title={desktopNotificationGranted ? "Desktop notifications are active" : "Enable desktop browser alerts"}
+          >
+            <Bell className={`w-3.5 h-3.5 ${desktopNotificationGranted ? 'text-emerald-600' : 'text-amber-600 animate-bounce'}`} />
+            {desktopNotificationGranted ? 'Alerts Active' : 'Enable Alerts'}
+          </button>
+
+          {unreadCount > 0 && (
+            <button
+              onClick={markAllAsRead}
+              className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-text/80 text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all shadow-2xs"
+            >
+              <CheckCircle className="w-3.5 h-3.5 text-primary" /> Mark All Read
+            </button>
+          )}
+
+          <button
+            onClick={fetchMessages}
+            className="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-text text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-2xs"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filter Tabs */}
