@@ -81,9 +81,22 @@ export default function AdminCourseEditor() {
         setCourseDescription(course.description || "");
         setCourseThumbnail(course.thumbnail_url || "");
         setCourseIntroVideo(course.intro_video_url || "");
-        setCoursePrice(course.total_price?.toString() || "0.00");
-        setCourseKeywords(course.keywords?.join(', ') || "");
-        setCourseSpokenLanguage(course.spoken_language !== undefined && course.spoken_language !== null ? course.spoken_language : "Arabic Spoken");
+        const rawKeywords: string[] = course.keywords || [];
+        const langTag = Array.isArray(rawKeywords)
+          ? rawKeywords.find((k: string) => typeof k === 'string' && k.toLowerCase().startsWith('lang:'))
+          : null;
+        const parsedLangFromTag = langTag ? langTag.slice(5).trim() : null;
+
+        const effectiveLang = (course.spoken_language !== undefined && course.spoken_language !== null)
+          ? course.spoken_language
+          : (parsedLangFromTag || "Arabic Spoken");
+
+        setCourseSpokenLanguage(effectiveLang);
+
+        const cleanKeywords = Array.isArray(rawKeywords)
+          ? rawKeywords.filter((k: string) => typeof k === 'string' && !k.toLowerCase().startsWith('lang:'))
+          : [];
+        setCourseKeywords(cleanKeywords.join(', '));
         setIsPublished(course.is_published || false);
 
         // Fetch sections
@@ -598,6 +611,12 @@ export default function AdminCourseEditor() {
     try {
       const finalIsPublished = publishOverride !== undefined ? publishOverride : isPublished;
       // 1. Update Course
+      const userKeywords = courseKeywords.split(',').map(k => k.trim()).filter(Boolean);
+      const cleanKeywords = userKeywords.filter(k => !k.toLowerCase().startsWith('lang:'));
+      if (courseSpokenLanguage.trim()) {
+        cleanKeywords.push(`lang:${courseSpokenLanguage.trim()}`);
+      }
+
       const coursePayload: any = {
         title: courseTitle,
         description: courseDescription,
@@ -606,7 +625,7 @@ export default function AdminCourseEditor() {
         spoken_language: courseSpokenLanguage.trim(),
         total_price: parseFloat(coursePrice) || 0,
         is_published: finalIsPublished,
-        keywords: courseKeywords.split(',').map(k => k.trim()).filter(Boolean)
+        keywords: cleanKeywords
       };
 
       let { error: courseError } = await supabase

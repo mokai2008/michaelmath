@@ -3,17 +3,22 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { Search, Filter, BookOpen, Star } from "lucide-react";
+import { getCourseSpokenLanguage } from "@/lib/utils";
 
 export default function CourseList({ courses }: { courses: any[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("All");
 
-  // Extract all unique keywords from courses to use as filters
+  // Extract all unique keywords from courses to use as filters (excluding internal lang tag)
   const allKeywords = useMemo(() => {
     const keywords = new Set<string>();
     courses.forEach(course => {
       if (course.keywords && Array.isArray(course.keywords)) {
-        course.keywords.forEach((kw: string) => keywords.add(kw));
+        course.keywords.forEach((kw: string) => {
+          if (typeof kw === 'string' && !kw.toLowerCase().startsWith('lang:')) {
+            keywords.add(kw);
+          }
+        });
       }
     });
     return Array.from(keywords).sort();
@@ -87,26 +92,28 @@ export default function CourseList({ courses }: { courses: any[] }) {
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredCourses.map((course: any, idx: number) => (
-                <Link href={`/courses/${course.id}`} key={course.id} className="bg-white rounded-3xl overflow-hidden shadow-lg shadow-black/5 border border-gray-100 group flex flex-col hover:-translate-y-1 transition-transform">
-                  <div className="aspect-[4/3] bg-background-alt relative overflow-hidden flex-shrink-0">
-                    <div className="absolute top-4 left-4 bg-accent text-white text-xs font-bold px-3 py-1 rounded-full z-10 shadow-sm">
-                      {idx === 0 ? 'NEW' : 'HOT'}
+              {filteredCourses.map((course: any, idx: number) => {
+                const spokenLang = getCourseSpokenLanguage(course);
+                return (
+                  <Link href={`/courses/${course.id}`} key={course.id} className="bg-white rounded-3xl overflow-hidden shadow-lg shadow-black/5 border border-gray-100 group flex flex-col hover:-translate-y-1 transition-transform">
+                    <div className="aspect-[4/3] bg-background-alt relative overflow-hidden flex-shrink-0">
+                      <div className="absolute top-4 left-4 bg-accent text-white text-xs font-bold px-3 py-1 rounded-full z-10 shadow-sm">
+                        {idx === 0 ? 'NEW' : 'HOT'}
+                      </div>
+                      {spokenLang && (
+                        <div className="absolute top-4 right-4 z-20 bg-slate-950/90 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                          <span>{spokenLang}</span>
+                        </div>
+                      )}
+                      {course.thumbnail_url ? (
+                        <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                          <BookOpen className="w-16 h-16 text-primary/20" />
+                        </div>
+                      )}
                     </div>
-                    {course.spoken_language && (
-                      <div className="absolute top-4 right-4 z-10 bg-slate-950/85 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span>{course.spoken_language}</span>
-                      </div>
-                    )}
-                    {course.thumbnail_url ? (
-                      <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
-                        <BookOpen className="w-16 h-16 text-primary/20" />
-                      </div>
-                    )}
-                  </div>
                   <div className="p-6 flex flex-col flex-grow">
                     <div className="flex items-center gap-2 text-sm text-text/60 mb-3">
                       <Star className="w-4 h-4 text-accent fill-accent" />
@@ -123,7 +130,8 @@ export default function CourseList({ courses }: { courses: any[] }) {
                     </div>
                   </div>
                 </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

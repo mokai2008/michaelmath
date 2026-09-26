@@ -251,3 +251,8 @@ END $$;
 ALTER TABLE public.courses 
 ADD COLUMN IF NOT EXISTS spoken_language text DEFAULT 'Arabic Spoken';
 
+UPDATE public.courses 
+SET spoken_language = 'Arabic Spoken' 
+WHERE spoken_language IS NULL;
+
+

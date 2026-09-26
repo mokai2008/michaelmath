@@ -16,6 +16,7 @@ import {
   PlayCircle,
   Phone
 } from "lucide-react";
+import { getCourseSpokenLanguage } from "@/lib/utils";
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
@@ -34,22 +35,34 @@ const staggerContainer = {
 
 export default function Home() {
   const [featuredCourses, setFeaturedCourses] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchCourses = async () => {
-      const { data, error } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('is_published', true)
-        .order('created_at', { ascending: false })
-        .limit(3);
-      
-      if (error) {
-        console.error("Error fetching featured courses:", error);
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('courses')
+          .select('*')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(3);
+        
+        if (error) {
+          console.error("Error fetching featured courses:", error);
+        }
+        if (data && isMounted) {
+          setFeaturedCourses(data);
+        }
+      } catch (err) {
+        console.error("Featured courses error:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-      if (data) setFeaturedCourses(data);
     };
     fetchCourses();
+    return () => { isMounted = false; };
   }, []);
 
   return (
@@ -188,61 +201,79 @@ export default function Home() {
             </Link>
           </motion.div>
           
-          <motion.div 
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={staggerContainer}
-            className="grid md:grid-cols-2 lg:grid-cols-3 gap-8"
-          >
-            {featuredCourses.length === 0 ? (
-              <div className="col-span-3 text-center py-12 bg-white rounded-3xl border border-gray-100 shadow-sm">
-                <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-text mb-2">No Featured Courses</h3>
-                <p className="text-text/60">Connect Supabase and publish a course to see it here.</p>
-              </div>
-            ) : (
-              featuredCourses.map((course: any, idx: number) => (
-                <Link href={`/courses/${course.id}`} key={course.id} className="block group">
-                  <motion.div variants={fadeInUp} className="bg-white rounded-3xl overflow-hidden shadow-lg shadow-black/5 border border-gray-100 h-full flex flex-col hover:-translate-y-1 transition-transform">
-                    <div className="aspect-[4/3] bg-background-alt relative overflow-hidden flex-shrink-0">
-                      <div className="absolute top-4 left-4 bg-accent text-white text-xs font-bold px-3 py-1 rounded-full z-10 shadow-sm">
-                        {idx === 0 ? 'NEW' : 'HOT'}
-                      </div>
-                      {course.spoken_language && (
-                        <div className="absolute top-4 right-4 z-10 bg-slate-950/85 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>{course.spoken_language}</span>
-                        </div>
-                      )}
-                      {course.thumbnail_url ? (
-                        <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
-                          <BookOpen className="w-16 h-16 text-primary/20" />
-                        </div>
-                      )}
+          {isLoading ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 h-96 animate-pulse flex flex-col">
+                  <div className="aspect-[4/3] bg-gray-200" />
+                  <div className="p-6 space-y-4 flex-grow flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/4" />
+                      <div className="h-6 bg-gray-200 rounded w-3/4" />
+                      <div className="h-4 bg-gray-200 rounded w-full" />
                     </div>
-                    <div className="p-6 flex flex-col flex-grow">
-                      <div className="flex items-center gap-2 text-sm text-text/60 mb-3">
-                        <Star className="w-4 h-4 text-accent fill-accent" />
-                        <span className="font-semibold text-text">5.0</span>
-                      </div>
-                      <h3 className="font-bold text-xl text-text mb-2 line-clamp-2 group-hover:text-primary transition-colors">{course.title}</h3>
-                      <p className="text-text/70 text-sm mb-4 line-clamp-2 flex-grow">{course.description || "Comprehensive syllabus covering everything from basics to advanced problem solving."}</p>
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-auto">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">MG</div>
-                          <span className="text-sm font-medium text-text">Michael Gad</span>
+                    <div className="h-8 bg-gray-200 rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : featuredCourses.length === 0 ? (
+            <div className="col-span-3 text-center py-12 bg-white rounded-3xl border border-gray-100 shadow-sm">
+              <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-text mb-2">No Featured Courses</h3>
+              <p className="text-text/60">Connect Supabase and publish a course to see it here.</p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredCourses.map((course: any, idx: number) => {
+                const spokenLang = getCourseSpokenLanguage(course);
+                return (
+                  <Link href={`/courses/${course.id}`} key={course.id} className="block group">
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: idx * 0.1 }}
+                      className="bg-white rounded-3xl overflow-hidden shadow-lg shadow-black/5 border border-gray-100 h-full flex flex-col hover:-translate-y-1 transition-transform"
+                    >
+                      <div className="aspect-[4/3] bg-background-alt relative overflow-hidden flex-shrink-0">
+                        <div className="absolute top-4 left-4 bg-accent text-white text-xs font-bold px-3 py-1 rounded-full z-10 shadow-sm">
+                          {idx === 0 ? 'NEW' : 'HOT'}
                         </div>
-                        <div className="font-bold text-xl text-primary">£{course.total_price}</div>
+                        {spokenLang && (
+                          <div className="absolute top-4 right-4 z-20 bg-slate-950/90 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                            <span>{spokenLang}</span>
+                          </div>
+                        )}
+                        {course.thumbnail_url ? (
+                          <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                            <BookOpen className="w-16 h-16 text-primary/20" />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </motion.div>
-                </Link>
-              ))
-            )}
-          </motion.div>
+                      <div className="p-6 flex flex-col flex-grow">
+                        <div className="flex items-center gap-2 text-sm text-text/60 mb-3">
+                          <Star className="w-4 h-4 text-accent fill-accent" />
+                          <span className="font-semibold text-text">5.0</span>
+                        </div>
+                        <h3 className="font-bold text-xl text-text mb-2 line-clamp-2 group-hover:text-primary transition-colors">{course.title}</h3>
+                        <p className="text-text/70 text-sm mb-4 line-clamp-2 flex-grow">{course.description || "Comprehensive syllabus covering everything from basics to advanced problem solving."}</p>
+                        <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-auto">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">MG</div>
+                            <span className="text-sm font-medium text-text">Michael Gad</span>
+                          </div>
+                          <div className="font-bold text-xl text-primary">£{course.total_price}</div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 

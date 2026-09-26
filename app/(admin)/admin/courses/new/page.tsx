@@ -441,6 +441,12 @@ export default function AdminNewCourse() {
     
     try {
       // 1. Create Course
+      const userKeywords = courseKeywords.split(',').map(k => k.trim()).filter(Boolean);
+      const cleanKeywords = userKeywords.filter(k => !k.toLowerCase().startsWith('lang:'));
+      if (courseSpokenLanguage.trim()) {
+        cleanKeywords.push(`lang:${courseSpokenLanguage.trim()}`);
+      }
+
       const coursePayload: any = {
         title: courseTitle,
         description: courseDescription,
@@ -449,7 +455,7 @@ export default function AdminNewCourse() {
         spoken_language: courseSpokenLanguage.trim(),
         total_price: parseFloat(coursePrice) || 0,
         is_published: publish,
-        keywords: courseKeywords.split(',').map(k => k.trim()).filter(Boolean)
+        keywords: cleanKeywords
       };
 
       let { data: courseData, error: courseError } = await supabase

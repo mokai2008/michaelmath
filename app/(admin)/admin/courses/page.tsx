@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, BookOpen, Edit2, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getCourseSpokenLanguage } from "@/lib/utils";
 
 export default function AdminCoursesPage() {
   const [courses, setCourses] = useState<any[]>([]);
@@ -115,17 +116,19 @@ export default function AdminCoursesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
-                {courses.map((course) => (
-                  <tr key={course.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-text">{course.title}</div>
-                      {course.spoken_language && (
-                        <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          {course.spoken_language}
-                        </span>
-                      )}
-                    </td>
+                {courses.map((course) => {
+                  const spokenLang = getCourseSpokenLanguage(course);
+                  return (
+                    <tr key={course.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-text">{course.title}</div>
+                        {spokenLang && (
+                          <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            {spokenLang}
+                          </span>
+                        )}
+                      </td>
                     <td className="px-6 py-4 font-medium text-primary">£{course.total_price}</td>
                     <td className="px-6 py-4">
                       <button
@@ -163,7 +166,8 @@ export default function AdminCoursesPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>

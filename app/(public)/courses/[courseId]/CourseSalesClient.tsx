@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PlayCircle, FileText, CheckCircle2, ChevronDown, ChevronUp, Star, Clock, Award, ShieldCheck, Video, Loader2 } from "lucide-react";
+import { PlayCircle, FileText, CheckCircle2, ChevronDown, ChevronUp, Star, Clock, Award, ShieldCheck, Video, Loader2, Globe } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import VideoPlayer from "@/components/VideoPlayer";
+import { getCourseSpokenLanguage } from "@/lib/utils";
 
 export default function CourseSalesClient({ course }: { course: any }) {
   const router = useRouter();
+  const spokenLang = getCourseSpokenLanguage(course);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [userId, setUserId] = useState<string | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
@@ -168,10 +170,10 @@ export default function CourseSalesClient({ course }: { course: any }) {
                   <Star className="w-4 h-4 text-accent fill-accent" />
                   <span>Premium Math Course</span>
                 </div>
-                {course.spoken_language && (
+                {spokenLang && (
                   <div className="inline-flex items-center gap-1.5 bg-white/20 border border-white/20 px-3.5 py-1 rounded-full text-xs font-bold text-white backdrop-blur-sm shadow-sm">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{course.spoken_language}</span>
+                    <span>{spokenLang}</span>
                   </div>
                 )}
               </div>
@@ -199,10 +201,10 @@ export default function CourseSalesClient({ course }: { course: any }) {
             </div>
             
             <div className="hidden lg:block relative">
-              {course.spoken_language && (
-                <div className="absolute top-4 right-4 z-20 bg-slate-950/85 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/20 flex items-center gap-1.5">
+              {spokenLang && (
+                <div className="absolute top-4 right-4 z-20 bg-slate-950/90 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>{course.spoken_language}</span>
+                  <span>{spokenLang}</span>
                 </div>
               )}
               <div className="aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 bg-black">
@@ -317,10 +319,10 @@ export default function CourseSalesClient({ course }: { course: any }) {
             <div className="lg:col-span-1">
               <div className="sticky top-24 bg-white rounded-3xl shadow-xl shadow-black/5 border border-gray-100 overflow-hidden">
                 <div className="lg:hidden aspect-video relative">
-                  {course.spoken_language && (
-                    <div className="absolute top-3 right-3 z-10 bg-slate-950/85 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5">
+                  {spokenLang && (
+                    <div className="absolute top-3 right-3 z-10 bg-slate-950/90 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5 pointer-events-none">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>{course.spoken_language}</span>
+                      <span>{spokenLang}</span>
                     </div>
                   )}
                    {course.thumbnail_url ? (
@@ -338,6 +340,13 @@ export default function CourseSalesClient({ course }: { course: any }) {
                   </div>
                   <p className="text-xs text-text/50 mb-6">Enroll free, purchase chapters from your wallet.</p>
                   
+                  {spokenLang && (
+                    <div className="mb-4 p-3 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center gap-2.5 text-xs font-semibold text-emerald-800">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                      <span>Language of Instruction: <strong>{spokenLang}</strong></span>
+                    </div>
+                  )}
+
                   <button 
                     onClick={handleEnroll}
                     disabled={isEnrolling || isCheckingAuth}
@@ -356,6 +365,7 @@ export default function CourseSalesClient({ course }: { course: any }) {
                   <div className="space-y-4">
                     <div className="font-bold text-text mb-4">This course includes:</div>
                     {[
+                      ...(spokenLang ? [{ icon: Globe, text: `${spokenLang} video instruction` }] : []),
                       { icon: PlayCircle, text: "On-demand video lessons" },
                       { icon: FileText, text: "Downloadable PDF worksheets" },
                       { icon: ShieldCheck, text: "Auto-correcting mock quizzes" },

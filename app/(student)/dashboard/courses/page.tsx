@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { BookOpen, PlayCircle, Award, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { calculateCourseProgress } from "@/lib/progress";
+import { getCourseSpokenLanguage } from "@/lib/utils";
 
 export default function MyCoursesPage() {
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
@@ -147,15 +148,17 @@ export default function MyCoursesPage() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {enrolledCourses.map((course) => (
-            <div key={course.id} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 flex flex-col group hover:shadow-md transition-shadow">
-              <div className="aspect-[4/3] bg-background-alt relative flex-shrink-0">
-                {course.spoken_language && (
-                  <div className="absolute top-4 left-4 z-10 bg-slate-950/85 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{course.spoken_language}</span>
-                  </div>
-                )}
+          {enrolledCourses.map((course) => {
+            const spokenLang = getCourseSpokenLanguage(course);
+            return (
+              <div key={course.id} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 flex flex-col group hover:shadow-md transition-shadow">
+                <div className="aspect-[4/3] bg-background-alt relative flex-shrink-0">
+                  {spokenLang && (
+                    <div className="absolute top-4 left-4 z-10 bg-slate-950/85 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-md border border-white/20 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>{spokenLang}</span>
+                    </div>
+                  )}
                 {course.thumbnail_url ? (
                   <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
                 ) : (
@@ -201,7 +204,8 @@ export default function MyCoursesPage() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
