@@ -46,7 +46,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [manualSubmissions, setManualSubmissions] = useState<Record<string, any>>({});
   const [sessionUser, setSessionUser] = useState<any>(null);
-  const [isUploadingWorksheet, setIsUploadingWorksheet] = useState(false);
+  const [isUploadingWorksheet, setIsUploadingWorksheet] = useState<string | null>(null);
   const [isUploadingQuiz, setIsUploadingQuiz] = useState<string | null>(null);
 
   const [interactiveAnswers, setInteractiveAnswers] = useState<Record<number, number>>({});
@@ -409,14 +409,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     }
   };
 
-  const handleWorksheetUpload = async (e: any, topicId: string) => {
+  const handleWorksheetUpload = async (e: any, topicId: string, subType: string = 'worksheet', worksheetTitle?: string) => {
     const file = e.target.files?.[0];
     if (!file || !sessionUser) return;
     
-    setIsUploadingWorksheet(true);
+    setIsUploadingWorksheet(subType);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${sessionUser.id}_${topicId}.${fileExt}`;
+      const safeSubType = subType.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileName = `${sessionUser.id}_${topicId}_${safeSubType}_${Date.now()}.${fileExt}`;
       const filePath = `worksheet_answers/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -436,7 +437,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
          .select('id')
          .eq('student_id', sessionUser.id)
          .eq('topic_id', topicId)
-         .eq('type', 'worksheet')
+         .eq('type', subType)
          .maybeSingle();
 
       if (existing) {
@@ -445,23 +446,28 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
          await supabase.from('manual_submissions').insert({
            student_id: sessionUser.id,
            topic_id: topicId,
-           type: 'worksheet',
+           type: subType,
            file_url: finalUrl
          });
       }
 
-      setManualSubmissions(prev => ({ ...prev, [`${topicId}_worksheet`]: { file_url: finalUrl, status: 'pending' } }));
+      setManualSubmissions(prev => ({ 
+        ...prev, 
+        [`${topicId}_${subType}`]: { file_url: finalUrl, status: 'pending' },
+        ...(subType.startsWith('worksheet') ? { [`${topicId}_worksheet`]: { file_url: finalUrl, status: 'pending' } } : {})
+      }));
 
       // Notify admin about worksheet submission
       await supabase.from('admin_notifications').insert({
         student_id: sessionUser.id,
         type: 'worksheet_submitted',
-        title: `Worksheet Submitted: ${activeTopic?.title || 'Unknown Topic'}`,
+        title: `Worksheet Submitted: ${worksheetTitle ? `${worksheetTitle} (${activeTopic?.title || ''})` : (activeTopic?.title || 'Unknown Topic')}`,
         message: 'uploaded worksheet answers for review',
         metadata: {
           course_id: params.courseId,
           topic_id: topicId,
-          topic_title: activeTopic?.title
+          topic_title: activeTopic?.title,
+          worksheet_title: worksheetTitle
         }
       }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
 
@@ -470,7 +476,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       console.error(err);
       alert("Error uploading worksheet: " + err.message);
     } finally {
-      setIsUploadingWorksheet(false);
+      setIsUploadingWorksheet(null);
     }
   };
 
@@ -846,7 +852,23 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
             const currentVideoUrl = activeUrls[currentMirrorIndex] || activeUrls[0] || '';
 
-            const pdfItems = contentItems.filter((i: any) => (i.type === 'worksheet' || i.type === 'notes') && i.url);
+            // Extract all worksheets and notes (from content_items or legacy topic_pdfs)
+            const contentWorksheets = contentItems.filter((i: any) => i.type === 'worksheet' && (i.url || i.file_url));
+            const legacyWorksheets = (activeTopic.topic_pdfs || []).filter((p: any) => p.type === 'worksheet');
+            const allWorksheets: any[] = contentWorksheets.length > 0 
+              ? contentWorksheets 
+              : legacyWorksheets.map((p: any, idx: number) => ({
+                  id: p.id || `legacy_ws_${idx}`,
+                  type: 'worksheet',
+                  title: p.title || (legacyWorksheets.length > 1 ? `Worksheet ${idx + 1}` : 'Worksheet'),
+                  url: p.file_url || p.url,
+                  answerPdfUrl: p.answerPdfUrl,
+                  answerVideoUrl: p.answerVideoUrl
+                }));
+
+            const contentNotes = contentItems.filter((i: any) => i.type === 'notes' && (i.url || i.file_url));
+            const legacyNotes = (activeTopic.topic_pdfs || []).filter((p: any) => p.type === 'notes');
+            const allNotes: any[] = contentNotes.length > 0 ? contentNotes : legacyNotes;
 
             return (
             <>
@@ -865,11 +887,20 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     let canComplete = true;
                     let lockReason = "";
                     
-                    const worksheetSub = manualSubmissions[`${activeTopic.id}_worksheet`];
-                    const hasWorksheet = activeTopic.topic_pdfs?.some((pdf: any) => pdf.type === 'worksheet');
-                    if (hasWorksheet && !worksheetSub) {
-                      canComplete = false;
-                      lockReason = "upload worksheet answers";
+                    if (allWorksheets.length > 0) {
+                      const allSubmitted = allWorksheets.every((ws: any, idx: number) => {
+                        const subType = allWorksheets.length === 1 
+                          ? 'worksheet' 
+                          : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
+                        const sub = manualSubmissions[`${activeTopic.id}_${subType}`]
+                          || (idx === 0 ? manualSubmissions[`${activeTopic.id}_worksheet`] : null)
+                          || manualSubmissions[`${activeTopic.id}_worksheet_${idx}`];
+                        return !!sub;
+                      });
+                      if (!allSubmitted) {
+                        canComplete = false;
+                        lockReason = "upload all worksheet answers";
+                      }
                     }
 
                     const hasQuiz = activeTopic.quizzes && activeTopic.quizzes.length > 0;
@@ -1012,169 +1043,206 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     </div>
                     <div>
                       <h2 className="text-xl font-black text-text">Homework Place</h2>
-                      <p className="text-xs text-text/60">Worksheet PDF download, student submission, & teacher score/feedback</p>
+                      <p className="text-xs text-text/60">
+                        {allWorksheets.length > 1 
+                          ? `${allWorksheets.length} Worksheets assigned for this topic` 
+                          : 'Worksheet PDF download, student submission, & teacher score/feedback'}
+                      </p>
                     </div>
                   </div>
-                  {manualSubmissions[`${activeTopic.id}_worksheet`] && (
-                    <span className={`px-3 py-1 font-bold text-xs rounded-full ${manualSubmissions[`${activeTopic.id}_worksheet`].status === 'reviewed' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
-                      {manualSubmissions[`${activeTopic.id}_worksheet`].status === 'reviewed' ? `Graded ${manualSubmissions[`${activeTopic.id}_worksheet`].score !== null ? `(${manualSubmissions[`${activeTopic.id}_worksheet`].score})` : ''}` : 'Pending Review'}
-                    </span>
-                  )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Box 1: Worksheet PDF Download & Upload */}
-                  <div className="bg-gray-50/80 border border-gray-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
-                    <div>
-                      <div className="text-xs font-extrabold text-text/40 uppercase tracking-wider mb-3">Step 1 & 2: Worksheet & Submission</div>
-                      
-                      {/* Download Worksheet Button */}
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {pdfItems.length > 0 ? (
-                          pdfItems.map((pdf: any) => (
-                            <a 
-                              key={pdf.id}
-                              href={pdf.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group"
-                            >
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-orange-500" />
-                                <span>Download {pdf.title || (pdf.type === 'notes' ? 'Notes PDF' : 'Worksheet PDF')}</span>
-                              </div>
-                              <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium">Download →</span>
-                            </a>
-                          ))
-                        ) : (
-                          activeTopic.topic_pdfs && activeTopic.topic_pdfs.map((pdf: any) => (
-                            <a 
-                              key={pdf.id}
-                              href={pdf.file_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group"
-                            >
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-orange-500" />
-                                <span>View {pdf.type === 'notes' ? 'Notes PDF' : 'Worksheet PDF'}</span>
-                              </div>
-                              <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium">Download →</span>
-                            </a>
-                          ))
-                        )}
+                {/* Lesson Notes if any */}
+                {allNotes.length > 0 && (
+                  <div className="flex items-center justify-between gap-3 p-4 bg-blue-50/70 border border-blue-200 rounded-2xl flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">📒</span>
+                      <div>
+                        <div className="text-xs font-bold text-blue-950">Topic Study Notes</div>
+                        <div className="text-[10px] text-blue-600">Download reference notes and summaries</div>
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {allNotes.map((note: any, nIdx: number) => (
+                        <a
+                          key={note.id || nIdx}
+                          href={note.url || note.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-1.5 bg-white text-blue-800 border border-blue-200 hover:bg-blue-100/50 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-blue-600" />
+                          <span>{note.title || `Notes ${nIdx + 1}`}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                      {/* Upload Status Card */}
-                      {manualSubmissions[`${activeTopic.id}_worksheet`] ? (
-                        <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
-                            <div className="truncate">
-                              <a href={manualSubmissions[`${activeTopic.id}_worksheet`].file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
-                                View Uploaded Homework PDF
-                              </a>
-                              <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
+                {/* Worksheets List: Render dedicated 2-column card for EACH worksheet */}
+                {allWorksheets.length > 0 ? (
+                  <div className="space-y-6">
+                    {allWorksheets.map((ws: any, wsIdx: number) => {
+                      const subType = allWorksheets.length === 1 
+                        ? 'worksheet' 
+                        : (ws.id ? `worksheet_${ws.id}` : `worksheet_${wsIdx}`);
+                      
+                      const sub = manualSubmissions[`${activeTopic.id}_${subType}`]
+                        || (wsIdx === 0 ? manualSubmissions[`${activeTopic.id}_worksheet`] : null)
+                        || manualSubmissions[`${activeTopic.id}_worksheet_${wsIdx}`];
+                      
+                      const wsTitle = ws.title || (allWorksheets.length > 1 ? `Homework ${wsIdx + 1}` : 'Topic Homework');
+                      const isUploadingThis = isUploadingWorksheet === subType;
+
+                      return (
+                        <div key={ws.id || wsIdx} className="space-y-4 pt-5 first:pt-0 border-t first:border-t-0 border-gray-100">
+                          {allWorksheets.length > 1 && (
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-lg bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center">
+                                  {wsIdx + 1}
+                                </span>
+                                <h3 className="text-base font-bold text-text">{wsTitle}</h3>
+                              </div>
+                              {sub && (
+                                <span className={`px-2.5 py-0.5 font-bold text-xs rounded-full ${sub.status === 'reviewed' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
+                                  {sub.status === 'reviewed' ? `Graded ${sub.score !== null && sub.score !== undefined ? `(${sub.score})` : ''}` : 'Pending Review'}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            {/* Box 1: Download & Upload for this worksheet */}
+                            <div className="bg-gray-50/80 border border-gray-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                              <div>
+                                <div className="text-xs font-extrabold text-text/40 uppercase tracking-wider mb-3">Step 1 & 2: Worksheet & Submission</div>
+                                
+                                {/* Download this specific worksheet */}
+                                <a 
+                                  href={ws.url || ws.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group mb-4"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-orange-500" />
+                                    <span>Download {wsTitle}</span>
+                                  </div>
+                                  <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium">Download →</span>
+                                </a>
+
+                                {/* Upload Status Card for this worksheet */}
+                                {sub ? (
+                                  <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
+                                      <div className="truncate">
+                                        <a href={sub.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
+                                          View Uploaded Homework PDF
+                                        </a>
+                                        <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
+                                      </div>
+                                    </div>
+                                    {sub.status !== 'reviewed' && (
+                                      <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50">
+                                        {isUploadingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+                                        <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
+                                      </label>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-primary/50 transition-colors">
+                                    <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
+                                    <div className="text-xs font-bold text-text">Upload Your Answer PDF for {wsTitle}</div>
+                                    <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution</p>
+                                    <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary/90 transition-all shadow-sm">
+                                      <Upload className="w-3.5 h-3.5" /> Select PDF File
+                                      <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
+                                    </label>
+                                    {isUploadingThis && <span className="text-xs text-text/50 flex items-center justify-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Box 2: Teacher Grading Feedback for this worksheet */}
+                            <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">Step 3: Teacher Review</span>
+                                  {sub?.score !== undefined && sub?.score !== null && (
+                                    <span className="text-xs font-black text-primary bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                                      Score: {sub.score}
+                                    </span>
+                                  )}
+                                </div>
+                                {sub?.status === 'reviewed' ? (
+                                  <div className="space-y-3">
+                                    <p className="text-xs text-gray-700 bg-white p-3 rounded-xl border border-emerald-100 italic">
+                                      "{sub.feedback_text || 'No written feedback provided.'}"
+                                    </p>
+                                    {sub.feedback_file_url && (
+                                      <a 
+                                        href={sub.feedback_file_url} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                                      >
+                                        <FileText className="w-4 h-4" /> Download Corrected PDF File
+                                      </a>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-text/60 italic bg-white p-3 rounded-xl border border-emerald-100/60">
+                                    {sub ? 'Your submission is being reviewed by Michael Gad. Feedback and scores will appear here.' : 'Submit your worksheet PDF to receive personalized teacher feedback.'}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          {manualSubmissions[`${activeTopic.id}_worksheet`].status !== 'reviewed' && (
-                            <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50">
-                              Update
-                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id)} />
-                            </label>
+
+                          {/* Model Answer for this worksheet */}
+                          {sub && (ws.answerPdfUrl || ws.answerVideoUrl) && (
+                            <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-xl">📝</span>
+                                <div>
+                                  <div className="text-xs font-bold text-teal-950">Official Model Answers: {wsTitle}</div>
+                                  <div className="text-[10px] text-teal-700">Unlocked after homework submission</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                {ws.answerPdfUrl && (
+                                  <a 
+                                    href={ws.answerPdfUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> Answer Sheet PDF
+                                  </a>
+                                )}
+                                {ws.answerVideoUrl && (
+                                  <a 
+                                    href={ws.answerVideoUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                                  >
+                                    <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
+                                  </a>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </div>
-                      ) : (
-                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-primary/50 transition-colors">
-                          <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
-                          <div className="text-xs font-bold text-text">Upload Your Answer PDF</div>
-                          <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution to complete this topic</p>
-                          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary/90 transition-all shadow-sm">
-                            <Upload className="w-3.5 h-3.5" /> Select PDF File
-                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id)} disabled={isUploadingWorksheet} />
-                          </label>
-                          {isUploadingWorksheet && <span className="text-xs text-text/50 flex items-center justify-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
-                        </div>
-                      )}
-                    </div>
+                      );
+                    })}
                   </div>
-
-                  {/* Box 2: Teacher Grading Feedback */}
-                  <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">Step 3: Teacher Review</span>
-                        {manualSubmissions[`${activeTopic.id}_worksheet`]?.score !== undefined && manualSubmissions[`${activeTopic.id}_worksheet`]?.score !== null && (
-                          <span className="text-xs font-black text-primary bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200">
-                            Score: {manualSubmissions[`${activeTopic.id}_worksheet`].score}
-                          </span>
-                        )}
-                      </div>
-                      {manualSubmissions[`${activeTopic.id}_worksheet`]?.status === 'reviewed' ? (
-                        <div className="space-y-3">
-                          <p className="text-xs text-gray-700 bg-white p-3 rounded-xl border border-emerald-100 italic">
-                            "{manualSubmissions[`${activeTopic.id}_worksheet`].feedback_text || 'No written feedback provided.'}"
-                          </p>
-                          {manualSubmissions[`${activeTopic.id}_worksheet`].feedback_file_url && (
-                            <a 
-                              href={manualSubmissions[`${activeTopic.id}_worksheet`].feedback_file_url} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
-                            >
-                              <FileText className="w-4 h-4" /> Download Corrected PDF File
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-text/60 italic bg-white p-3 rounded-xl border border-emerald-100/60">
-                          {manualSubmissions[`${activeTopic.id}_worksheet`] ? 'Your submission is being reviewed by Michael Gad. Feedback and scores will appear here.' : 'Submit your worksheet PDF to receive personalized teacher feedback.'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Model Answer Section (Unlocked after submission) */}
-                {manualSubmissions[`${activeTopic.id}_worksheet`] && (() => {
-                  const worksheetItem = contentItems.find((i: any) => i.type === 'worksheet');
-                  const hasAnswerPdf = worksheetItem?.answerPdfUrl;
-                  const hasAnswerVideo = worksheetItem?.answerVideoUrl;
-                  if (!hasAnswerPdf && !hasAnswerVideo) return null;
-                  return (
-                    <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-xl">📝</span>
-                        <div>
-                          <div className="text-xs font-bold text-teal-950">Official Model Answers & Video Solution</div>
-                          <div className="text-[10px] text-teal-700">Unlocked after homework submission</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        {hasAnswerPdf && (
-                          <a 
-                            href={worksheetItem.answerPdfUrl} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1"
-                          >
-                            <FileText className="w-3.5 h-3.5" /> Answer Sheet PDF
-                          </a>
-                        )}
-                        {hasAnswerVideo && (
-                          <a 
-                            href={worksheetItem.answerVideoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
-                          >
-                            <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
+                ) : (
+                  <p className="text-xs text-text/40 italic">No worksheets assigned for this topic.</p>
+                )}
               </div>
 
                 {activeTopic.quizzes && activeTopic.quizzes.length > 0 && (
