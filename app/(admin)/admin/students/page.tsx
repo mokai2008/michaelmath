@@ -412,6 +412,30 @@ export default function AdminStudentsPage() {
         console.error("Error fetching section purchases:", spErr);
       }
 
+      // Also check topic_purchases to count courses students have topic access to
+      try {
+        const { data: tpList } = await supabase
+          .from("topic_purchases")
+          .select("student_id, topic_id, topics(section_id, sections(course_id, courses(id, title)))");
+
+        if (tpList && tpList.length > 0) {
+          tpList.forEach((tp: any) => {
+            const cId = tp.topics?.sections?.course_id;
+            const cTitle = tp.topics?.sections?.courses?.title || "Enrolled Course";
+            if (cId && !enrollmentsData.some((e: any) => e.student_id === tp.student_id && e.course_id === cId)) {
+              enrollmentsData.push({
+                id: `tp_${tp.topic_id}`,
+                student_id: tp.student_id,
+                course_id: cId,
+                courses: { id: cId, title: cTitle }
+              });
+            }
+          });
+        }
+      } catch (tpErr) {
+        console.error("Error fetching topic purchases:", tpErr);
+      }
+
       // 3. Fetch chat logs to count AI usage
       const { data: chatsData } = await supabase
         .from("chat_logs")
@@ -608,6 +632,21 @@ export default function AdminStudentsPage() {
         const cId = sp.sections?.course_id;
         if (cId) detectedCourseIds.add(cId);
       });
+
+      // Source D: Topic purchases
+      try {
+        const { data: tpUser } = await supabase
+          .from("topic_purchases")
+          .select("id, purchased_at, topic_id, topics(section_id, sections(course_id))")
+          .eq("student_id", student.id);
+
+        (tpUser || []).forEach((tp: any) => {
+          const cId = tp.topics?.sections?.course_id;
+          if (cId) detectedCourseIds.add(cId);
+        });
+      } catch (tpErr) {
+        console.error("Error fetching student topic purchases:", tpErr);
+      }
 
       // GUARANTEE: If no course was detected, ALWAYS default to the 1st academy course!
       if (detectedCourseIds.size === 0) {

@@ -32,6 +32,7 @@ export default function AdminNewCourse() {
           id: 1,
           title: "Lesson 1: Getting Started",
           progress_percentage: 100,
+          price: 0,
           isExpanded: true,
           items: [
             {
@@ -131,6 +132,7 @@ export default function AdminNewCourse() {
             id: newTopicId, 
             title: `Lesson ${newTopicId}: New Lesson`,
             progress_percentage: 0,
+            price: 0,
             isExpanded: true,
             items: []
           }]
@@ -165,6 +167,13 @@ export default function AdminNewCourse() {
     setSections(sections.map(s => s.id === sectionId ? {
       ...s,
       topics: s.topics.map((t: any) => t.id === topicId ? { ...t, title } : t)
+    } : s));
+  };
+
+  const updateTopicPrice = (sectionId: number, topicId: number, price: number | string) => {
+    setSections(sections.map(s => s.id === sectionId ? {
+      ...s,
+      topics: s.topics.map((t: any) => t.id === topicId ? { ...t, price } : t)
     } : s));
   };
 
@@ -556,8 +565,9 @@ export default function AdminNewCourse() {
           const topic = section.topics[tIdx];
           const items = topic.items || [];
           const rawWeight = parseFloat(String(topic.progress_percentage || 0)) || 0;
+          const rawPrice = parseFloat(String(topic.price || 0)) || 0;
           const itemsList = (items || []).filter((i: any) => !i?.__topic_meta);
-          const itemsWithMeta = [...itemsList, { __topic_meta: true, progress_percentage: rawWeight }];
+          const itemsWithMeta = [...itemsList, { __topic_meta: true, progress_percentage: rawWeight, price: rawPrice }];
           const firstVideo = itemsList.find((i: any) => i.type === 'video');
 
           const topicPayload: any = {
@@ -566,7 +576,8 @@ export default function AdminNewCourse() {
             order_index: tIdx,
             youtube_url: firstVideo?.url || '',
             content_items: itemsWithMeta,
-            progress_percentage: rawWeight
+            progress_percentage: rawWeight,
+            price: rawPrice
           };
 
           let { data: topicData, error: topicError } = await supabase
@@ -575,9 +586,10 @@ export default function AdminNewCourse() {
             .select()
             .single();
 
-          if (topicError && (topicError.message?.includes('content_items') || topicError.message?.includes('progress_percentage'))) {
+          if (topicError && (topicError.message?.includes('content_items') || topicError.message?.includes('progress_percentage') || topicError.message?.includes('price'))) {
             if (topicError.message?.includes('content_items')) delete topicPayload.content_items;
             if (topicError.message?.includes('progress_percentage')) delete topicPayload.progress_percentage;
+            if (topicError.message?.includes('price')) delete topicPayload.price;
             const retry = await supabase.from('topics').insert(topicPayload).select().single();
             topicData = retry.data;
             topicError = retry.error;
@@ -945,6 +957,21 @@ export default function AdminNewCourse() {
                             className="w-11 text-center text-xs font-black text-primary bg-transparent outline-none"
                           />
                           <span className="text-xs font-black text-text/50">%</span>
+                        </div>
+
+                        {/* Lesson Price Input */}
+                        <div className="flex items-center bg-slate-100 hover:bg-slate-200/80 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500 border border-gray-200 rounded-lg px-2.5 py-1 transition-all" title="Individual purchase price for this lesson (£ 0 = Included / Free)">
+                          <span className="text-[11px] font-bold text-text/60 mr-1">Price:</span>
+                          <span className="text-xs font-black text-emerald-600 mr-0.5">£</span>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            step="0.5" 
+                            value={topic.price !== undefined && topic.price !== null ? topic.price : ''} 
+                            onChange={(e) => updateTopicPrice(section.id, topic.id, e.target.value)} 
+                            placeholder="0" 
+                            className="w-12 text-center text-xs font-black text-emerald-600 bg-transparent outline-none" 
+                          />
                         </div>
 
                         <span className="text-xs font-semibold text-text/50 bg-gray-100 px-2.5 py-1 rounded-full border border-gray-200">

@@ -152,8 +152,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [shuffledQuestions, setShuffledQuestions] = useState<any[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [purchasedSections, setPurchasedSections] = useState<Record<string, boolean>>({});
+  const [purchasedTopics, setPurchasedTopics] = useState<Record<string, boolean>>({});
   const [walletBalance, setWalletBalance] = useState(0);
   const [buyingSection, setBuyingSection] = useState<string | null>(null);
+  const [buyingTopic, setBuyingTopic] = useState<string | null>(null);
   const [canvaQuizModal, setCanvaQuizModal] = useState<any>(null);
   const [canvaLiveScores, setCanvaLiveScores] = useState<Record<string, { score: number; total: number }>>({});
 
@@ -380,6 +382,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             const pMap: Record<string, boolean> = {};
             purchases.forEach((p: any) => { pMap[p.section_id] = true; });
             setPurchasedSections(pMap);
+          }
+
+          // Fetch topic purchases
+          try {
+            const { data: tPurchases } = await supabase
+              .from('topic_purchases')
+              .select('topic_id')
+              .eq('student_id', session.user.id);
+            if (tPurchases) {
+              const tpMap: Record<string, boolean> = {};
+              tPurchases.forEach((p: any) => { tpMap[p.topic_id] = true; });
+              setPurchasedTopics(tpMap);
+            }
+          } catch (tpErr) {
+            console.error('Error fetching topic purchases:', tpErr);
           }
 
           // Fetch wallet balance
@@ -813,6 +830,98 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     finally { setBuyingSection(null); }
   };
 
+  // Helper: extract price from topic (column or content_items metadata fallback)
+  const getTopicPrice = (topic: any): number => {
+    if (!topic) return 0;
+    if (topic.price !== undefined && topic.price !== null && topic.price !== '') {
+      const p = parseFloat(String(topic.price));
+      if (!isNaN(p)) return p;
+    }
+    if (Array.isArray(topic.content_items)) {
+      const meta = topic.content_items.find((i: any) => i?.__topic_meta);
+      if (meta && meta.price !== undefined && meta.price !== null) {
+        const p = parseFloat(String(meta.price));
+        if (!isNaN(p)) return p;
+      }
+    }
+    return 0;
+  };
+
+  // Helper: determine if a topic is unlocked for the current student
+  const isTopicUnlocked = (section: any, topic: any, sIdx: number) => {
+    if (!topic) return false;
+    // 1. Explicitly purchased topic
+    if (purchasedTopics[topic.id]) return true;
+    // 2. Entire section purchased
+    if (section && purchasedSections[section.id]) return true;
+
+    const topicPrice = getTopicPrice(topic);
+    const sectionPrice = section?.price || 0;
+    const isSectionFree = sIdx === 0 || sectionPrice === 0;
+
+    // If individual price is set on this topic, it requires purchase
+    if (topicPrice > 0) return false;
+
+    // Otherwise accessible if the section is free/unlocked
+    return isSectionFree;
+  };
+
+  // Helper: purchase a topic directly via Supabase client
+  const purchaseTopic = async (topic: any) => {
+    setBuyingTopic(topic.id);
+    try {
+      const price = getTopicPrice(topic);
+      if (price <= 0) return;
+
+      // Re-fetch latest wallet balance
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', sessionUser.id)
+        .single();
+      const currentBalance = prof?.wallet_balance || 0;
+      
+      if (currentBalance < price) {
+        alert(`Not enough balance (£${currentBalance.toFixed(2)}). This lesson costs £${price.toFixed(2)}. Please top up your wallet.`);
+        return;
+      }
+
+      const newBal = currentBalance - price;
+
+      // Deduct from wallet
+      const { error: updErr } = await supabase
+        .from('profiles')
+        .update({ wallet_balance: newBal })
+        .eq('id', sessionUser.id);
+      if (updErr) throw new Error('Balance update failed: ' + updErr.message);
+
+      // Record purchase
+      const { error: insErr } = await supabase.from('topic_purchases').insert({
+        student_id: sessionUser.id,
+        topic_id: topic.id,
+        amount_paid: price,
+      });
+      if (insErr) {
+        console.error('Failed to insert topic_purchases:', insErr);
+      }
+
+      // Record transaction
+      await supabase.from('wallet_transactions').insert({
+        student_id: sessionUser.id,
+        type: 'purchase',
+        amount: price,
+        description: `Purchased lesson: ${topic.title}`,
+      });
+
+      setPurchasedTopics(prev => ({ ...prev, [topic.id]: true }));
+      setWalletBalance(newBal);
+    } catch (e: any) { 
+      alert(e.message); 
+    } finally { 
+      setBuyingTopic(null); 
+    }
+  };
+
   // Check if active topic belongs to a locked section
   const getActiveTopicSection = () => {
     if (!activeTopic || !course) return null;
@@ -823,7 +932,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
   const activeSection = getActiveTopicSection();
   const activeSectionIdx = activeSection ? course?.sections.indexOf(activeSection) : 0;
-  const isActiveTopicLocked = activeSection && activeSectionIdx > 0 && !purchasedSections[activeSection.id] && (activeSection.price || 0) > 0;
+  const activeTopicPrice = getTopicPrice(activeTopic);
+  const activeSectionPrice = activeSection?.price || 0;
+  const isActiveTopicLocked = activeTopic ? !isTopicUnlocked(activeSection, activeTopic, activeSectionIdx) : false;
 
 
   return (
@@ -910,7 +1021,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {!isFreeSection && !isSectionUnlocked && section.price > 0 && (
-                      <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">${section.price}</span>
+                      <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">£{section.price}</span>
                     )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openSections[section.id] ? 'rotate-180' : ''}`} />
                   </div>
@@ -923,6 +1034,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     ) : (
                       section.topics.map((topic: any) => {
                         const isActive = activeTopic?.id === topic.id;
+                        const isTopicRowUnlocked = isTopicUnlocked(section, topic, sIdx);
+                        const topicRowPrice = getTopicPrice(topic);
                         return (
                           <div 
                             key={topic.id}
@@ -934,19 +1047,26 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                             }}
                             className={`px-4 py-2.5 border-l-4 flex items-start gap-3 cursor-pointer ${isActive ? 'bg-primary/5 border-primary' : 'hover:bg-gray-50 border-transparent'}`}
                           >
-                            {!isSectionUnlocked ? (
+                            {!isTopicRowUnlocked ? (
                               <Lock className={`w-4 h-4 mt-0.5 flex-shrink-0 text-orange-400`} />
                             ) : (
                               <PlayCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${isActive ? 'text-primary' : 'text-gray-400'}`} />
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-1">
-                                <div className={`text-sm font-medium ${!isSectionUnlocked ? 'text-text/40' : isActive ? 'text-primary' : 'text-text'} truncate`}>{topic.title}</div>
-                                {getTopicWeight(topic) > 0 && (
-                                  <span className="text-[10px] font-bold text-text/50 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
-                                    {getTopicWeight(topic)}%
-                                  </span>
-                                )}
+                                <div className={`text-sm font-medium ${!isTopicRowUnlocked ? 'text-text/50' : isActive ? 'text-primary' : 'text-text'} truncate`}>{topic.title}</div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {!isTopicRowUnlocked && topicRowPrice > 0 && (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded">
+                                      £{topicRowPrice}
+                                    </span>
+                                  )}
+                                  {getTopicWeight(topic) > 0 && (
+                                    <span className="text-[10px] font-bold text-text/50 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+                                      {getTopicWeight(topic)}%
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               {progress[topic.id] && <div className="text-xs text-green-600 mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Completed</div>}
                             </div>
@@ -995,52 +1115,122 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         </div>
 
         <div className="max-w-4xl mx-auto p-3 sm:p-5 md:p-8 w-full min-w-0">
-          {/* Purchase Gate - shown when student clicks a topic in a locked section */}
-          {isActiveTopicLocked && activeSection ? (
+          {/* Purchase Gate - shown when student clicks a topic that is locked */}
+          {isActiveTopicLocked && activeSection && activeTopic ? (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-              <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-10 max-w-md w-full">
-                <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Lock className="w-10 h-10 text-orange-400" />
+              <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-8 sm:p-10 max-w-lg w-full">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-5 sm:mb-6">
+                  <Lock className="w-8 h-8 sm:w-10 sm:h-10 text-orange-400" />
                 </div>
-                <h2 className="text-2xl font-bold text-text mb-2">Section Locked</h2>
-                <p className="text-text/60 mb-1">{activeSection.title}</p>
-                <p className="text-sm text-text/40 mb-6">Purchase this section to unlock all its topics, videos, worksheets, and quizzes.</p>
+                <h2 className="text-2xl font-bold text-text mb-1">
+                  {activeTopicPrice > 0 && activeSectionPrice > 0
+                    ? 'Premium Content Locked'
+                    : activeTopicPrice > 0
+                    ? 'Lesson Locked'
+                    : 'Section Locked'}
+                </h2>
+                <p className="text-primary font-bold text-base mb-1">{activeTopic.title}</p>
+                <p className="text-xs text-text/50 mb-6">Part of: {activeSection.title}</p>
                 
-                <div className="bg-gray-50 rounded-xl p-4 mb-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm text-text/60">Section price</span>
-                    <span className="text-xl font-black text-primary">${activeSection.price || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-text/60">Your wallet</span>
-                    <span className={`text-sm font-bold ${walletBalance >= (activeSection.price || 0) ? 'text-green-600' : 'text-red-500'}`}>
-                      ${walletBalance.toFixed(2)}
-                    </span>
-                  </div>
+                {/* Wallet Balance Display */}
+                <div className="bg-gray-50 border border-gray-200/60 rounded-xl p-3.5 mb-6 flex justify-between items-center">
+                  <span className="text-xs font-semibold text-text/60">Your Wallet Balance</span>
+                  <span className={`text-base font-black ${walletBalance > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    £{walletBalance.toFixed(2)}
+                  </span>
                 </div>
 
-                {walletBalance >= (activeSection.price || 0) ? (
-                  <button
-                    onClick={() => purchaseSection(activeSection)}
-                    disabled={buyingSection === activeSection.id}
-                    className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-primary/20 hover:-translate-y-0.5 disabled:opacity-50 text-lg"
-                  >
-                    {buyingSection === activeSection.id ? (
-                      <span className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Purchasing...</span>
-                    ) : (
-                      `Unlock for $${activeSection.price || 0}`
-                    )}
-                  </button>
-                ) : (
-                  <div>
-                    <p className="text-sm text-red-500 font-medium mb-3">Insufficient balance. Please top up your wallet.</p>
-                    <Link href="/dashboard/wallet" className="block w-full bg-text hover:bg-text/90 text-white font-bold py-4 rounded-xl text-center transition-colors">
-                      Go to Wallet
+                <div className="space-y-4">
+                  {/* Option 1: Individual Topic Purchase */}
+                  {activeTopicPrice > 0 && (
+                    <div className="border border-emerald-200 bg-emerald-50/40 rounded-2xl p-4 text-left">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                            Individual Lesson
+                          </span>
+                          <h4 className="text-sm font-bold text-text mt-1">{activeTopic.title}</h4>
+                          <p className="text-xs text-text/60 mt-0.5">Unlock all videos, worksheets, and quizzes in this lesson.</p>
+                        </div>
+                        <div className="text-right shrink-0 ml-3">
+                          <span className="text-xl font-black text-emerald-600">£{activeTopicPrice}</span>
+                        </div>
+                      </div>
+
+                      {walletBalance >= activeTopicPrice ? (
+                        <button
+                          onClick={() => purchaseTopic(activeTopic)}
+                          disabled={buyingTopic === activeTopic.id}
+                          className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all shadow-md shadow-emerald-600/20 hover:-translate-y-0.5 disabled:opacity-50 text-sm flex items-center justify-center gap-2"
+                        >
+                          {buyingTopic === activeTopic.id ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" /> Purchasing Lesson...
+                            </>
+                          ) : (
+                            `Unlock Lesson for £${activeTopicPrice}`
+                          )}
+                        </button>
+                      ) : (
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <span className="text-xs text-red-500 font-medium">Insufficient balance</span>
+                          <Link href="/dashboard/wallet" className="text-xs font-bold text-emerald-700 hover:underline">
+                            Top up wallet &rarr;
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Option 2: Full Section Purchase */}
+                  {activeSectionPrice > 0 && (
+                    <div className="border border-primary/20 bg-primary/5 rounded-2xl p-4 text-left">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                            Full Section Access
+                          </span>
+                          <h4 className="text-sm font-bold text-text mt-1">{activeSection.title}</h4>
+                          <p className="text-xs text-text/60 mt-0.5">Unlock all {activeSection.topics?.length || 0} lessons in this entire section.</p>
+                        </div>
+                        <div className="text-right shrink-0 ml-3">
+                          <span className="text-xl font-black text-primary">£{activeSectionPrice}</span>
+                        </div>
+                      </div>
+
+                      {walletBalance >= activeSectionPrice ? (
+                        <button
+                          onClick={() => purchaseSection(activeSection)}
+                          disabled={buyingSection === activeSection.id}
+                          className="w-full mt-3 bg-primary hover:bg-primary/90 text-white font-bold py-2.5 px-4 rounded-xl transition-all shadow-md shadow-primary/20 hover:-translate-y-0.5 disabled:opacity-50 text-sm flex items-center justify-center gap-2"
+                        >
+                          {buyingSection === activeSection.id ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" /> Purchasing Section...
+                            </>
+                          ) : (
+                            `Unlock Full Section for £${activeSectionPrice}`
+                          )}
+                        </button>
+                      ) : (
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <span className="text-xs text-red-500 font-medium">Insufficient balance</span>
+                          <Link href="/dashboard/wallet" className="text-xs font-bold text-primary hover:underline">
+                            Top up wallet &rarr;
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {walletBalance < Math.min(...[activeTopicPrice > 0 ? activeTopicPrice : Infinity, activeSectionPrice > 0 ? activeSectionPrice : Infinity]) && (
+                  <div className="mt-5">
+                    <Link href="/dashboard/wallet" className="block w-full bg-text hover:bg-text/90 text-white font-bold py-3.5 rounded-xl text-center transition-colors text-sm">
+                      Go to Wallet & Top Up
                     </Link>
                   </div>
                 )}
-                
-                <p className="text-[11px] text-text/30 mt-4">{activeSection.topics?.length || 0} topics included</p>
               </div>
             </div>
           ) : activeTopic ? (() => {

@@ -285,13 +285,20 @@ export default function CourseSalesClient({ course }: { course: any }) {
                                   <span className="text-text font-medium">{topic.title}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  {idx === 0 ? (
-                                    <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">Free Intro</span>
-                                  ) : section.price > 0 ? (
-                                    <span className="text-xs font-bold text-text/60 bg-gray-100 px-2 py-1 rounded">${section.price}</span>
-                                  ) : (
-                                    <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">Free</span>
-                                  )}
+                                  {(() => {
+                                    const rawPrice = topic.price !== undefined && topic.price !== null ? parseFloat(topic.price) : 0;
+                                    const tPrice = !isNaN(rawPrice) && rawPrice > 0 ? rawPrice : 0;
+                                    if (tPrice > 0) {
+                                      return <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded">£{tPrice}</span>;
+                                    }
+                                    if (idx === 0) {
+                                      return <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">Free Intro</span>;
+                                    }
+                                    if (section.price > 0) {
+                                      return <span className="text-xs font-bold text-text/60 bg-gray-100 px-2 py-1 rounded">£{section.price}</span>;
+                                    }
+                                    return <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">Free</span>;
+                                  })()}
                                   <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded">Locked</span>
                                 </div>
                               </div>

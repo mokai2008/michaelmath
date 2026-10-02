@@ -163,11 +163,15 @@ export default function AdminCourseEditor() {
 
             let items: any[] = [];
             let metaWeight: any = null;
+            let metaPrice: any = null;
             if (Array.isArray(topic.content_items) && topic.content_items.length > 0) {
               const realContentItems = topic.content_items.filter((it: any) => {
                 if (it?.__topic_meta) {
                   if (it.progress_percentage !== undefined && it.progress_percentage !== null) {
                     metaWeight = it.progress_percentage;
+                  }
+                  if (it.price !== undefined && it.price !== null) {
+                    metaPrice = it.price;
                   }
                   return false;
                 }
@@ -234,10 +238,15 @@ export default function AdminCourseEditor() {
               ? topic.progress_percentage
               : (metaWeight !== null ? metaWeight : '');
 
+            const resolvedPrice = (topic.price !== undefined && topic.price !== null && topic.price !== '')
+              ? topic.price
+              : (metaPrice !== null ? metaPrice : 0);
+
             return {
               id: topic.id,
               title: topic.title,
               progress_percentage: resolvedWeight,
+              price: resolvedPrice,
               isExpanded: false,
               items
             };
@@ -300,6 +309,7 @@ export default function AdminCourseEditor() {
             id: newTopicId, 
             title: `Lesson ${newTopicId}: New Lesson`,
             progress_percentage: 0,
+            price: 0,
             isExpanded: true,
             items: []
           }]
@@ -334,6 +344,13 @@ export default function AdminCourseEditor() {
     setSections(sections.map(s => s.id === sectionId ? {
       ...s,
       topics: s.topics.map((t: any) => t.id === topicId ? { ...t, title } : t)
+    } : s));
+  };
+
+  const updateTopicPrice = (sectionId: string | number, topicId: string | number, price: number | string) => {
+    setSections(sections.map(s => s.id === sectionId ? {
+      ...s,
+      topics: s.topics.map((t: any) => t.id === topicId ? { ...t, price } : t)
     } : s));
   };
 
@@ -728,8 +745,9 @@ export default function AdminCourseEditor() {
         for (let tIdx = 0; tIdx < section.topics.length; tIdx++) {
           const topic = section.topics[tIdx];
           const rawWeight = parseFloat(String(topic.progress_percentage || 0)) || 0;
+          const rawPrice = parseFloat(String(topic.price || 0)) || 0;
           const items = (topic.items || []).filter((i: any) => !i?.__topic_meta);
-          const itemsWithMeta = [...items, { __topic_meta: true, progress_percentage: rawWeight }];
+          const itemsWithMeta = [...items, { __topic_meta: true, progress_percentage: rawWeight, price: rawPrice }];
           const firstVideo = items.find((i: any) => i.type === 'video');
 
           const topicPayload: any = {
@@ -738,28 +756,31 @@ export default function AdminCourseEditor() {
             order_index: tIdx,
             youtube_url: firstVideo?.url || '',
             content_items: itemsWithMeta,
-            progress_percentage: rawWeight
+            progress_percentage: rawWeight,
+            price: rawPrice
           };
           
           let dbTopicId = topic.id;
           if (typeof topic.id === 'string') {
              // Update existing
              let { error: tErr } = await supabase.from('topics').update(topicPayload).eq('id', topic.id);
-             if (tErr && (tErr.message?.includes('content_items') || tErr.message?.includes('progress_percentage'))) {
+             if (tErr && (tErr.message?.includes('content_items') || tErr.message?.includes('progress_percentage') || tErr.message?.includes('price'))) {
                if (tErr.message?.includes('content_items')) delete topicPayload.content_items;
                if (tErr.message?.includes('progress_percentage')) delete topicPayload.progress_percentage;
+               if (tErr.message?.includes('price')) delete topicPayload.price;
                await supabase.from('topics').update(topicPayload).eq('id', topic.id);
              }
           } else {
              // Insert new
              let { data, error: tErr } = await supabase.from('topics').insert(topicPayload).select().single();
-             if (tErr && (tErr.message?.includes('content_items') || tErr.message?.includes('progress_percentage'))) {
+             if (tErr && (tErr.message?.includes('content_items') || tErr.message?.includes('progress_percentage') || tErr.message?.includes('price'))) {
                if (tErr.message?.includes('content_items')) delete topicPayload.content_items;
                if (tErr.message?.includes('progress_percentage')) delete topicPayload.progress_percentage;
+               if (tErr.message?.includes('price')) delete topicPayload.price;
                const retry = await supabase.from('topics').insert(topicPayload).select().single();
                data = retry.data;
              }
-             dbTopicId = data.id;
+             dbTopicId = data?.id;
           }
 
           // Handle PDFs (sync to topic_pdfs for backwards compatibility & submission tracking)
@@ -1111,6 +1132,21 @@ export default function AdminCourseEditor() {
                             className="w-11 text-center text-xs font-black text-primary bg-transparent outline-none"
                           />
                           <span className="text-xs font-black text-text/50">%</span>
+                        </div>
+
+                        {/* Lesson Price Input */}
+                        <div className="flex items-center bg-slate-100 hover:bg-slate-200/80 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500 border border-gray-200 rounded-lg px-2.5 py-1 transition-all" title="Individual purchase price for this lesson (£ 0 = Included / Free)">
+                          <span className="text-[11px] font-bold text-text/60 mr-1">Price:</span>
+                          <span className="text-xs font-black text-emerald-600 mr-0.5">£</span>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            step="0.5" 
+                            value={topic.price !== undefined && topic.price !== null ? topic.price : ''} 
+                            onChange={(e) => updateTopicPrice(section.id, topic.id, e.target.value)} 
+                            placeholder="0" 
+                            className="w-12 text-center text-xs font-black text-emerald-600 bg-transparent outline-none" 
+                          />
                         </div>
 
                         <span className="text-xs font-semibold text-text/50 bg-gray-100 px-2.5 py-1 rounded-full border border-gray-200">
