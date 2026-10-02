@@ -25,7 +25,15 @@ interface StudentPerformance {
   enrolledCourses: number;
   quizDetails: any[];
   homeworkDetails: any[];
-  videoDetails: any[];
+  videoDetails: {
+    id: string;
+    topicId: string;
+    topicTitle: string;
+    courseTitle?: string | null;
+    courseId?: string;
+    serverIndex: number;
+    createdAt: string;
+  }[];
 }
 
 export default function PerformancePage() {
@@ -109,6 +117,30 @@ export default function PerformancePage() {
           .in('student_id', studentIds)
       ]);
 
+      // Fetch all unique topics directly by ID to ensure accurate titles everywhere
+      const allTopicIds = Array.from(new Set([
+        ...(videoOpens || []).map(v => v.topic_id),
+        ...(worksheetSubs || []).map(w => w.topic_id),
+        ...(manualSubs || []).map(m => m.topic_id),
+        ...(quizSubs || []).map(q => (q as any).quizzes?.topic_id || (q as any).topic_id),
+        ...(topicProgress || []).map(t => t.topic_id),
+      ].filter(Boolean)));
+
+      const topicsMap = new Map<string, { title: string; courseTitle?: string }>();
+      if (allTopicIds.length > 0) {
+        const { data: tList } = await supabase
+          .from('topics')
+          .select('id, title, sections:section_id (title, courses:course_id (title))')
+          .in('id', allTopicIds);
+
+        (tList || []).forEach((t: any) => {
+          topicsMap.set(t.id, {
+            title: t.title || 'Topic Lesson',
+            courseTitle: t.sections?.courses?.title || null
+          });
+        });
+      }
+
       // Build per-student performance
       const performances: StudentPerformance[] = students.map(student => {
         const sid = student.id;
@@ -126,7 +158,7 @@ export default function PerformancePage() {
         const hwDetails = [
           ...(worksheetSubs || []).filter(w => w.student_id === sid).map(w => ({
             id: w.id,
-            topicTitle: (w as any).topics?.title || 'Unknown',
+            topicTitle: topicsMap.get(w.topic_id)?.title || (w as any).topics?.title || 'Worksheet',
             submittedAt: w.submitted_at,
             status: 'submitted' as string,
             score: null as number | null,
@@ -135,7 +167,7 @@ export default function PerformancePage() {
           })),
           ...(manualSubs || []).filter(m => m.student_id === sid && m.type === 'worksheet').map(m => ({
             id: m.id,
-            topicTitle: (m as any).topics?.title || 'Unknown',
+            topicTitle: topicsMap.get(m.topic_id)?.title || (m as any).topics?.title || 'Worksheet',
             submittedAt: m.submitted_at,
             status: m.status,
             score: m.score,
@@ -169,20 +201,23 @@ export default function PerformancePage() {
 
         // Quiz details
         const quizDetails = [
-          ...studentQuizSubs.map(q => ({
-            id: q.id,
-            topicTitle: (q as any).quizzes?.topics?.title || (q as any).quizzes?.title || 'Unknown',
-            quizTitle: (q as any).quizzes?.title || 'Quiz',
-            submittedAt: q.submitted_at,
-            score: q.score,
-            totalMarks: (q as any).quizzes?.total_marks || 0,
-            passingScore: (q as any).quizzes?.passing_score || 70,
-            pct: Math.round((q.score / ((q as any).quizzes?.total_marks || 1)) * 100),
-            source: 'quiz_submissions'
-          })),
+          ...studentQuizSubs.map(q => {
+            const topId = (q as any).quizzes?.topic_id || (q as any).topic_id;
+            return {
+              id: q.id,
+              topicTitle: (topId ? topicsMap.get(topId)?.title : null) || (q as any).quizzes?.topics?.title || (q as any).quizzes?.title || 'Quiz Evaluation',
+              quizTitle: (q as any).quizzes?.title || 'Quiz',
+              submittedAt: q.submitted_at,
+              score: q.score,
+              totalMarks: (q as any).quizzes?.total_marks || 0,
+              passingScore: (q as any).quizzes?.passing_score || 70,
+              pct: Math.round((q.score / ((q as any).quizzes?.total_marks || 1)) * 100),
+              source: 'quiz_submissions'
+            };
+          }),
           ...(manualSubs || []).filter(m => m.student_id === sid && m.type === 'pdf_quiz').map(m => ({
             id: m.id,
-            topicTitle: (m as any).topics?.title || 'Unknown',
+            topicTitle: topicsMap.get(m.topic_id)?.title || (m as any).topics?.title || 'PDF Quiz',
             quizTitle: 'PDF Quiz',
             submittedAt: m.submitted_at,
             score: m.score,
@@ -201,16 +236,21 @@ export default function PerformancePage() {
         // Enrollments
         const studentEnrollments = (enrollments || []).filter(e => e.student_id === sid).length;
 
-        // Video details
+        // Video details with resolved topic title and course title
         const videoDetails = studentVideos
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .map(v => ({
-            id: v.id,
-            topicId: v.topic_id,
-            courseId: v.course_id,
-            serverIndex: v.server_index,
-            createdAt: v.created_at
-          }));
+          .map(v => {
+            const topicInfo = v.topic_id ? topicsMap.get(v.topic_id) : null;
+            return {
+              id: v.id,
+              topicId: v.topic_id,
+              topicTitle: topicInfo?.title || 'Video Lesson',
+              courseTitle: topicInfo?.courseTitle || null,
+              courseId: v.course_id,
+              serverIndex: v.server_index,
+              createdAt: v.created_at
+            };
+          });
 
         return {
           id: sid,
@@ -553,13 +593,20 @@ export default function PerformancePage() {
                     ) : (
                       <div className="space-y-2 max-h-[45vh] overflow-y-auto">
                         {selectedStudent.videoDetails.map((v, i) => (
-                          <div key={v.id || i} className="flex items-center gap-3 p-3 rounded-xl bg-purple-50/30 border border-purple-100/50">
-                            <PlayCircle className="w-5 h-5 text-purple-400 flex-shrink-0" />
+                          <div key={v.id || i} className="flex items-center gap-3 p-3.5 rounded-xl bg-purple-50/40 border border-purple-100 hover:border-purple-200 transition-colors">
+                            <PlayCircle className="w-5 h-5 text-purple-600 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-text">Server {v.serverIndex + 1}</div>
-                              <div className="text-[10px] text-text/40">Topic: {v.topicId?.slice(0, 8)}...</div>
+                              <div className="text-sm font-bold text-text truncate">{v.topicTitle}</div>
+                              <div className="text-xs text-text/50 flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded text-[10px]">
+                                  Server {v.serverIndex + 1}
+                                </span>
+                                {v.courseTitle && (
+                                  <span className="text-[11px] text-text/50 truncate">• {v.courseTitle}</span>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-[10px] text-text/40 whitespace-nowrap">{formatDate(v.createdAt)}</span>
+                            <span className="text-[11px] text-text/40 whitespace-nowrap flex-shrink-0">{formatDate(v.createdAt)}</span>
                           </div>
                         ))}
                       </div>
