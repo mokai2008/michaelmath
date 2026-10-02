@@ -15,6 +15,8 @@ export function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [session, setSession] = useState<any>(null);
+  const [isAiBlocked, setIsAiBlocked] = useState(false);
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hi! I am the Michael Gad Math AI Assistant. How can I help you with your studies today?' }
   ]);
@@ -32,7 +34,21 @@ export function ChatBot() {
   useEffect(() => {
     import('@/lib/supabase').then(({ supabase }) => {
       supabase.auth.getSession().then(({ data }) => {
-        if (data.session) setSession(data.session);
+        if (data.session) {
+          setSession(data.session);
+          // Check student profile for AI permissions
+          supabase
+            .from('profiles')
+            .select('ai_enabled, ai_disabled_reason')
+            .eq('id', data.session.user.id)
+            .maybeSingle()
+            .then(({ data: profile }) => {
+              if (profile && profile.ai_enabled === false) {
+                setIsAiBlocked(true);
+                setBlockedReason(profile.ai_disabled_reason || 'AI Assistant access has been disabled for your account by the instructor.');
+              }
+            });
+        }
       });
     });
   }, []);
@@ -65,6 +81,11 @@ export function ChatBot() {
     e.preventDefault();
     if (!input.trim() && !attachedImage) return;
 
+    if (isAiBlocked) {
+      alert("AI Assistant access is currently disabled for your account. Please contact Michael Gad for help.");
+      return;
+    }
+
     const userMessage = { role: 'user', content: input, image: attachedImage };
     setMessages(prev => [...prev, userMessage]);
     setInput("");
@@ -93,16 +114,35 @@ export function ChatBot() {
         }),
       });
 
-      if (!response.ok) throw new Error('API Error');
-
       const data = await response.json();
+
+      if (response.status === 403 || data.ai_disabled) {
+        setIsAiBlocked(true);
+        setBlockedReason(data.error || 'AI Assistant access has been disabled for your account by the instructor.');
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `🔒 ${data.error || 'AI Assistant access has been disabled for your account by the instructor. Please contact Michael Gad for assistance.'}`
+        }]);
+        return;
+      }
+
+      if (response.status === 429 || data.limit_reached) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⏳ ${data.error || 'You have reached your daily question limit.'}`
+        }]);
+        return;
+      }
+
+      if (!response.ok) throw new Error(data.error || 'API Error');
+
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply, model: data.model }]);
       if (data.chatId && !chatId) {
         setChatId(data.chatId);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting right now." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: error?.message || "Sorry, I'm having trouble connecting right now." }]);
     } finally {
       setIsTyping(false);
     }
@@ -112,12 +152,21 @@ export function ChatBot() {
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        title="Ask Michael's AI Assistant"
-        aria-label="Ask Michael's AI Assistant"
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-tr from-primary to-green-400 rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-110 transition-transform z-50 group"
+        title={isAiBlocked ? "AI Assistant (Access Paused)" : "Ask Michael's AI Assistant"}
+        aria-label={isAiBlocked ? "AI Assistant (Access Paused)" : "Ask Michael's AI Assistant"}
+        className={`fixed bottom-6 right-6 w-14 h-14 ${
+          isAiBlocked 
+            ? 'bg-gradient-to-tr from-gray-600 to-gray-400' 
+            : 'bg-gradient-to-tr from-primary to-green-400'
+        } rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-110 transition-transform z-50 group`}
       >
         <Sparkles className="w-6 h-6 group-hover:hidden" />
         <MessageSquare className="w-6 h-6 hidden group-hover:block" />
+        {isAiBlocked && (
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-2 border-white rounded-full flex items-center justify-center text-[10px] font-bold">
+            !
+          </span>
+        )}
       </button>
     );
   }
@@ -125,17 +174,19 @@ export function ChatBot() {
   return (
     <div className="fixed bottom-6 right-6 w-full max-w-[400px] h-[560px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-100 overflow-hidden">
       {/* Header */}
-      <div className="bg-primary p-4 flex items-center justify-between text-white">
+      <div className={`${isAiBlocked ? 'bg-slate-800' : 'bg-primary'} p-4 flex items-center justify-between text-white transition-colors`}>
         <div className="flex items-center gap-3">
           <div className="relative">
             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
               <BrainCircuit className="w-6 h-6" />
             </div>
-            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 border-2 border-primary rounded-full"></div>
+            <div className={`absolute bottom-0 right-0 w-3 h-3 ${isAiBlocked ? 'bg-red-400' : 'bg-green-400'} border-2 ${isAiBlocked ? 'border-slate-800' : 'border-primary'} rounded-full`}></div>
           </div>
           <div>
             <h3 className="font-bold text-sm leading-tight">Math AI Assistant</h3>
-            <span className="text-xs text-white/80">Online | Claude & ChatGPT Engine</span>
+            <span className="text-xs text-white/80">
+              {isAiBlocked ? 'Access Paused by Instructor' : 'Online | Claude & ChatGPT Engine'}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -148,10 +199,23 @@ export function ChatBot() {
         </div>
       </div>
 
+      {/* Disabled Banner Notice if stopped by instructor */}
+      {isAiBlocked && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-2.5 text-xs text-red-800 flex items-start gap-2">
+          <span className="text-base leading-none">🔒</span>
+          <div>
+            <p className="font-bold">AI Assistant Paused</p>
+            <p className="text-[11px] text-red-700/90 leading-tight mt-0.5">
+              {blockedReason || 'Your AI Assistant access has been paused by the instructor. Contact Michael Gad for help.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 bg-background-alt space-y-4">
-        {/* Quick Prompts - Show only if few messages */}
-        {messages.length === 1 && (
+        {/* Quick Prompts - Show only if few messages and not blocked */}
+        {!isAiBlocked && messages.length === 1 && (
           <div className="flex flex-wrap gap-2 mb-6">
             {["What should I study today?", "How do I top up my wallet?", "Explain algebra basics"].map((chip, i) => (
               <button 
@@ -216,12 +280,15 @@ export function ChatBot() {
             accept="image/*" 
             ref={fileInputRef} 
             onChange={handleFileChange} 
+            disabled={isAiBlocked}
             className="hidden" 
           />
           <button 
             type="button" 
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-400 hover:text-primary transition-colors flex-shrink-0"
+            disabled={isAiBlocked}
+            className="p-2 text-gray-400 hover:text-primary transition-colors flex-shrink-0 disabled:opacity-40 disabled:hover:text-gray-400"
+            title={isAiBlocked ? "AI disabled" : "Attach image"}
           >
             <Paperclip className="w-5 h-5" />
           </button>
@@ -229,27 +296,30 @@ export function ChatBot() {
             <textarea 
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              disabled={isAiBlocked}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSend(e);
                 }
               }}
-              placeholder="Ask a math question..."
-              className="w-full max-h-32 bg-transparent p-3 text-sm outline-none resize-none"
+              placeholder={isAiBlocked ? "AI access is paused for your account..." : "Ask a math question..."}
+              className="w-full max-h-32 bg-transparent p-3 text-sm outline-none resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
               rows={1}
             />
           </div>
           <button 
             type="submit"
-            disabled={!input.trim() || isTyping}
-            className="p-3 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 transition-colors"
+            disabled={!input.trim() || isTyping || isAiBlocked}
+            className="p-3 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 transition-colors"
           >
             <Send className="w-5 h-5" />
           </button>
         </form>
         <div className="text-center mt-2">
-          <span className="text-[10px] text-gray-400">Powered by Claude 3.7 & ChatGPT</span>
+          <span className="text-[10px] text-gray-400">
+            {isAiBlocked ? 'Access managed by Michael Gad' : 'Powered by Claude 3.7 & ChatGPT'}
+          </span>
         </div>
       </div>
     </div>

@@ -20,10 +20,18 @@ export interface ChatMessage {
   image?: string | null;
 }
 
+export interface AIUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCostCents: number;
+}
+
 export interface AIResponse {
   reply: string;
   provider: 'claude' | 'gpt' | 'mock';
   model: string;
+  usage: AIUsage;
 }
 
 // Global toggle memory for round-robin balancing
@@ -93,7 +101,13 @@ export async function generateAIResponse({
   return {
     reply: "API Key Notice: Please configure `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in your `.env.local` file to enable live AI responses from Claude or ChatGPT.",
     provider: 'mock',
-    model: 'Demo Mode'
+    model: 'Demo Mode',
+    usage: {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      estimatedCostCents: 0,
+    },
   };
 }
 
@@ -152,10 +166,22 @@ async function callClaude(messages: ChatMessage[], systemPrompt: string): Promis
   const textBlocks = response.content.filter(block => block.type === 'text');
   const replyText = textBlocks.map(b => (b as any).text).join('\n') || 'No response text received from Claude.';
 
+  const promptTokens = response.usage?.input_tokens || 0;
+  const completionTokens = response.usage?.output_tokens || 0;
+  const totalTokens = promptTokens + completionTokens;
+  // Claude 3.7 Sonnet: $3/M in, $15/M out => (input * 0.0003 + output * 0.0015) cents
+  const estimatedCostCents = Number((promptTokens * 0.0003 + completionTokens * 0.0015).toFixed(4));
+
   return {
     reply: replyText,
     provider: 'claude',
     model: 'Claude 3.7 Sonnet',
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      estimatedCostCents,
+    },
   };
 }
 
@@ -197,9 +223,21 @@ async function callOpenAI(messages: ChatMessage[], systemPrompt: string): Promis
 
   const replyText = response.choices[0]?.message?.content || 'No response text received from OpenAI.';
 
+  const promptTokens = response.usage?.prompt_tokens || 0;
+  const completionTokens = response.usage?.completion_tokens || 0;
+  const totalTokens = response.usage?.total_tokens || (promptTokens + completionTokens);
+  // GPT-4o: $2.50/M in, $10/M out => (input * 0.00025 + output * 0.0010) cents
+  const estimatedCostCents = Number((promptTokens * 0.00025 + completionTokens * 0.0010).toFixed(4));
+
   return {
     reply: replyText,
     provider: 'gpt',
     model: 'GPT-4o',
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      estimatedCostCents,
+    },
   };
 }

@@ -7,8 +7,11 @@ import {
   Send,
   Video,
   Server,
-  Eye
+  Eye,
+  Sparkles,
+  MessageSquare
 } from "lucide-react";
+import Link from "next/link";
 import { 
   BarChart, 
   Bar, 
@@ -30,7 +33,9 @@ export default function AdminStatsPage() {
     totalRevenue: 0,
     avgTimeSpent: "0h 0m",
     newStudents: 0,
-    totalVideoOpens: 0
+    totalVideoOpens: 0,
+    totalAiMessages: 0,
+    totalAiTokens: 0,
   });
 
   const [performanceData, setPerformanceData] = useState<any[]>([]);
@@ -89,13 +94,27 @@ export default function AdminStatsPage() {
 
         setServerOpensData(chartData);
       }
+
+      // 5. AI Chat Messages & Usage
+      const { data: chatLogs } = await supabase
+        .from('chat_logs')
+        .select('messages, total_messages, total_tokens');
+
+      let totalAiMsgs = 0;
+      let totalAiToks = 0;
+      chatLogs?.forEach((c: any) => {
+        totalAiMsgs += (c.total_messages || c.messages?.length || 0);
+        totalAiToks += (c.total_tokens || (c.messages?.length || 0) * 120);
+      });
       
       setStats({
         totalStudents: studentCount || 0,
         newStudents: newCount || 0,
         avgTimeSpent: `${hours}h ${minutes}m`,
         totalRevenue: 0,
-        totalVideoOpens: totalOpens
+        totalVideoOpens: totalOpens,
+        totalAiMessages: totalAiMsgs,
+        totalAiTokens: totalAiToks,
       });
     };
     fetchStats();
@@ -114,52 +133,65 @@ export default function AdminStatsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-6 mb-6 md:mb-8">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-            <Users className="w-6 h-6 text-blue-500" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-6 md:mb-8">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+            <Users className="w-5 h-5 text-blue-500" />
           </div>
           <div>
-            <div className="text-text/60 text-sm font-medium">Total Students</div>
-            <div className="text-2xl font-bold text-text">{stats.totalStudents}</div>
+            <div className="text-text/60 text-xs font-medium">Students</div>
+            <div className="text-xl font-bold text-text">{stats.totalStudents}</div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
-            <CreditCard className="w-6 h-6 text-green-500" />
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
+            <CreditCard className="w-5 h-5 text-green-500" />
           </div>
           <div>
-            <div className="text-text/60 text-sm font-medium">Total Revenue</div>
-            <div className="text-2xl font-bold text-text">£{stats.totalRevenue}</div>
+            <div className="text-text/60 text-xs font-medium">Revenue</div>
+            <div className="text-xl font-bold text-text">£{stats.totalRevenue}</div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-            <Clock className="w-6 h-6 text-purple-500" />
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+            <Clock className="w-5 h-5 text-purple-500" />
           </div>
           <div>
-            <div className="text-text/60 text-sm font-medium">Avg. Time Spent/Wk</div>
-            <div className="text-2xl font-bold text-text">{stats.avgTimeSpent}</div>
+            <div className="text-text/60 text-xs font-medium">Avg. Study/Wk</div>
+            <div className="text-xl font-bold text-text">{stats.avgTimeSpent}</div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
-            <Users className="w-6 h-6 text-orange-500" />
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
+            <Users className="w-5 h-5 text-orange-500" />
           </div>
           <div>
-            <div className="text-text/60 text-sm font-medium">New This Week</div>
-            <div className="text-2xl font-bold text-text">{stats.newStudents}</div>
+            <div className="text-text/60 text-xs font-medium">New / Week</div>
+            <div className="text-xl font-bold text-text">{stats.newStudents}</div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 col-span-2 sm:col-span-1">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-            <Eye className="w-6 h-6 text-amber-500" />
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+            <Eye className="w-5 h-5 text-amber-500" />
           </div>
           <div>
-            <div className="text-text/60 text-sm font-medium">Total Video Opens</div>
-            <div className="text-2xl font-bold text-text">{stats.totalVideoOpens}</div>
+            <div className="text-text/60 text-xs font-medium">Video Opens</div>
+            <div className="text-xl font-bold text-text">{stats.totalVideoOpens}</div>
           </div>
         </div>
+        <Link 
+          href="/admin/chat-logs"
+          className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all flex items-center gap-3 group"
+          title="Click to view AI Chat Logs & Token Usage"
+        >
+          <div className="w-11 h-11 rounded-xl bg-purple-50 group-hover:bg-purple-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Sparkles className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <div className="text-text/60 text-xs font-medium group-hover:text-purple-700 transition-colors">AI Queries</div>
+            <div className="text-xl font-bold text-purple-700">{stats.totalAiMessages}</div>
+          </div>
+        </Link>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 md:gap-8 mb-6 md:mb-8">

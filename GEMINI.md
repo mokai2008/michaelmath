@@ -19,9 +19,9 @@ Build a premium, fully functional LMS web platform. The tech stack is Next.js 14
 **Features Implemented:**
 - **Public:** Homepage, Courses directory (with keyword filtering and search), About.
 - **Auth:** Supabase Auth login/signup.
-- **Admin Dashboard:** Overview Stats (with Video Opens per Server chart and Total Video Opens KPI), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Student Management (interactive student analytics modal with enrolled courses progress, completed lessons history, uploaded/reviewed worksheets with scores and feedback, quiz attempts, editable student/parent WhatsApp numbers, and 1-click WhatsApp progress report generator), Live Sessions (Scheduling, Requests), Chat Logs, Settings.
+- **Admin Dashboard:** Overview Stats (with Video Opens per Server chart, Total Video Opens KPI, and Total AI Queries), Course Builder (CRUD sections/topics/quizzes, PDF/Video uploads, Keywords, per-server mirror open badges), Student Management (interactive student analytics modal with enrolled courses progress, completed lessons history, uploaded/reviewed worksheets with scores and feedback, quiz attempts, editable student/parent WhatsApp numbers, 1-click WhatsApp progress report generator, and dedicated AI Assistant tab with usage metrics, question quota controls, and 1-click Stop/Enable AI access toggle), Live Sessions (Scheduling, Requests), AI Chat Logs (live monitor with total messages, token consumption, est. API cost, active vs paused student breakdown, filtering, and 1-click AI stop/enable controls), Settings.
 - **Student Dashboard:** Enrolled Courses, Course Player (with seamless background video server open logging, student view clean with no open counts exposed), Wallet (balance/transactions), Live Sessions (Invitations, Booking), Notifications, Reminders, Profile.
-- **AI Chatbot:** Basic API route and widget exist.
+- **AI Chatbot & Token Tracking Engine:** Dual-model balancer (Claude 3.7 Sonnet & GPT-4o) with prompt & completion token accounting, cost calculations, student quota management, instant instructor lockout enforcement (403 block preventing API calls and token waste), and real-time locked-out UI with notification banners.
 
 ### 3. Immediate Next Steps
 The following features still need implementation. Ask me which one to tackle first:

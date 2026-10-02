@@ -20,8 +20,14 @@ import {
   Save,
   MessageSquare,
   ShieldAlert,
-  Wallet
+  Wallet,
+  Sparkles,
+  Ban,
+  Zap,
+  Plus,
+  Trash2
 } from "lucide-react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { DownloadReportButton } from "@/components/reports/DownloadReportButton";
 import { ReportPreviewModal } from "@/components/reports/ReportPreviewModal";
@@ -41,16 +47,41 @@ function generateWhatsAppReport(student: any): string {
   const email = student.email || 'N/A';
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
-  let text = `🎓 *Michael Gad Math Academy - Student Progress Report*\n`;
-  text += `-----------------------------------------------\n`;
-  text += `👤 *Student:* ${name} (Code: ${code})\n`;
-  text += `📧 *Email:* ${email}\n`;
-  text += `📅 *Report Date:* ${dateStr}\n\n`;
+  let text = `🎓 *Michael Gad Math Academy*\n`;
+  text += `📋 *Comprehensive Student Progress Report*\n`;
+  text += `═══════════════════════════════════\n\n`;
 
-  // Enrolled Courses & Progress
+  // Student Info
+  text += `👤 *Student Information:*\n`;
+  text += `• *Name:* ${name}\n`;
+  text += `• *Code:* ${code}\n`;
+  text += `• *Email:* ${email}\n`;
+  if (student.student_whatsapp) text += `• *Student Phone:* ${student.student_whatsapp}\n`;
+  if (student.parent_whatsapp) text += `• *Parent Phone:* ${student.parent_whatsapp}\n`;
+  text += `• *Wallet Balance:* $${(student.wallet_balance || 0).toFixed(2)}\n`;
+  text += `• *Report Date:* ${dateStr}\n\n`;
+
+  // Overall Summary Stats
+  const totalCompleted = student.topic_progress?.filter((tp: any) => tp.is_completed)?.length || 0;
+  let totalSecs = 0;
+  student.topic_progress?.forEach((tp: any) => totalSecs += (tp.time_spent_seconds || 0));
+  const enrollmentCount = student.enrollments?.length || 0;
+  const worksheetCount = student.manual_submissions?.length || 0;
+  const quizCount = student.quiz_submissions?.length || 0;
+
+  text += `📊 *Overall Summary:*\n`;
+  text += `───────────────────────────\n`;
+  text += `📚 Enrolled Courses: ${enrollmentCount}\n`;
+  text += `✅ Lessons Completed: ${totalCompleted}\n`;
+  text += `⏱️ Total Study Time: ${formatTime(totalSecs)}\n`;
+  text += `📝 Worksheets Submitted: ${worksheetCount}\n`;
+  text += `🧠 Quizzes Attempted: ${quizCount}\n\n`;
+
+  // Enrolled Courses & Progress (with section-level details)
   text += `📚 *Enrolled Courses & Progress:*\n`;
+  text += `───────────────────────────\n`;
   if (student.enrollments && student.enrollments.length > 0) {
-    student.enrollments.forEach((e: any) => {
+    student.enrollments.forEach((e: any, idx: number) => {
       const course = e.courses;
       if (course) {
         const courseTopics = course.sections?.flatMap((sec: any) => sec.topics || []) || [];
@@ -58,7 +89,24 @@ function generateWhatsAppReport(student: any): string {
           .filter((tp: any) => tp.is_completed)
           .map((tp: any) => tp.topic_id);
         const { progressPercentage, completedCount, totalCount } = calculateCourseProgress(courseTopics, completedIds);
-        text += `• *${course.title}*: ${progressPercentage}% completed (${completedCount}/${totalCount} lessons)\n`;
+        
+        const enrollDate = e.enrolled_at ? new Date(e.enrolled_at).toLocaleDateString("en-GB") : 'N/A';
+        const progressBar = generateProgressBar(progressPercentage);
+        
+        text += `\n${idx + 1}. *${course.title}*\n`;
+        text += `   ${progressBar} ${progressPercentage}%\n`;
+        text += `   📖 ${completedCount}/${totalCount} lessons completed\n`;
+        text += `   📅 Enrolled: ${enrollDate}\n`;
+        
+        // Show section breakdown
+        if (course.sections && course.sections.length > 0) {
+          course.sections.forEach((sec: any) => {
+            const secTopics = sec.topics || [];
+            const secCompleted = secTopics.filter((t: any) => completedIds.includes(t.id)).length;
+            const secIcon = secCompleted === secTopics.length && secTopics.length > 0 ? '✅' : secCompleted > 0 ? '🔄' : '⬜';
+            text += `   ${secIcon} ${sec.title}: ${secCompleted}/${secTopics.length} lessons\n`;
+          });
+        }
       }
     });
   } else {
@@ -66,46 +114,101 @@ function generateWhatsAppReport(student: any): string {
   }
   text += `\n`;
 
-  // Completed Lessons Summary
-  const totalCompleted = student.topic_progress?.filter((tp: any) => tp.is_completed)?.length || 0;
-  let totalSecs = 0;
-  student.topic_progress?.forEach((tp: any) => totalSecs += (tp.time_spent_seconds || 0));
-
-  text += `✅ *Total Lessons Completed:* ${totalCompleted} lessons\n`;
-  text += `⏱️ *Total Study Time:* ${formatTime(totalSecs)}\n\n`;
+  // Completed Lessons Detail
+  text += `✅ *Completed Lessons History:*\n`;
+  text += `───────────────────────────\n`;
+  const completedLessons = (student.topic_progress || []).filter((tp: any) => tp.is_completed);
+  if (completedLessons.length > 0) {
+    completedLessons.forEach((tp: any, idx: number) => {
+      const topicTitle = tp.topics?.title || 'Lesson';
+      const lastDate = tp.last_accessed_at ? new Date(tp.last_accessed_at).toLocaleDateString("en-GB") : 'N/A';
+      const timeSpent = formatTime(tp.time_spent_seconds);
+      text += `${idx + 1}. ✅ ${topicTitle}\n`;
+      text += `   ⏱️ Study time: ${timeSpent} • 📅 Last accessed: ${lastDate}\n`;
+    });
+  } else {
+    text += `• No completed lessons logged yet.\n`;
+  }
+  text += `\n`;
 
   // Worksheets & Submissions
-  text += `📝 *Worksheet Submissions:*\n`;
+  text += `📝 *Worksheet Submissions & Feedback:*\n`;
+  text += `───────────────────────────\n`;
   const submissions = student.manual_submissions || [];
   if (submissions.length > 0) {
-    submissions.slice(0, 5).forEach((sub: any) => {
+    submissions.forEach((sub: any, idx: number) => {
       const topicTitle = sub.topics?.title || 'Worksheet Assignment';
-      const statusStr = sub.status === 'reviewed' ? `Reviewed (Score: ${sub.score || 'N/A'})` : 'Pending Review';
-      const feedbackStr = sub.feedback ? ` - Feedback: "${sub.feedback}"` : '';
-      text += `• *${topicTitle}*: ${statusStr}${feedbackStr}\n`;
+      const submitDate = sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString("en-GB") : 'N/A';
+      
+      if (sub.status === 'reviewed') {
+        text += `${idx + 1}. ✅ *${topicTitle}*\n`;
+        text += `   📊 Score: *${sub.score || 'N/A'}*\n`;
+        if (sub.feedback) {
+          text += `   💬 Feedback: "${sub.feedback}"\n`;
+        }
+        text += `   📅 Submitted: ${submitDate}\n`;
+      } else {
+        text += `${idx + 1}. ⏳ *${topicTitle}*\n`;
+        text += `   Status: Pending Review\n`;
+        text += `   📅 Submitted: ${submitDate}\n`;
+      }
     });
   } else {
     text += `• No worksheet submissions yet.\n`;
   }
   text += `\n`;
 
-  // Quiz Scores
-  text += `📊 *Quiz Performance:*\n`;
+  // Quiz Performance
+  text += `🧠 *Quiz Performance & Results:*\n`;
+  text += `───────────────────────────\n`;
   const quizzes = student.quiz_submissions || [];
   if (quizzes.length > 0) {
-    quizzes.slice(0, 5).forEach((qs: any) => {
+    let totalScore = 0;
+    let totalMaxScore = 0;
+    let passCount = 0;
+
+    quizzes.forEach((qs: any, idx: number) => {
       const qTitle = qs.quizzes?.title || qs.quizzes?.topics?.title || 'Quiz';
-      const statusIcon = qs.passed ? '✅ Passed' : '❌ Failed';
-      text += `• *${qTitle}*: ${qs.score ?? 'N/A'}/${qs.quizzes?.total_marks || 100} (${statusIcon})\n`;
+      const totalMarks = qs.quizzes?.total_marks || 100;
+      const passingScore = qs.quizzes?.passing_score;
+      const scorePct = totalMarks > 0 ? Math.round(((qs.score ?? 0) / totalMarks) * 100) : 0;
+      const passed = passingScore != null ? (qs.score ?? 0) >= passingScore : scorePct >= 50;
+      const statusIcon = passed ? '✅ Passed' : '❌ Failed';
+      const quizDate = qs.submitted_at ? new Date(qs.submitted_at).toLocaleDateString("en-GB") : 'N/A';
+      
+      text += `${idx + 1}. *${qTitle}*\n`;
+      text += `   📊 Score: *${qs.score ?? 'N/A'}/${totalMarks}* (${scorePct}%) — ${statusIcon}\n`;
+      if (passingScore != null) {
+        text += `   🎯 Passing score: ${passingScore}/${totalMarks}\n`;
+      }
+      text += `   📅 Date: ${quizDate}\n`;
+
+      totalScore += (qs.score ?? 0);
+      totalMaxScore += totalMarks;
+      if (passed) passCount++;
     });
+
+    // Quiz Summary
+    const avgPct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+    text += `\n📈 *Quiz Summary:*\n`;
+    text += `   • Average Score: ${avgPct}%\n`;
+    text += `   • Pass Rate: ${passCount}/${quizzes.length} quizzes (${Math.round((passCount / quizzes.length) * 100)}%)\n`;
   } else {
     text += `• No quiz attempts yet.\n`;
   }
 
-  text += `\n-----------------------------------------------\n`;
-  text += `Thank you! For questions, reply to this message. 🚀`;
+  text += `\n═══════════════════════════════════\n`;
+  text += `📌 _This is an automated report generated by Michael Gad Math Academy LMS._\n`;
+  text += `💬 For questions, reply to this message.\n`;
+  text += `🌐 gadmaths.com 🚀`;
 
   return text;
+}
+
+function generateProgressBar(pct: number): string {
+  const filled = Math.round(pct / 10);
+  const empty = 10 - filled;
+  return '▓'.repeat(filled) + '░'.repeat(empty);
 }
 
 export default function AdminStudentsPage() {
@@ -114,7 +217,7 @@ export default function AdminStudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [activeTab, setActiveTab] = useState<"courses" | "lessons" | "worksheets" | "quizzes">("courses");
+  const [activeTab, setActiveTab] = useState<"courses" | "lessons" | "worksheets" | "quizzes" | "ai">("courses");
 
   // Editable WhatsApp Phone state
   const [studentPhoneInput, setStudentPhoneInput] = useState("");
@@ -123,9 +226,105 @@ export default function AdminStudentsPage() {
   const [copiedReport, setCopiedReport] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
+  // Student AI permission and daily limit controls
+  const [aiDailyLimitInput, setAiDailyLimitInput] = useState<string>("");
+  const [isTogglingAi, setIsTogglingAi] = useState(false);
+
+  // Academy course enrollment controls
+  const [allCourses, setAllCourses] = useState<any[]>([]);
+  const [selectedCourseToEnroll, setSelectedCourseToEnroll] = useState<string>("");
+  const [isEnrollingAll, setIsEnrollingAll] = useState(false);
+  const [isEnrollingSingle, setIsEnrollingSingle] = useState(false);
+
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  const handleEnrollAllFirstCourse = async () => {
+    if (!window.confirm("Enroll all registered students into the 1st academy course now?")) return;
+    setIsEnrollingAll(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/enroll-students", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ action: "enroll_all_first_course" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert(data.message || "All students enrolled in the 1st course successfully!");
+      await fetchStudents();
+      if (selectedStudent) {
+        await handleSelectStudent(selectedStudent);
+      }
+    } catch (err: any) {
+      alert("Failed to auto-enroll students: " + err.message);
+    } finally {
+      setIsEnrollingAll(false);
+    }
+  };
+
+  const handleEnrollSingle = async (courseId: string) => {
+    if (!selectedStudent || !courseId) return;
+    setIsEnrollingSingle(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/enroll-students", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: "enroll_single",
+          studentId: selectedStudent.id,
+          courseId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert("Student enrolled successfully!");
+      await handleSelectStudent(selectedStudent);
+      await fetchStudents();
+    } catch (err: any) {
+      alert("Failed to enroll student: " + err.message);
+    } finally {
+      setIsEnrollingSingle(false);
+    }
+  };
+
+  const handleUnenrollSingle = async (courseId: string) => {
+    if (!selectedStudent || !courseId) return;
+    if (!window.confirm("Are you sure you want to unenroll this student from this course?")) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/enroll-students", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: "unenroll_single",
+          studentId: selectedStudent.id,
+          courseId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      alert("Student unenrolled successfully.");
+      await handleSelectStudent(selectedStudent);
+      await fetchStudents();
+    } catch (err: any) {
+      alert("Failed to unenroll student: " + err.message);
+    }
+  };
 
   const fetchStudents = async () => {
     setIsLoading(true);
@@ -147,19 +346,91 @@ export default function AdminStudentsPage() {
         (p: any) => p.role !== "admin" && p.email !== "mokai2008@gmail.com"
       );
 
-      // 2. Fetch enrollments for all students
-      const { data: enrollmentsData } = await supabase
-        .from("enrollments")
-        .select("id, created_at, student_id, course_id, courses(id, title)");
+      // Fetch all academy courses for enrollment controls
+      try {
+        const { data: allCoursesData } = await supabase
+          .from("courses")
+          .select("id, title")
+          .order("created_at", { ascending: true });
+        if (allCoursesData && allCoursesData.length > 0) {
+          setAllCourses(allCoursesData);
+          setSelectedCourseToEnroll(prev => prev || allCoursesData[0].id);
+        }
+      } catch (cErr) {
+        console.warn("Could not fetch academy courses list:", cErr);
+      }
 
-      // Merge enrollments into student profiles
+      // 2. Fetch enrollments for all students with robust fallback
+      let enrollmentsData: any[] = [];
+      try {
+        const { data: rawEnrs, error: enrErr } = await supabase
+          .from("enrollments")
+          .select("id, enrolled_at, student_id, course_id");
+
+        if (!enrErr && rawEnrs && rawEnrs.length > 0) {
+          const cIds = Array.from(new Set(rawEnrs.map((e: any) => e.course_id).filter(Boolean)));
+          let coursesMap = new Map();
+          if (cIds.length > 0) {
+            const { data: cList } = await supabase
+              .from("courses")
+              .select("id, title")
+              .in("id", cIds);
+            coursesMap = new Map((cList || []).map((c: any) => [c.id, c]));
+          }
+          enrollmentsData = rawEnrs.map((e: any) => ({
+            ...e,
+            courses: coursesMap.get(e.course_id) || { id: e.course_id, title: "Course" }
+          }));
+        }
+      } catch (err) {
+        console.error("Error fetching enrollments:", err);
+      }
+
+      // Also check section_purchases to count courses students have partial/full section access to
+      try {
+        const { data: spList } = await supabase
+          .from("section_purchases")
+          .select("student_id, section_id, sections(course_id, courses(id, title))");
+
+        if (spList && spList.length > 0) {
+          spList.forEach((sp: any) => {
+            const cId = sp.sections?.course_id;
+            const cTitle = sp.sections?.courses?.title || "Enrolled Course";
+            if (cId && !enrollmentsData.some((e: any) => e.student_id === sp.student_id && e.course_id === cId)) {
+              enrollmentsData.push({
+                id: `sp_${sp.section_id}`,
+                student_id: sp.student_id,
+                course_id: cId,
+                courses: { id: cId, title: cTitle }
+              });
+            }
+          });
+        }
+      } catch (spErr) {
+        console.error("Error fetching section purchases:", spErr);
+      }
+
+      // 3. Fetch chat logs to count AI usage
+      const { data: chatsData } = await supabase
+        .from("chat_logs")
+        .select("student_id, messages, total_messages, total_tokens");
+
+      // Merge enrollments and AI stats into student profiles
       const merged = studentProfiles.map((student: any) => {
         const studentEnrs = (enrollmentsData || []).filter(
           (e: any) => e.student_id === student.id
         );
+        const studentChats = (chatsData || []).filter(
+          (c: any) => c.student_id === student.id
+        );
+        const totalAiMsgs = studentChats.reduce((acc: number, c: any) => {
+          return acc + (c.total_messages || c.messages?.length || 0);
+        }, 0);
+
         return {
           ...student,
-          enrollments: studentEnrs
+          enrollments: studentEnrs,
+          ai_message_count: totalAiMsgs,
         };
       });
 
@@ -175,70 +446,278 @@ export default function AdminStudentsPage() {
     setSelectedStudent(student);
     setStudentPhoneInput(student.student_whatsapp || "");
     setParentPhoneInput(student.parent_whatsapp || "");
+    setAiDailyLimitInput(
+      student.ai_daily_limit !== null && student.ai_daily_limit !== undefined 
+        ? String(student.ai_daily_limit) 
+        : ""
+    );
     setActiveTab("courses");
     setCopiedReport(false);
     setIsLoadingDetails(true);
 
     try {
       // 1. Fetch topic progress
-      const { data: tpData } = await supabase
+      const { data: tpData, error: tpErr } = await supabase
         .from("topic_progress")
-        .select("*, topics(id, title)")
+        .select("*, topics(id, title, section_id)")
         .eq("student_id", student.id);
+      if (tpErr) console.warn("Error fetching topic progress:", tpErr);
 
-      // 2. Fetch manual submissions
-      const { data: msData } = await supabase
+      // 2. Fetch manual submissions (worksheets and PDF quizzes)
+      const { data: msData, error: msErr } = await supabase
         .from("manual_submissions")
-        .select("*, topics(id, title)")
-        .eq("student_id", student.id);
+        .select("*, topics(id, title, section_id)")
+        .eq("student_id", student.id)
+        .order("submitted_at", { ascending: false });
+      if (msErr) console.warn("Error fetching manual submissions:", msErr);
 
-      // 3. Fetch quiz submissions
-      const { data: qsData } = await supabase
+      // Separate worksheets vs PDF quizzes
+      const allManualSubs = msData || [];
+      const worksheetsData = allManualSubs.filter((s: any) => s.type !== "pdf_quiz");
+      const pdfQuizzesData = allManualSubs.filter((s: any) => s.type === "pdf_quiz");
+
+      // 3. Fetch interactive quiz submissions with resilient fallback
+      let interactiveQuizSubs: any[] = [];
+      const { data: rawQs, error: qErr } = await supabase
         .from("quiz_submissions")
-        .select("*, quizzes(id, title, total_marks, passing_score, topic_id, topics(id, title))")
+        .select("*, quizzes(id, total_marks, passing_score, topic_id)")
+        .eq("student_id", student.id)
+        .order("submitted_at", { ascending: false });
+
+      if (qErr) {
+        console.warn("Retrying raw quiz_submissions query:", qErr);
+        const { data: baseSubs } = await supabase
+          .from("quiz_submissions")
+          .select("*")
+          .eq("student_id", student.id)
+          .order("submitted_at", { ascending: false });
+        interactiveQuizSubs = baseSubs || [];
+      } else if (rawQs && rawQs.length > 0) {
+        const tIds = Array.from(new Set(rawQs.map((q: any) => q.quizzes?.topic_id).filter(Boolean)));
+        let tMap = new Map();
+        if (tIds.length > 0) {
+          const { data: tList } = await supabase.from("topics").select("id, title, section_id").in("id", tIds);
+          tMap = new Map((tList || []).map((t: any) => [t.id, t]));
+        }
+        interactiveQuizSubs = rawQs.map((q: any) => ({
+          ...q,
+          quizzes: q.quizzes ? {
+            ...q.quizzes,
+            topics: tMap.get(q.quizzes.topic_id) || null
+          } : null
+        }));
+      }
+
+      // Convert PDF quizzes into quiz submissions format so they display in Quizzes tab and reports
+      const formattedPdfQuizzes = pdfQuizzesData.map((pq: any) => ({
+        id: pq.id,
+        student_id: pq.student_id,
+        quiz_id: pq.id,
+        score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
+        submitted_at: pq.submitted_at,
+        is_pdf_quiz: true,
+        file_url: pq.file_url,
+        feedback: pq.feedback_text || pq.feedback,
+        feedback_file_url: pq.feedback_file_url || pq.reviewed_file_url,
+        status: pq.status,
+        quizzes: {
+          id: pq.id,
+          title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : "PDF Quiz",
+          total_marks: 100,
+          passing_score: 50,
+          topics: pq.topics || null
+        }
+      }));
+
+      // Unified quiz submissions list (both interactive & PDF quizzes)
+      const unifiedQuizzes = [...interactiveQuizSubs, ...formattedPdfQuizzes].sort(
+        (a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+      );
+
+      // 4. Robust course resolution: ensure student's courses are always found
+      const detectedCourseIds = new Set<string>();
+
+      // Source A: Direct enrollments table in Supabase
+      const { data: directEnrs } = await supabase
+        .from("enrollments")
+        .select("id, enrolled_at, course_id")
         .eq("student_id", student.id);
 
-      // 4. Fetch detailed course sections/topics
-      const courseIds = student.enrollments?.map((e: any) => e.courses?.id || e.course_id).filter(Boolean) || [];
-      let detailedEnrollments = student.enrollments || [];
-      if (courseIds.length > 0) {
+      (directEnrs || []).forEach((e: any) => {
+        if (e.course_id) detectedCourseIds.add(e.course_id);
+      });
+
+      // Source B: Already attached enrollments on student object
+      (student.enrollments || []).forEach((e: any) => {
+        const cId = e.course_id || e.courses?.id;
+        if (cId) detectedCourseIds.add(cId);
+      });
+
+      // Source C: Section purchases
+      const { data: spUser } = await supabase
+        .from("section_purchases")
+        .select("id, purchased_at, section_id")
+        .eq("student_id", student.id);
+
+      // Source D: Collect all section IDs from tpData, msData, spUser to discover course_ids
+      const allSectionIds = Array.from(new Set([
+        ...(tpData || []).map((tp: any) => tp.topics?.section_id),
+        ...(allManualSubs || []).map((ms: any) => ms.topics?.section_id),
+        ...(interactiveQuizSubs || []).map((qs: any) => qs.quizzes?.topics?.section_id),
+        ...(spUser || []).map((sp: any) => sp.section_id),
+      ].filter(Boolean)));
+
+      if (allSectionIds.length > 0) {
+        const { data: secList } = await supabase
+          .from("sections")
+          .select("id, course_id")
+          .in("id", allSectionIds);
+        (secList || []).forEach((s: any) => {
+          if (s.course_id) detectedCourseIds.add(s.course_id);
+        });
+      }
+
+      const allCourseIds = Array.from(detectedCourseIds);
+      let detailedEnrollments: any[] = [];
+
+      if (allCourseIds.length > 0) {
         let { data: coursesData, error: cErr } = await supabase
           .from("courses")
           .select("id, title, total_price, sections(id, title, topics(id, title, progress_percentage, content_items))")
-          .in("id", courseIds);
+          .in("id", allCourseIds);
 
         if (cErr) {
           const fallback = await supabase
             .from("courses")
             .select("id, title, total_price, sections(id, title, topics(id, title, content_items))")
-            .in("id", courseIds);
+            .in("id", allCourseIds);
           coursesData = fallback.data;
         }
 
         if (coursesData) {
-          detailedEnrollments = student.enrollments.map((enr: any) => {
-            const matchedCourse = coursesData.find((c: any) => c.id === (enr.courses?.id || enr.course_id));
+          detailedEnrollments = coursesData.map((course: any) => {
+            const matchingEnr = (directEnrs || []).find((e: any) => e.course_id === course.id);
+            const matchingSp = (spUser || []).find((sp: any) => sp.section_id && allSectionIds.includes(sp.section_id));
             return {
-              ...enr,
-              courses: matchedCourse || enr.courses
+              id: matchingEnr?.id || `enr_${course.id}`,
+              course_id: course.id,
+              enrolled_at: matchingEnr?.enrolled_at || matchingSp?.purchased_at || student.created_at,
+              courses: course
             };
           });
         }
       }
 
+      // 5. Fetch student AI chat logs
+      const { data: chatData } = await supabase
+        .from("chat_logs")
+        .select("*")
+        .eq("student_id", student.id)
+        .order("created_at", { ascending: false });
+
       const fullStudentData = {
         ...student,
         enrollments: detailedEnrollments,
         topic_progress: tpData || [],
-        manual_submissions: msData || [],
-        quiz_submissions: qsData || []
+        manual_submissions: worksheetsData,
+        all_manual_submissions: allManualSubs,
+        quiz_submissions: unifiedQuizzes,
+        chat_logs: chatData || [],
       };
 
       setSelectedStudent(fullStudentData);
+
+      // Also update outer students list state so counts reflect live data immediately
+      setStudents(prev => prev.map(s => {
+        if (s.id === student.id) {
+          return {
+            ...s,
+            enrollments: detailedEnrollments,
+          };
+        }
+        return s;
+      }));
     } catch (err) {
       console.error("Error loading student detail:", err);
     } finally {
       setIsLoadingDetails(false);
+    }
+  };
+
+  // Toggle student AI access (Stop / Enable)
+  const handleToggleStudentAi = async (nextStatus: boolean) => {
+    if (!selectedStudent) return;
+    const confirmPrompt = nextStatus
+      ? `Re-enable AI Assistant access for ${selectedStudent.full_name || selectedStudent.email}?`
+      : `Stop AI Assistant access for ${selectedStudent.full_name || selectedStudent.email}?\n\nThe student will be immediately prevented from using the AI chatbot.`;
+
+    if (!window.confirm(confirmPrompt)) return;
+
+    setIsTogglingAi(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/toggle-student-ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          studentId: selectedStudent.id,
+          aiEnabled: nextStatus,
+          dailyLimit: aiDailyLimitInput.trim() ? parseInt(aiDailyLimitInput, 10) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const updated = {
+        ...selectedStudent,
+        ai_enabled: nextStatus,
+      };
+      setSelectedStudent(updated);
+      setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, ai_enabled: nextStatus } : s));
+      alert(data.message || `Student AI access ${nextStatus ? "enabled" : "stopped"} successfully.`);
+    } catch (err: any) {
+      alert("Failed to update AI access: " + err.message);
+    } finally {
+      setIsTogglingAi(false);
+    }
+  };
+
+  // Save student AI daily limit
+  const handleSaveAiLimit = async () => {
+    if (!selectedStudent) return;
+    setIsTogglingAi(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const limitVal = aiDailyLimitInput.trim() ? parseInt(aiDailyLimitInput, 10) : null;
+      const res = await fetch("/api/admin/toggle-student-ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          studentId: selectedStudent.id,
+          aiEnabled: selectedStudent.ai_enabled !== false,
+          dailyLimit: limitVal,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const updated = {
+        ...selectedStudent,
+        ai_daily_limit: limitVal,
+      };
+      setSelectedStudent(updated);
+      setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, ai_daily_limit: limitVal } : s));
+      alert("AI daily question limit updated successfully!");
+    } catch (err: any) {
+      alert("Failed to save AI limit: " + err.message);
+    } finally {
+      setIsTogglingAi(false);
     }
   };
 
@@ -316,6 +795,17 @@ export default function AdminStudentsPage() {
             {students.length} registered student{students.length !== 1 ? "s" : ""}. Click any student to view full records & WhatsApp reports.
           </p>
         </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleEnrollAllFirstCourse}
+            disabled={isEnrollingAll}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+            title="Auto-enroll all registered students into the 1st academy course"
+          >
+            {isEnrollingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
+            Auto-Enroll All in 1st Course
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -370,6 +860,17 @@ export default function AdminStudentsPage() {
                         {student.student_code && (
                           <span className="text-[10px] font-black bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full border border-gray-200">
                             {student.student_code}
+                          </span>
+                        )}
+                        {student.ai_enabled === false ? (
+                          <span className="text-[10px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-full border border-red-200 flex items-center gap-1">
+                            <Ban className="w-3 h-3 text-red-600" />
+                            AI Paused
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-emerald-600" />
+                            AI Active{student.ai_message_count ? ` (${student.ai_message_count} msgs)` : ''}
                           </span>
                         )}
                       </div>
@@ -523,12 +1024,14 @@ export default function AdminStudentsPage() {
                 <DownloadReportButton
                   student={selectedStudent}
                   variant="secondary"
-                  label="Download PDF"
+                  label={isLoadingDetails ? "Loading..." : "Download PDF"}
+                  disabled={isLoadingDetails}
                 />
 
                 <button
                   onClick={() => setIsPdfModalOpen(true)}
-                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                  disabled={isLoadingDetails}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Customize PDF template & preview"
                 >
                   <FileText className="w-3.5 h-3.5 text-emerald-400" />
@@ -583,6 +1086,17 @@ export default function AdminStudentsPage() {
                 <Award className="w-4 h-4 text-purple-500" />
                 Quizzes ({selectedStudent.quiz_submissions?.length || 0})
               </button>
+              <button
+                onClick={() => setActiveTab("ai")}
+                className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
+                  activeTab === "ai"
+                    ? "border-primary text-primary bg-white"
+                    : "border-transparent text-gray-500 hover:text-text"
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                AI Assistant ({selectedStudent.chat_logs?.length || 0})
+              </button>
             </div>
 
             {/* Modal Tab Content */}
@@ -597,6 +1111,47 @@ export default function AdminStudentsPage() {
                   {/* TAB 1: Enrolled Courses */}
                   {activeTab === "courses" && (
                     <div className="space-y-4">
+                      {/* Course Enrollment Quick Action */}
+                      {allCourses.length > 0 && (
+                        <div className="bg-primary/5 border border-primary/20 p-4 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                          <div className="flex-1">
+                            <label className="text-xs font-bold text-primary block mb-1">
+                              Enroll Student in Course:
+                            </label>
+                            <select
+                              value={selectedCourseToEnroll}
+                              onChange={(e) => setSelectedCourseToEnroll(e.target.value)}
+                              className="w-full text-xs font-medium bg-white border border-gray-200 rounded-xl px-3 py-2 text-text outline-none focus:ring-2 focus:ring-primary"
+                            >
+                              {allCourses.map((c) => {
+                                const isEnrolled = selectedStudent.enrollments?.some(
+                                  (e: any) => e.course_id === c.id || e.courses?.id === c.id
+                                );
+                                return (
+                                  <option key={c.id} value={c.id}>
+                                    {c.title} {isEnrolled ? "(Already Enrolled)" : ""}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                          <button
+                            onClick={() => handleEnrollSingle(selectedCourseToEnroll)}
+                            disabled={
+                              isEnrollingSingle ||
+                              !selectedCourseToEnroll ||
+                              selectedStudent.enrollments?.some(
+                                (e: any) => e.course_id === selectedCourseToEnroll || e.courses?.id === selectedCourseToEnroll
+                              )
+                            }
+                            className="sm:self-end px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer h-[36px]"
+                          >
+                            {isEnrollingSingle ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            Enroll in Course
+                          </button>
+                        </div>
+                      )}
+
                       {(!selectedStudent.enrollments || selectedStudent.enrollments.length === 0) ? (
                         <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
                           <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-2" />
@@ -616,10 +1171,24 @@ export default function AdminStudentsPage() {
                           return (
                             <div key={enr.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs">
                               <div className="flex items-center justify-between gap-4 mb-3">
-                                <h4 className="font-bold text-text text-base">{course.title}</h4>
-                                <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">
-                                  {progressPercentage}% Completed
-                                </span>
+                                <div>
+                                  <h4 className="font-bold text-text text-base">{course.title}</h4>
+                                  <span className="text-[11px] text-text/50">
+                                    Enrolled: {new Date(enr.enrolled_at || selectedStudent.created_at).toLocaleDateString("en-GB")}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">
+                                    {progressPercentage}% Completed
+                                  </span>
+                                  <button
+                                    onClick={() => handleUnenrollSingle(course.id)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Unenroll student from this course"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </div>
                               
                               {/* Progress Bar */}
@@ -629,7 +1198,6 @@ export default function AdminStudentsPage() {
 
                               <div className="flex items-center justify-between text-xs text-text/60">
                                 <span>{completedCount} of {totalCount} lessons completed</span>
-                                <span>Enrolled: {new Date(enr.created_at || selectedStudent.created_at).toLocaleDateString("en-GB")}</span>
                               </div>
                             </div>
                           );
@@ -679,56 +1247,60 @@ export default function AdminStudentsPage() {
                           <p className="text-sm text-text/60 font-medium">No worksheet submissions submitted yet.</p>
                         </div>
                       ) : (
-                        selectedStudent.manual_submissions.map((sub: any) => (
-                          <div key={sub.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-5 h-5 text-blue-500" />
-                                <h5 className="font-bold text-text text-sm">{sub.topics?.title || "Worksheet Submission"}</h5>
+                        selectedStudent.manual_submissions.map((sub: any) => {
+                          const feedbackMsg = sub.feedback_text || sub.feedback;
+                          const feedbackFile = sub.feedback_file_url || sub.reviewed_file_url;
+                          return (
+                            <div key={sub.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-5 h-5 text-blue-500" />
+                                  <h5 className="font-bold text-text text-sm">{sub.topics?.title || "Worksheet Assignment"}</h5>
+                                </div>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                                  sub.status === "reviewed"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-orange-100 text-orange-700"
+                                }`}>
+                                  {sub.status === "reviewed" ? "Reviewed" : "Pending Review"}
+                                </span>
                               </div>
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                                sub.status === "reviewed"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-orange-100 text-orange-700"
-                              }`}>
-                                {sub.status === "reviewed" ? "Reviewed" : "Pending Review"}
-                              </span>
-                            </div>
 
-                            {sub.status === "reviewed" && (
-                              <div className="bg-green-50/60 border border-green-100 p-3 rounded-xl text-xs space-y-1">
-                                <div className="font-bold text-green-900">Score: {sub.score || "N/A"}</div>
-                                {sub.feedback && <div className="text-green-800 italic">&quot;{sub.feedback}&quot;</div>}
-                              </div>
-                            )}
+                              {sub.status === "reviewed" && (
+                                <div className="bg-green-50/60 border border-green-100 p-3 rounded-xl text-xs space-y-1">
+                                  <div className="font-bold text-green-900">Score: {sub.score !== null && sub.score !== undefined ? sub.score : "N/A"}</div>
+                                  {feedbackMsg && <div className="text-green-800 italic">&quot;{feedbackMsg}&quot;</div>}
+                                </div>
+                              )}
 
-                            <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
-                              <span className="text-text/50">Submitted: {new Date(sub.submitted_at).toLocaleDateString("en-GB")}</span>
-                              <div className="flex items-center gap-3">
-                                {sub.file_url && (
-                                  <a
-                                    href={sub.file_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-primary hover:underline font-semibold flex items-center gap-1"
-                                  >
-                                    View Student File <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                )}
-                                {sub.reviewed_file_url && (
-                                  <a
-                                    href={sub.reviewed_file_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-green-600 hover:underline font-semibold flex items-center gap-1"
-                                  >
-                                    View Admin Feedback File <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                )}
+                              <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
+                                <span className="text-text/50">Submitted: {new Date(sub.submitted_at).toLocaleDateString("en-GB")}</span>
+                                <div className="flex items-center gap-3">
+                                  {sub.file_url && (
+                                    <a
+                                      href={sub.file_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary hover:underline font-semibold flex items-center gap-1"
+                                    >
+                                      View Student File <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                  {feedbackFile && (
+                                    <a
+                                      href={feedbackFile}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-green-600 hover:underline font-semibold flex items-center gap-1"
+                                    >
+                                      View Feedback File <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -742,27 +1314,282 @@ export default function AdminStudentsPage() {
                           <p className="text-sm text-text/60 font-medium">No quiz attempts logged yet.</p>
                         </div>
                       ) : (
-                        selectedStudent.quiz_submissions.map((qs: any) => (
-                          <div key={qs.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs flex items-center justify-between gap-4">
-                            <div>
-                              <h5 className="font-bold text-text text-sm">
-                                {qs.quizzes?.title || qs.quizzes?.topics?.title || "Quiz Evaluation"}
-                              </h5>
-                              <p className="text-xs text-text/50">Date: {new Date(qs.submitted_at).toLocaleDateString("en-GB")}</p>
+                        selectedStudent.quiz_submissions.map((qs: any) => {
+                          const totalMarks = qs.quizzes?.total_marks || 100;
+                          const passingScore = qs.quizzes?.passing_score;
+                          const scoreVal = qs.score !== null && qs.score !== undefined ? Number(qs.score) : null;
+                          const scorePct = scoreVal !== null && totalMarks > 0 ? Math.round((scoreVal / totalMarks) * 100) : null;
+                          const isPassed = scoreVal !== null ? (passingScore != null ? scoreVal >= passingScore : scorePct !== null && scorePct >= 50) : false;
+                          const isReviewed = qs.status === "reviewed" || !qs.is_pdf_quiz;
+                          const feedbackMsg = qs.feedback || qs.feedback_text;
+
+                          return (
+                            <div key={qs.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
+                              <div className="flex items-center justify-between gap-4">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <Award className="w-5 h-5 text-purple-600" />
+                                    <h5 className="font-bold text-text text-sm">
+                                      {qs.quizzes?.title || qs.quizzes?.topics?.title || "Quiz Evaluation"}
+                                    </h5>
+                                    {qs.is_pdf_quiz && (
+                                      <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full border border-purple-200">
+                                        PDF Upload
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-text/50 mt-1">Submitted: {new Date(qs.submitted_at).toLocaleDateString("en-GB")}</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {scoreVal !== null && (
+                                    <div className="text-right">
+                                      <span className="text-sm font-bold text-text">
+                                        {scoreVal} / {totalMarks}
+                                      </span>
+                                      {scorePct !== null && <span className="block text-[11px] text-text/50">{scorePct}%</span>}
+                                    </div>
+                                  )}
+                                  {qs.is_pdf_quiz && qs.status === "pending" ? (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
+                                      Pending Review
+                                    </span>
+                                  ) : (
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                      isPassed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
+                                    }`}>
+                                      {isPassed ? "Passed" : "Failed"}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {feedbackMsg && (
+                                <div className="bg-purple-50/60 border border-purple-100 p-3 rounded-xl text-xs space-y-1">
+                                  <div className="font-bold text-purple-900">Instructor Feedback:</div>
+                                  <div className="text-purple-800 italic">&quot;{feedbackMsg}&quot;</div>
+                                </div>
+                              )}
+
+                              {qs.file_url && (
+                                <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
+                                  <a
+                                    href={qs.file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline font-semibold flex items-center gap-1"
+                                  >
+                                    View Student Quiz Solution <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                  {qs.feedback_file_url && (
+                                    <a
+                                      href={qs.feedback_file_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-green-600 hover:underline font-semibold flex items-center gap-1"
+                                    >
+                                      View Instructor Feedback File <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-bold text-text">
-                                {qs.score ?? "N/A"} / {qs.quizzes?.total_marks || 100}
-                              </span>
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                qs.passed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
-                              }`}>
-                                {qs.passed ? "Passed" : "Failed"}
-                              </span>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 5: AI Assistant & Usage */}
+                  {activeTab === "ai" && (
+                    <div className="space-y-6">
+                      {/* AI Access Control Banner */}
+                      <div className={`p-5 rounded-2xl border ${
+                        selectedStudent.ai_enabled === false
+                          ? 'bg-rose-50/70 border-rose-200 text-rose-900'
+                          : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                      }`}>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                              selectedStudent.ai_enabled === false
+                                ? 'bg-rose-100 text-rose-700'
+                                : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              {selectedStudent.ai_enabled === false ? (
+                                <Ban className="w-5 h-5" />
+                              ) : (
+                                <Sparkles className="w-5 h-5" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-sm">
+                                  AI Assistant Access: {selectedStudent.ai_enabled === false ? 'PAUSED / BLOCKED' : 'ACTIVE'}
+                                </h4>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  selectedStudent.ai_enabled === false
+                                    ? 'bg-rose-200 text-rose-800'
+                                    : 'bg-emerald-200 text-emerald-800'
+                                }`}>
+                                  {selectedStudent.ai_enabled === false ? 'Disabled' : 'Enabled'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-text/70 mt-0.5">
+                                {selectedStudent.ai_enabled === false
+                                  ? 'This student is currently blocked from using the AI Chatbot. No API tokens can be consumed by this student.'
+                                  : 'This student can freely ask questions to the Michael Gad Math AI Assistant (Claude 3.7 & GPT-4o).'}
+                              </p>
                             </div>
                           </div>
-                        ))
-                      )}
+
+                          {/* 1-Click Action Button */}
+                          <div className="flex-shrink-0 w-full sm:w-auto">
+                            {selectedStudent.ai_enabled === false ? (
+                              <button
+                                onClick={() => handleToggleStudentAi(true)}
+                                disabled={isTogglingAi}
+                                className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              >
+                                {isTogglingAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                Re-enable AI Access
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleStudentAi(false)}
+                                disabled={isTogglingAi}
+                                className="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              >
+                                {isTogglingAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                                Stop Student AI Usage
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Daily Limit Controls */}
+                        <div className="mt-4 pt-4 border-t border-black/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
+                          <div className="text-text/70">
+                            <strong>Daily Question Quota:</strong> {selectedStudent.ai_daily_limit ? `${selectedStudent.ai_daily_limit} questions / day` : 'Unlimited'}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="e.g. 20 (or blank for unlimited)"
+                              value={aiDailyLimitInput}
+                              onChange={(e) => setAiDailyLimitInput(e.target.value)}
+                              className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs w-48 outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <button
+                              onClick={handleSaveAiLimit}
+                              disabled={isTogglingAi}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                            >
+                              Save Quota
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Usage Metrics */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+                          <div className="text-[11px] font-bold text-text/50 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <MessageSquare className="w-3.5 h-3.5 text-primary" />
+                            Total Questions
+                          </div>
+                          <div className="text-xl font-bold text-text">
+                            {(selectedStudent.chat_logs || []).reduce((acc: number, c: any) => acc + (c.messages?.filter((m: any) => m.role === 'user').length || 0), 0)}
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+                          <div className="text-[11px] font-bold text-text/50 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <Zap className="w-3.5 h-3.5 text-purple-600" />
+                            Total Tokens
+                          </div>
+                          <div className="text-xl font-bold text-purple-700">
+                            ~{((selectedStudent.chat_logs || []).reduce((acc: number, c: any) => acc + (c.total_tokens || (c.messages?.length || 0) * 120), 0)).toLocaleString()}
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+                          <div className="text-[11px] font-bold text-text/50 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-blue-600" />
+                            Conversations
+                          </div>
+                          <div className="text-xl font-bold text-text">
+                            {(selectedStudent.chat_logs || []).length}
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+                          <div className="text-[11px] font-bold text-text/50 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                            Est. API Cost
+                          </div>
+                          <div className="text-xl font-bold text-emerald-700">
+                            ${(((selectedStudent.chat_logs || []).reduce((acc: number, c: any) => acc + (c.total_tokens || (c.messages?.length || 0) * 120), 0) / 1_000_000) * 5.0).toFixed(3)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Recent Student AI Conversations */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-bold text-text text-sm">Recent Student AI Conversations</h4>
+                          <Link 
+                            href="/admin/chat-logs" 
+                            className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                          >
+                            Open Full AI Chat Logs →
+                          </Link>
+                        </div>
+
+                        {(!selectedStudent.chat_logs || selectedStudent.chat_logs.length === 0) ? (
+                          <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                            <Sparkles className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm text-text/60 font-medium">No AI interactions recorded for this student yet.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {selectedStudent.chat_logs.map((log: any) => {
+                              const lastMsg = log.messages?.[log.messages.length - 1];
+                              const firstUserMsg = log.messages?.find((m: any) => m.role === 'user');
+                              return (
+                                <div key={log.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs hover:border-primary/30 transition-colors">
+                                  <div className="flex items-start justify-between gap-3 mb-2">
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-text truncate">
+                                        Q: {firstUserMsg?.content || "Conversation session"}
+                                      </p>
+                                      <span className="text-[11px] text-text/50">
+                                        Page: {log.context?.currentPage || "/dashboard"} • {new Date(log.created_at).toLocaleString("en-GB")}
+                                      </span>
+                                    </div>
+                                    <span className="bg-gray-100 text-gray-700 font-bold px-2 py-0.5 rounded text-[11px] shrink-0">
+                                      {log.messages?.length || 0} messages
+                                    </span>
+                                  </div>
+                                  {lastMsg && (
+                                    <div className="text-xs text-text/70 bg-gray-50 p-2.5 rounded-lg border border-gray-100 line-clamp-2">
+                                      <strong className="text-text/90">Last: </strong> {lastMsg.content}
+                                    </div>
+                                  )}
+                                  <div className="mt-2.5 flex items-center justify-end">
+                                    <Link
+                                      href="/admin/chat-logs"
+                                      className="text-xs font-bold text-primary hover:text-primary/80 flex items-center gap-1"
+                                    >
+                                      Inspect in Chat Logs →
+                                    </Link>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </>

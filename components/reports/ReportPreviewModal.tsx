@@ -26,7 +26,8 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   // Calculate quick metrics for preview
   const enrollmentsCount = student.enrollments?.length || 0;
   const completedLessonsCount = (student.topic_progress || []).filter((tp: any) => tp.is_completed).length;
-  const worksheetsCount = student.manual_submissions?.length || 0;
+  const allManual = student.all_manual_submissions || student.manual_submissions || [];
+  const worksheetsCount = (student.manual_submissions || allManual).filter((s: any) => s.type !== 'pdf_quiz').length;
   const quizzesCount = student.quiz_submissions?.length || 0;
 
   return (

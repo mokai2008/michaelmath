@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
+    let userId: string | null = null;
+
     // Try creating user via Admin API with email_confirm: true (bypasses confirmation emails completely)
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -61,9 +63,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: signUpError.message }, { status: 400 });
       }
 
-      if (signUpData.session) {
+      if (signUpData.session && signUpData.user) {
+        userId = signUpData.user.id;
+        // Explicitly update profiles with WhatsApp numbers (trigger may not get metadata)
+        await supabaseAnon.from('profiles').update({
+          student_whatsapp: studentWhatsapp || null,
+          parent_email: parentEmail || null,
+          parent_whatsapp: parentWhatsapp || null,
+          full_name: fullName || null
+        }).eq('id', userId);
         return NextResponse.json({ session: signUpData.session, user: signUpData.user });
       }
+    } else if (userData?.user) {
+      userId = userData.user.id;
     }
 
     // Sign in to get session tokens for client
@@ -74,6 +86,39 @@ export async function POST(request: NextRequest) {
 
     if (signInError) {
       return NextResponse.json({ error: signInError.message }, { status: 400 });
+    }
+
+    // Explicitly update profiles with WhatsApp numbers after sign-in
+    // This ensures data is saved even if the trigger didn't receive user_metadata
+    const finalUserId = userId || sessionData.user?.id;
+    if (finalUserId) {
+      await supabaseAdmin.from('profiles').update({
+        student_whatsapp: studentWhatsapp || null,
+        parent_email: parentEmail || null,
+        parent_whatsapp: parentWhatsapp || null,
+        full_name: fullName || null
+      }).eq('id', finalUserId);
+
+      // Automatically enroll student into the 1st course upon signup
+      try {
+        const { data: firstCourse } = await supabaseAdmin
+          .from('courses')
+          .select('id')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (firstCourse) {
+          await supabaseAdmin
+            .from('enrollments')
+            .upsert(
+              { student_id: finalUserId, course_id: firstCourse.id },
+              { onConflict: 'student_id,course_id' }
+            );
+        }
+      } catch (autoEnrErr) {
+        console.warn('Auto-enroll error on signup:', autoEnrErr);
+      }
     }
 
     return NextResponse.json({

@@ -14,6 +14,7 @@ interface StudentReportProps {
     enrollments?: any[];
     topic_progress?: any[];
     manual_submissions?: any[];
+    all_manual_submissions?: any[];
     quiz_submissions?: any[];
   };
   teacherNotes?: string;
@@ -317,14 +318,36 @@ export const StudentReportPDF: React.FC<StudentReportProps> = ({
   });
 
   const enrollments = student.enrollments || [];
-  const completedLessons = (student.topic_progress || []).filter((tp) => tp.is_completed);
+  const completedLessons = (student.topic_progress || []).filter((tp: any) => tp.is_completed);
   let totalStudyTimeSecs = 0;
-  (student.topic_progress || []).forEach((tp) => {
+  (student.topic_progress || []).forEach((tp: any) => {
     totalStudyTimeSecs += tp.time_spent_seconds || 0;
   });
 
-  const worksheets = student.manual_submissions || [];
-  const quizzes = student.quiz_submissions || [];
+  // Separate true worksheets from manual_submissions
+  const allManual = student.all_manual_submissions || student.manual_submissions || [];
+  const worksheets = (student.manual_submissions || allManual).filter((s: any) => s.type !== 'pdf_quiz');
+
+  // Unified quizzes: if student.quiz_submissions already unified use it, otherwise merge any pdf_quiz from manual submissions
+  let quizzes = student.quiz_submissions || [];
+  const pdfQuizzesInManual = allManual.filter((s: any) => s.type === 'pdf_quiz');
+  if (pdfQuizzesInManual.length > 0 && !quizzes.some((q: any) => q.is_pdf_quiz)) {
+    const formattedPdfQuizzes = pdfQuizzesInManual.map((pq: any) => ({
+      id: pq.id,
+      score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
+      submitted_at: pq.submitted_at,
+      is_pdf_quiz: true,
+      feedback: pq.feedback_text || pq.feedback,
+      status: pq.status,
+      quizzes: {
+        id: pq.id,
+        title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : 'PDF Quiz',
+        total_marks: 100,
+        passing_score: 50,
+      }
+    }));
+    quizzes = [...quizzes, ...formattedPdfQuizzes];
+  }
 
   return (
     <Document title={`Academic_Report_${student.student_code || 'Student'}`}>
@@ -401,30 +424,31 @@ export const StudentReportPDF: React.FC<StudentReportProps> = ({
         <View style={styles.table}>
           <View style={styles.tableHeaderRow}>
             <Text style={[styles.th, { flex: 3 }]}>Course Name</Text>
-            <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Completed / Total</Text>
+            <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>Completed / Total</Text>
             <Text style={[styles.th, { flex: 1, textAlign: 'right' }]}>Progress %</Text>
           </View>
           {enrollments.length === 0 ? (
             <Text style={styles.emptyText}>No active course enrollments found.</Text>
           ) : (
-            enrollments.map((enr, i) => {
+            enrollments.map((enr: any, i: number) => {
               const course = enr.courses;
               if (!course) return null;
               const courseTopics = course.sections?.flatMap((sec: any) => sec.topics || []) || [];
               const completedIds = (student.topic_progress || [])
-                .filter((tp) => tp.is_completed)
-                .map((tp) => tp.topic_id);
+                .filter((tp: any) => tp.is_completed)
+                .map((tp: any) => tp.topic_id);
               const { progressPercentage: pct, completedCount, totalCount: totalTopics } = calculateCourseProgress(courseTopics, completedIds);
 
               return (
                 <View
                   key={enr.id || i}
                   style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+                  wrap={false}
                 >
                   <Text style={[styles.td, { flex: 3, fontFamily: 'Helvetica-Bold' }]}>
                     {course.title}
                   </Text>
-                  <Text style={[styles.td, { flex: 1, textAlign: 'center' }]}>
+                  <Text style={[styles.td, { flex: 1.5, textAlign: 'center' }]}>
                     {completedCount} / {totalTopics} lessons
                   </Text>
                   <Text style={[styles.td, { flex: 1, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: theme.primary }]}>
@@ -436,108 +460,155 @@ export const StudentReportPDF: React.FC<StudentReportProps> = ({
           )}
         </View>
 
-        {/* Section 2: Worksheet Submissions */}
-        <Text style={styles.sectionHeader}>Worksheet Submissions & Feedback</Text>
-        <View style={styles.table}>
-          <View style={styles.tableHeaderRow}>
-            <Text style={[styles.th, { flex: 2.5 }]}>Topic / Worksheet</Text>
-            <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Status</Text>
-            <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Score</Text>
-            <Text style={[styles.th, { flex: 2.5 }]}>Instructor Feedback</Text>
-          </View>
-          {worksheets.length === 0 ? (
-            <Text style={styles.emptyText}>No worksheet submissions recorded yet.</Text>
-          ) : (
-            worksheets.slice(0, 6).map((sub, i) => {
-              const topicTitle = sub.topics?.title || 'Worksheet Assignment';
-              const isReviewed = sub.status === 'reviewed';
-              return (
+        {/* Section 2: Completed Lessons History */}
+        {completedLessons.length > 0 && (
+          <View wrap={false}>
+            <Text style={styles.sectionHeader}>Completed Lessons & Study History</Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeaderRow}>
+                <Text style={[styles.th, { flex: 3 }]}>Lesson / Topic</Text>
+                <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>Study Time</Text>
+                <Text style={[styles.th, { flex: 1.5, textAlign: 'right' }]}>Last Accessed</Text>
+              </View>
+              {completedLessons.map((tp: any, i: number) => (
                 <View
-                  key={sub.id || i}
+                  key={tp.id || i}
                   style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+                  wrap={false}
                 >
-                  <Text style={[styles.td, { flex: 2.5 }]}>{topicTitle}</Text>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text
-                      style={
-                        isReviewed
-                          ? styles.statusBadgeSuccess
-                          : styles.statusBadgeWarning
-                      }
-                    >
-                      {isReviewed ? 'REVIEWED' : 'PENDING'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.td, { flex: 1, textAlign: 'center', fontFamily: 'Helvetica-Bold' }]}>
-                    {sub.score || 'N/A'}
+                  <Text style={[styles.td, { flex: 3, fontFamily: 'Helvetica-Bold' }]}>
+                    {tp.topics?.title || 'Lesson Topic'}
                   </Text>
-                  <Text style={[styles.td, { flex: 2.5, fontSize: 7.5, color: '#4B5563' }]}>
-                    {sub.feedback || (isReviewed ? 'No specific comments' : 'Awaiting instructor review')}
+                  <Text style={[styles.td, { flex: 1.5, textAlign: 'center' }]}>
+                    {formatTime(tp.time_spent_seconds)}
+                  </Text>
+                  <Text style={[styles.td, { flex: 1.5, textAlign: 'right', color: '#6B7280', fontSize: 7.5 }]}>
+                    {tp.last_accessed_at ? new Date(tp.last_accessed_at).toLocaleDateString('en-GB') : 'N/A'}
                   </Text>
                 </View>
-              );
-            })
-          )}
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Section 3: Worksheet Submissions */}
+        <View wrap={false}>
+          <Text style={styles.sectionHeader}>Worksheet Submissions & Feedback</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.th, { flex: 2.5 }]}>Topic / Worksheet</Text>
+              <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Status</Text>
+              <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Score</Text>
+              <Text style={[styles.th, { flex: 2.5 }]}>Instructor Feedback</Text>
+            </View>
+            {worksheets.length === 0 ? (
+              <Text style={styles.emptyText}>No worksheet submissions recorded yet.</Text>
+            ) : (
+              worksheets.map((sub: any, i: number) => {
+                const topicTitle = sub.topics?.title || 'Worksheet Assignment';
+                const isReviewed = sub.status === 'reviewed';
+                const feedbackText = sub.feedback_text || sub.feedback;
+                return (
+                  <View
+                    key={sub.id || i}
+                    style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+                    wrap={false}
+                  >
+                    <Text style={[styles.td, { flex: 2.5 }]}>{topicTitle}</Text>
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                      <Text
+                        style={
+                          isReviewed
+                            ? styles.statusBadgeSuccess
+                            : styles.statusBadgeWarning
+                        }
+                      >
+                        {isReviewed ? 'REVIEWED' : 'PENDING'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.td, { flex: 1, textAlign: 'center', fontFamily: 'Helvetica-Bold' }]}>
+                      {sub.score !== null && sub.score !== undefined ? sub.score : 'N/A'}
+                    </Text>
+                    <Text style={[styles.td, { flex: 2.5, fontSize: 7.5, color: '#4B5563' }]}>
+                      {feedbackText || (isReviewed ? 'Satisfactory completion' : 'Awaiting instructor review')}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
         </View>
 
-        {/* Section 3: Quiz History */}
-        <Text style={styles.sectionHeader}>Quiz Evaluation & Performance</Text>
-        <View style={styles.table}>
-          <View style={styles.tableHeaderRow}>
-            <Text style={[styles.th, { flex: 3 }]}>Quiz Title</Text>
-            <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>Score</Text>
-            <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>Result</Text>
-            <Text style={[styles.th, { flex: 1.5, textAlign: 'right' }]}>Date</Text>
-          </View>
-          {quizzes.length === 0 ? (
-            <Text style={styles.emptyText}>No quiz attempts logged yet.</Text>
-          ) : (
-            quizzes.slice(0, 6).map((q, i) => {
-              const quizTitle = q.quizzes?.title || q.quizzes?.topics?.title || 'Quiz Evaluation';
-              const totalMarks = q.quizzes?.total_marks || 100;
-              const date = q.submitted_at
-                ? new Date(q.submitted_at).toLocaleDateString('en-GB')
-                : 'N/A';
+        {/* Section 4: Quiz Evaluation & Performance */}
+        <View wrap={false}>
+          <Text style={styles.sectionHeader}>Quiz Evaluation & Performance</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.th, { flex: 3 }]}>Quiz Title</Text>
+              <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>Score</Text>
+              <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>Result</Text>
+              <Text style={[styles.th, { flex: 1.5, textAlign: 'right' }]}>Date</Text>
+            </View>
+            {quizzes.length === 0 ? (
+              <Text style={styles.emptyText}>No quiz attempts logged yet.</Text>
+            ) : (
+              quizzes.map((q: any, i: number) => {
+                const quizTitle = q.quizzes?.title || q.quizzes?.topics?.title || 'Quiz Evaluation';
+                const totalMarks = q.quizzes?.total_marks || 100;
+                const passingScore = q.quizzes?.passing_score;
+                const scoreVal = q.score !== null && q.score !== undefined ? Number(q.score) : null;
+                const scorePct = scoreVal !== null && totalMarks > 0 ? Math.round((scoreVal / totalMarks) * 100) : null;
+                const isPassed = scoreVal !== null ? (passingScore != null ? scoreVal >= passingScore : (scorePct !== null && scorePct >= 50)) : false;
+                const isPending = q.is_pdf_quiz && q.status === 'pending';
+                const date = q.submitted_at
+                  ? new Date(q.submitted_at).toLocaleDateString('en-GB')
+                  : 'N/A';
 
-              return (
-                <View
-                  key={q.id || i}
-                  style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
-                >
-                  <Text style={[styles.td, { flex: 3 }]}>{quizTitle}</Text>
-                  <Text style={[styles.td, { flex: 1.5, textAlign: 'center', fontFamily: 'Helvetica-Bold' }]}>
-                    {q.score ?? 'N/A'} / {totalMarks}
-                  </Text>
-                  <View style={{ flex: 1.5, alignItems: 'center' }}>
-                    <Text
-                      style={
-                        q.passed
-                          ? styles.statusBadgeSuccess
-                          : styles.statusBadgeError
-                      }
-                    >
-                      {q.passed ? 'PASSED' : 'FAILED'}
+                return (
+                  <View
+                    key={q.id || i}
+                    style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+                    wrap={false}
+                  >
+                    <Text style={[styles.td, { flex: 3 }]}>{quizTitle}</Text>
+                    <Text style={[styles.td, { flex: 1.5, textAlign: 'center', fontFamily: 'Helvetica-Bold' }]}>
+                      {scoreVal !== null ? `${scoreVal} / ${totalMarks} (${scorePct}%)` : 'Pending'}
+                    </Text>
+                    <View style={{ flex: 1.5, alignItems: 'center' }}>
+                      {isPending ? (
+                        <Text style={styles.statusBadgeWarning}>PENDING</Text>
+                      ) : (
+                        <Text
+                          style={
+                            isPassed
+                              ? styles.statusBadgeSuccess
+                              : styles.statusBadgeError
+                          }
+                        >
+                          {isPassed ? 'PASSED' : 'FAILED'}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={[styles.td, { flex: 1.5, textAlign: 'right', color: '#6B7280', fontSize: 7.5 }]}>
+                      {date}
                     </Text>
                   </View>
-                  <Text style={[styles.td, { flex: 1.5, textAlign: 'right', color: '#6B7280', fontSize: 7.5 }]}>
-                    {date}
-                  </Text>
-                </View>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </View>
         </View>
 
         {/* Teacher / Remarks Box */}
         {teacherNotes ? (
-          <View style={styles.notesBox}>
+          <View style={styles.notesBox} wrap={false}>
             <Text style={styles.notesTitle}>INSTRUCTOR REMARKS & RECOMMENDATIONS</Text>
             <Text style={styles.notesText}>{teacherNotes}</Text>
           </View>
         ) : null}
 
         {/* Footer & Signature */}
-        <View style={styles.footerContainer}>
+        <View style={styles.footerContainer} wrap={false}>
           <View style={styles.signatureBlock}>
             <Text style={styles.teacherName}>Michael Gad</Text>
             <Text style={styles.teacherTitle}>Lead Math Instructor & Academy Founder</Text>

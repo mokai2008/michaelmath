@@ -100,6 +100,55 @@ Never break character. Do not introduce yourself as an underlying model. You are
       `;
     }
 
+    // Check student AI permissions & limits if user is a student
+    let studentProfile: any = null;
+    if (supabaseAuth && user && mode !== 'admin') {
+      try {
+        const { data: profile } = await supabaseAuth
+          .from('profiles')
+          .select('ai_enabled, ai_disabled_reason, ai_daily_limit, full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        studentProfile = profile;
+
+        // 1. Check if instructor has disabled AI for this student
+        if (profile && profile.ai_enabled === false) {
+          return NextResponse.json(
+            { 
+              error: profile.ai_disabled_reason || 'AI Assistant access has been disabled for your account by the instructor. Please contact Michael Gad for assistance.',
+              ai_disabled: true 
+            }, 
+            { status: 403 }
+          );
+        }
+
+        // 2. Check if student has a daily question limit configured
+        if (profile?.ai_daily_limit && profile.ai_daily_limit > 0) {
+          const startOfDay = new Date();
+          startOfDay.setHours(0, 0, 0, 0);
+
+          const { count: todayCount } = await supabaseAuth
+            .from('ai_usage_events')
+            .select('id', { count: 'exact', head: true })
+            .eq('student_id', user.id)
+            .gte('created_at', startOfDay.toISOString());
+
+          if (todayCount !== null && todayCount >= profile.ai_daily_limit) {
+            return NextResponse.json(
+              { 
+                error: `You have reached your daily limit of ${profile.ai_daily_limit} AI questions. Please continue with your lessons and try again tomorrow.`,
+                limit_reached: true 
+              }, 
+              { status: 429 }
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("Could not check student profile for AI permissions (proceeding):", err);
+      }
+    }
+
     // Call unified AI provider (Claude / GPT load balancer)
     const aiResult = await generateAIResponse({
       messages,
@@ -109,31 +158,83 @@ Never break character. Do not introduce yourself as an underlying model. You are
 
     let currentChatId = chatId || null;
 
-    // Persist chat logs if user session is present
+    // Persist chat logs & token tracking if user session is present
     if (supabaseAuth && user) {
       const fullMessages = [...messages, { 
         role: 'assistant', 
         content: aiResult.reply,
         provider: aiResult.provider,
-        model: aiResult.model
+        model: aiResult.model,
+        usage: aiResult.usage
       }];
+
+      const promptTokens = aiResult.usage?.promptTokens || 0;
+      const completionTokens = aiResult.usage?.completionTokens || 0;
+      const totalTokens = aiResult.usage?.totalTokens || 0;
       
       if (chatId) {
-        await supabaseAuth.from('chat_logs').update({
+        // Try update with token metrics, fallback to standard update if columns not yet migrated
+        const updatePayload: any = {
           messages: fullMessages,
           context: { ...context, mode, provider: aiResult.provider, model: aiResult.model }
+        };
+
+        const { error: updErr } = await supabaseAuth.from('chat_logs').update({
+          ...updatePayload,
+          total_messages: fullMessages.length,
+          total_tokens: totalTokens,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          last_active_at: new Date().toISOString()
         }).eq('id', chatId);
+
+        if (updErr) {
+          // Fallback if extra columns don't exist yet
+          await supabaseAuth.from('chat_logs').update(updatePayload).eq('id', chatId);
+        }
         currentChatId = chatId;
       } else {
-        const { data: newChat, error } = await supabaseAuth.from('chat_logs').insert({
+        const insertPayload: any = {
           student_id: user.id,
           messages: fullMessages,
           context: { ...context, mode, provider: aiResult.provider, model: aiResult.model }
+        };
+
+        let { data: newChat, error } = await supabaseAuth.from('chat_logs').insert({
+          ...insertPayload,
+          total_messages: fullMessages.length,
+          total_tokens: totalTokens,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          last_active_at: new Date().toISOString()
         }).select().single();
+
+        if (error) {
+          // Fallback if extra columns don't exist yet
+          const fallbackRes = await supabaseAuth.from('chat_logs').insert(insertPayload).select().single();
+          newChat = fallbackRes.data;
+        }
         
-        if (!error && newChat) {
+        if (newChat) {
           currentChatId = newChat.id;
         }
+      }
+
+      // Record detailed event log for AI usage analytics & token tracking
+      try {
+        await supabaseAuth.from('ai_usage_events').insert({
+          student_id: user.id,
+          chat_id: currentChatId,
+          provider: aiResult.provider,
+          model: aiResult.model,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+          cost_cents: aiResult.usage?.estimatedCostCents || 0,
+          context_page: context.currentPage || null
+        });
+      } catch (eventErr) {
+        console.warn('ai_usage_events log skipped (table might need migration):', eventErr);
       }
     }
 
@@ -142,6 +243,7 @@ Never break character. Do not introduce yourself as an underlying model. You are
       provider: aiResult.provider,
       model: aiResult.model,
       chatId: currentChatId,
+      usage: aiResult.usage
     });
 
   } catch (error) {
