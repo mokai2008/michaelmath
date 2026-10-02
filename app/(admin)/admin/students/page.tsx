@@ -347,12 +347,14 @@ export default function AdminStudentsPage() {
       );
 
       // Fetch all academy courses for enrollment controls
+      let loadedCourses: any[] = [];
       try {
         const { data: allCoursesData } = await supabase
           .from("courses")
           .select("id, title")
           .order("created_at", { ascending: true });
         if (allCoursesData && allCoursesData.length > 0) {
+          loadedCourses = allCoursesData;
           setAllCourses(allCoursesData);
           setSelectedCourseToEnroll(prev => prev || allCoursesData[0].id);
         }
@@ -415,11 +417,25 @@ export default function AdminStudentsPage() {
         .from("chat_logs")
         .select("student_id, messages, total_messages, total_tokens");
 
+      const defaultCourse = loadedCourses.length > 0 ? loadedCourses[0] : null;
+
       // Merge enrollments and AI stats into student profiles
       const merged = studentProfiles.map((student: any) => {
-        const studentEnrs = (enrollmentsData || []).filter(
+        let studentEnrs = (enrollmentsData || []).filter(
           (e: any) => e.student_id === student.id
         );
+
+        // Every student is supposed to be enrolled in the 1st course
+        if (studentEnrs.length === 0 && defaultCourse) {
+          studentEnrs = [{
+            id: `enr_default_${defaultCourse.id}`,
+            student_id: student.id,
+            course_id: defaultCourse.id,
+            enrolled_at: student.created_at,
+            courses: defaultCourse
+          }];
+        }
+
         const studentChats = (chatsData || []).filter(
           (c: any) => c.student_id === student.id
         );
@@ -457,58 +473,89 @@ export default function AdminStudentsPage() {
 
     try {
       // 1. Fetch topic progress
-      const { data: tpData, error: tpErr } = await supabase
+      const { data: rawTp } = await supabase
         .from("topic_progress")
-        .select("*, topics(id, title, section_id)")
+        .select("*")
         .eq("student_id", student.id);
-      if (tpErr) console.warn("Error fetching topic progress:", tpErr);
+      const tpData = rawTp || [];
 
       // 2. Fetch manual submissions (worksheets and PDF quizzes)
-      const { data: msData, error: msErr } = await supabase
+      const { data: rawMs } = await supabase
         .from("manual_submissions")
-        .select("*, topics(id, title, section_id)")
+        .select("*")
         .eq("student_id", student.id)
         .order("submitted_at", { ascending: false });
-      if (msErr) console.warn("Error fetching manual submissions:", msErr);
+      const allManualSubs = rawMs || [];
 
-      // Separate worksheets vs PDF quizzes
-      const allManualSubs = msData || [];
-      const worksheetsData = allManualSubs.filter((s: any) => s.type !== "pdf_quiz");
-      const pdfQuizzesData = allManualSubs.filter((s: any) => s.type === "pdf_quiz");
-
-      // 3. Fetch interactive quiz submissions with resilient fallback
+      // 3. Fetch interactive quiz submissions
       let interactiveQuizSubs: any[] = [];
-      const { data: rawQs, error: qErr } = await supabase
+      const { data: rawQs } = await supabase
         .from("quiz_submissions")
         .select("*, quizzes(id, total_marks, passing_score, topic_id)")
         .eq("student_id", student.id)
         .order("submitted_at", { ascending: false });
+      interactiveQuizSubs = rawQs || [];
 
-      if (qErr) {
-        console.warn("Retrying raw quiz_submissions query:", qErr);
-        const { data: baseSubs } = await supabase
-          .from("quiz_submissions")
-          .select("*")
-          .eq("student_id", student.id)
-          .order("submitted_at", { ascending: false });
-        interactiveQuizSubs = baseSubs || [];
-      } else if (rawQs && rawQs.length > 0) {
-        const tIds = Array.from(new Set(rawQs.map((q: any) => q.quizzes?.topic_id).filter(Boolean)));
-        let tMap = new Map();
-        if (tIds.length > 0) {
-          const { data: tList } = await supabase.from("topics").select("id, title, section_id").in("id", tIds);
-          tMap = new Map((tList || []).map((t: any) => [t.id, t]));
-        }
-        interactiveQuizSubs = rawQs.map((q: any) => ({
-          ...q,
-          quizzes: q.quizzes ? {
-            ...q.quizzes,
-            topics: tMap.get(q.quizzes.topic_id) || null
-          } : null
-        }));
+      // Collect all topic IDs across progress, submissions, and quizzes
+      const allTopicIds = Array.from(new Set([
+        ...tpData.map((tp: any) => tp.topic_id),
+        ...allManualSubs.map((ms: any) => ms.topic_id),
+        ...interactiveQuizSubs.map((qs: any) => qs.topic_id || qs.quizzes?.topic_id),
+      ].filter(Boolean)));
+
+      // Map topics directly to get real title, section_id, and course_id
+      const topicsMap = new Map<string, any>();
+      const detectedCourseIds = new Set<string>();
+
+      if (allTopicIds.length > 0) {
+        const { data: tList } = await supabase
+          .from("topics")
+          .select("id, title, section_id, sections(id, course_id)")
+          .in("id", allTopicIds);
+        (tList || []).forEach((t: any) => {
+          topicsMap.set(t.id, t);
+          const cId = t.sections?.course_id;
+          if (cId) detectedCourseIds.add(cId);
+        });
       }
 
-      // Convert PDF quizzes into quiz submissions format so they display in Quizzes tab and reports
+      // Attach topic info to topic_progress
+      const enrichedTp = tpData.map((tp: any) => ({
+        ...tp,
+        topics: topicsMap.get(tp.topic_id) || null
+      }));
+
+      // Attach topic info to manual_submissions
+      const enrichedManualSubs = allManualSubs.map((ms: any) => ({
+        ...ms,
+        topics: topicsMap.get(ms.topic_id) || null
+      }));
+
+      // Attach topic info to interactive quiz submissions
+      const enrichedInteractiveQuizzes = interactiveQuizSubs.map((qs: any) => {
+        const topId = qs.quizzes?.topic_id || qs.topic_id;
+        const topicObj = topId ? topicsMap.get(topId) : null;
+        return {
+          ...qs,
+          quizzes: qs.quizzes ? {
+            ...qs.quizzes,
+            title: qs.quizzes.title || topicObj?.title || "Quiz Evaluation",
+            topics: topicObj || qs.quizzes.topics || null
+          } : {
+            id: qs.quiz_id || qs.id,
+            title: topicObj?.title || "Quiz Evaluation",
+            total_marks: 100,
+            passing_score: 50,
+            topics: topicObj || null
+          }
+        };
+      });
+
+      // Separate worksheets vs PDF quizzes
+      const worksheetsData = enrichedManualSubs.filter((s: any) => s.type !== "pdf_quiz");
+      const pdfQuizzesData = enrichedManualSubs.filter((s: any) => s.type === "pdf_quiz");
+
+      // Format PDF quizzes into quiz submissions format
       const formattedPdfQuizzes = pdfQuizzesData.map((pq: any) => ({
         id: pq.id,
         student_id: pq.student_id,
@@ -530,13 +577,11 @@ export default function AdminStudentsPage() {
       }));
 
       // Unified quiz submissions list (both interactive & PDF quizzes)
-      const unifiedQuizzes = [...interactiveQuizSubs, ...formattedPdfQuizzes].sort(
+      const unifiedQuizzes = [...enrichedInteractiveQuizzes, ...formattedPdfQuizzes].sort(
         (a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
       );
 
       // 4. Robust course resolution: ensure student's courses are always found
-      const detectedCourseIds = new Set<string>();
-
       // Source A: Direct enrollments table in Supabase
       const { data: directEnrs } = await supabase
         .from("enrollments")
@@ -556,25 +601,27 @@ export default function AdminStudentsPage() {
       // Source C: Section purchases
       const { data: spUser } = await supabase
         .from("section_purchases")
-        .select("id, purchased_at, section_id")
+        .select("id, purchased_at, section_id, sections(course_id)")
         .eq("student_id", student.id);
 
-      // Source D: Collect all section IDs from tpData, msData, spUser to discover course_ids
-      const allSectionIds = Array.from(new Set([
-        ...(tpData || []).map((tp: any) => tp.topics?.section_id),
-        ...(allManualSubs || []).map((ms: any) => ms.topics?.section_id),
-        ...(interactiveQuizSubs || []).map((qs: any) => qs.quizzes?.topics?.section_id),
-        ...(spUser || []).map((sp: any) => sp.section_id),
-      ].filter(Boolean)));
+      (spUser || []).forEach((sp: any) => {
+        const cId = sp.sections?.course_id;
+        if (cId) detectedCourseIds.add(cId);
+      });
 
-      if (allSectionIds.length > 0) {
-        const { data: secList } = await supabase
-          .from("sections")
-          .select("id, course_id")
-          .in("id", allSectionIds);
-        (secList || []).forEach((s: any) => {
-          if (s.course_id) detectedCourseIds.add(s.course_id);
-        });
+      // GUARANTEE: If no course was detected, ALWAYS default to the 1st academy course!
+      if (detectedCourseIds.size === 0) {
+        if (allCourses.length > 0) {
+          detectedCourseIds.add(allCourses[0].id);
+        } else {
+          const { data: fCourse } = await supabase
+            .from("courses")
+            .select("id")
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (fCourse) detectedCourseIds.add(fCourse.id);
+        }
       }
 
       const allCourseIds = Array.from(detectedCourseIds);
@@ -594,18 +641,27 @@ export default function AdminStudentsPage() {
           coursesData = fallback.data;
         }
 
-        if (coursesData) {
+        if (coursesData && coursesData.length > 0) {
           detailedEnrollments = coursesData.map((course: any) => {
             const matchingEnr = (directEnrs || []).find((e: any) => e.course_id === course.id);
-            const matchingSp = (spUser || []).find((sp: any) => sp.section_id && allSectionIds.includes(sp.section_id));
             return {
               id: matchingEnr?.id || `enr_${course.id}`,
               course_id: course.id,
-              enrolled_at: matchingEnr?.enrolled_at || matchingSp?.purchased_at || student.created_at,
+              enrolled_at: matchingEnr?.enrolled_at || student.created_at,
               courses: course
             };
           });
         }
+      }
+
+      // If still empty for any reason, synthesize 1st course entry
+      if (detailedEnrollments.length === 0 && allCourses.length > 0) {
+        detailedEnrollments = [{
+          id: `enr_${allCourses[0].id}`,
+          course_id: allCourses[0].id,
+          enrolled_at: student.created_at,
+          courses: allCourses[0]
+        }];
       }
 
       // 5. Fetch student AI chat logs
@@ -618,14 +674,35 @@ export default function AdminStudentsPage() {
       const fullStudentData = {
         ...student,
         enrollments: detailedEnrollments,
-        topic_progress: tpData || [],
+        topic_progress: enrichedTp,
         manual_submissions: worksheetsData,
-        all_manual_submissions: allManualSubs,
+        all_manual_submissions: enrichedManualSubs,
         quiz_submissions: unifiedQuizzes,
         chat_logs: chatData || [],
       };
 
       setSelectedStudent(fullStudentData);
+
+      // Silently persist enrollment into DB in background if not already recorded
+      const firstTargetCourse = allCourseIds[0];
+      if (firstTargetCourse && (!directEnrs || directEnrs.length === 0)) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.access_token) {
+            fetch("/api/admin/enroll-students", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                action: "enroll_single",
+                studentId: student.id,
+                courseId: firstTargetCourse,
+              }),
+            }).catch(() => {});
+          }
+        });
+      }
 
       // Also update outer students list state so counts reflect live data immediately
       setStudents(prev => prev.map(s => {

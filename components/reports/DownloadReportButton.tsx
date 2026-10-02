@@ -133,6 +133,22 @@ export const DownloadReportButton: React.FC<DownloadReportButtonProps> = ({
             }
           }
 
+          if (detailedEnrollments.length === 0) {
+            const { data: fc } = await supabase
+              .from("courses")
+              .select("id, title, total_price, sections(id, title, topics(id, title, progress_percentage, content_items))")
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            if (fc) {
+              detailedEnrollments = [{
+                id: `enr_${fc.id}`,
+                course_id: fc.id,
+                courses: fc
+              }];
+            }
+          }
+
           reportStudent = {
             ...reportStudent,
             enrollments: detailedEnrollments.length > 0 ? detailedEnrollments : reportStudent.enrollments || [],
