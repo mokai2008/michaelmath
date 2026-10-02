@@ -1,4 +1,11 @@
--- Automatically enroll all existing registered students into the first created course
+-- 1. Ensure Admin has full permissions to manage enrollments
+DROP POLICY IF EXISTS "Admin can manage all enrollments" ON public.enrollments;
+CREATE POLICY "Admin can manage all enrollments"
+  ON public.enrollments FOR ALL
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- 2. Automatically enroll all existing registered students into the first created course
 DO $$
 DECLARE
   v_first_course_id uuid;
@@ -19,3 +26,4 @@ BEGIN
     ON CONFLICT (student_id, course_id) DO NOTHING;
   END IF;
 END $$;
+
