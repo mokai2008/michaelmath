@@ -117,29 +117,38 @@ export default function PerformancePage() {
           .in('student_id', studentIds)
       ]);
 
-      // Fetch all unique topics directly by ID to ensure accurate titles everywhere
-      const allTopicIds = Array.from(new Set([
-        ...(videoOpens || []).map(v => v.topic_id),
-        ...(worksheetSubs || []).map(w => w.topic_id),
-        ...(manualSubs || []).map(m => m.topic_id),
-        ...(quizSubs || []).map(q => (q as any).quizzes?.topic_id || (q as any).topic_id),
-        ...(topicProgress || []).map(t => t.topic_id),
-      ].filter(Boolean)));
+      // Fetch courses, sections, and topics flatly without nested join errors
+      const [
+        { data: allAcademyCourses },
+        { data: allAcademySections },
+        { data: allAcademyTopics }
+      ] = await Promise.all([
+        supabase.from('courses').select('id, title'),
+        supabase.from('sections').select('id, title, course_id'),
+        supabase.from('topics').select('id, title, section_id')
+      ]);
 
-      const topicsMap = new Map<string, { title: string; courseTitle?: string }>();
-      if (allTopicIds.length > 0) {
-        const { data: tList } = await supabase
-          .from('topics')
-          .select('id, title, sections:section_id (title, courses:course_id (title))')
-          .in('id', allTopicIds);
+      const coursesTitleMap = new Map<string, string>();
+      (allAcademyCourses || []).forEach((c: any) => {
+        coursesTitleMap.set(c.id, c.title);
+      });
 
-        (tList || []).forEach((t: any) => {
-          topicsMap.set(t.id, {
-            title: t.title || 'Topic Lesson',
-            courseTitle: t.sections?.courses?.title || null
-          });
+      const sectionsInfoMap = new Map<string, { title: string; courseTitle: string | null }>();
+      (allAcademySections || []).forEach((s: any) => {
+        sectionsInfoMap.set(s.id, {
+          title: s.title,
+          courseTitle: coursesTitleMap.get(s.course_id) || null
         });
-      }
+      });
+
+      const topicsMap = new Map<string, { title: string; courseTitle: string | null }>();
+      (allAcademyTopics || []).forEach((t: any) => {
+        const sec = sectionsInfoMap.get(t.section_id);
+        topicsMap.set(t.id, {
+          title: t.title || 'Topic Lesson',
+          courseTitle: sec?.courseTitle || (allAcademyCourses && allAcademyCourses[0]?.title) || null
+        });
+      });
 
       // Build per-student performance
       const performances: StudentPerformance[] = students.map(student => {
