@@ -18,7 +18,7 @@ const supabaseAnon = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, fullName, studentWhatsapp, parentEmail, parentWhatsapp } = await request.json();
+    const { email, password, fullName, country, studentWhatsapp, parentEmail, parentWhatsapp } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
+        country,
         student_whatsapp: studentWhatsapp,
         parent_email: parentEmail,
         parent_whatsapp: parentWhatsapp
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
         options: {
           data: {
             full_name: fullName,
+            country,
             student_whatsapp: studentWhatsapp,
             parent_email: parentEmail,
             parent_whatsapp: parentWhatsapp
@@ -72,6 +74,10 @@ export async function POST(request: NextRequest) {
           parent_whatsapp: parentWhatsapp || null,
           full_name: fullName || null
         }).eq('id', userId);
+        if (country) {
+          const { error: countryErr } = await supabaseAnon.from('profiles').update({ country }).eq('id', userId);
+          if (countryErr) console.warn('Country save failed on signup:', countryErr.message);
+        }
         return NextResponse.json({ session: signUpData.session, user: signUpData.user });
       }
     } else if (userData?.user) {
@@ -98,6 +104,12 @@ export async function POST(request: NextRequest) {
         parent_whatsapp: parentWhatsapp || null,
         full_name: fullName || null
       }).eq('id', finalUserId);
+
+      // Saved separately so a missing `country` column never blocks the fields above
+      if (country) {
+        const { error: countryErr } = await supabaseAdmin.from('profiles').update({ country }).eq('id', finalUserId);
+        if (countryErr) console.warn('Country save failed on signup:', countryErr.message);
+      }
 
       // Automatically enroll student into the 1st course upon signup
       try {

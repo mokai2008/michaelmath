@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState, Suspense } from "react";
-import { Mail, Lock, User, Phone, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, User, Phone, ArrowRight, Eye, EyeOff, Globe, ChevronDown } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { COUNTRIES, POPULAR_COUNTRIES } from "@/lib/countries";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function SignupForm() {
@@ -20,6 +21,7 @@ function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [country, setCountry] = useState("");
   const [studentWhatsapp, setStudentWhatsapp] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [parentWhatsapp, setParentWhatsapp] = useState("");
@@ -47,6 +49,7 @@ function SignupForm() {
           email,
           password,
           fullName,
+          country,
           studentWhatsapp,
           parentEmail,
           parentWhatsapp
@@ -76,6 +79,7 @@ function SignupForm() {
         options: {
           data: {
             full_name: fullName,
+            country,
             student_whatsapp: studentWhatsapp,
             parent_email: parentEmail,
             parent_whatsapp: parentWhatsapp
@@ -167,6 +171,36 @@ function SignupForm() {
             >
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Country</label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Globe className="h-5 w-5 text-gray-400" />
+            </div>
+            <select
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              required
+              className={`w-full appearance-none bg-white pl-10 pr-10 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none ${country ? "text-text" : "text-gray-400"}`}
+            >
+              <option value="" disabled>Select your country</option>
+              <optgroup label="Popular">
+                {POPULAR_COUNTRIES.map((c) => (
+                  <option key={`popular-${c}`} value={c} className="text-text">{c}</option>
+                ))}
+              </optgroup>
+              <optgroup label="All countries">
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c} className="text-text">{c}</option>
+                ))}
+              </optgroup>
+            </select>
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+              <ChevronDown className="h-5 w-5 text-gray-400" />
+            </div>
           </div>
         </div>
 
