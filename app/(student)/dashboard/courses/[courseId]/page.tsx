@@ -15,7 +15,8 @@ import {
   ZoomIn,
   ShoppingCart,
   Server,
-  ExternalLink
+  ExternalLink,
+  Video
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -158,6 +159,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [buyingTopic, setBuyingTopic] = useState<string | null>(null);
   const [canvaQuizModal, setCanvaQuizModal] = useState<any>(null);
   const [canvaLiveScores, setCanvaLiveScores] = useState<Record<string, { score: number; total: number }>>({});
+  const [expandedSolutionVideos, setExpandedSolutionVideos] = useState<Record<string, boolean>>({});
+
+  const toggleSolutionVideo = (id: string) => {
+    setExpandedSolutionVideos(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  // Remember the student's active lesson across page refreshes and submissions
+  useEffect(() => {
+    if (activeTopic?.id && typeof window !== 'undefined') {
+      sessionStorage.setItem(`active_topic_${params.courseId}`, activeTopic.id);
+    }
+  }, [activeTopic?.id, params.courseId]);
 
   const courseProgressStats = useMemo(() => {
     const allTopics = (course?.sections || []).flatMap((s: any) => s.topics || []);
@@ -407,12 +423,20 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             .single();
           setWalletBalance(prof?.wallet_balance || 0);
           
-          // Open first section and set first topic active by default
-          if (sections.length > 0) {
-            setOpenSections({ [sections[0].id]: true });
-            if (sections[0].topics && sections[0].topics.length > 0) {
-              setActiveTopic(sections[0].topics[0]);
+          // Restore student's current active topic from sessionStorage, or default to first topic
+          const allTopics = sections.flatMap((s: any) => s.topics || []);
+          const savedTopicId = typeof window !== 'undefined' ? sessionStorage.getItem(`active_topic_${params.courseId}`) : null;
+          const targetTopic = (savedTopicId ? allTopics.find((t: any) => t.id === savedTopicId) : null) || (sections[0]?.topics?.[0] || null);
+
+          if (targetTopic) {
+            setActiveTopic(targetTopic);
+            // Automatically expand the section that contains the current active lesson
+            const parentSection = sections.find((s: any) => (s.topics || []).some((t: any) => t.id === targetTopic.id));
+            if (parentSection) {
+              setOpenSections(prev => ({ ...prev, [parentSection.id]: true }));
             }
+          } else if (sections.length > 0) {
+            setOpenSections({ [sections[0].id]: true });
           }
       } catch (err) {
         console.error("CoursePlayer fetch error:", err);
@@ -752,6 +776,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         alert("🎉 Quiz uploaded! All topic requirements completed — this topic has been marked complete!");
       } else {
         alert("Quiz answers uploaded successfully!");
+      }
+
+      if (activeTopic?.id && typeof window !== 'undefined') {
+        sessionStorage.setItem(`active_topic_${params.courseId}`, activeTopic.id);
       }
       window.location.reload(); 
     } catch (err: any) {
@@ -1762,36 +1790,64 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                           {/* Model Answer / Video Solution for this worksheet */}
                           {sub && (ws.answerPdfUrl || ws.answerVideoUrl) && (
-                            <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                              <div className="flex items-center gap-2.5">
-                                <span className="text-xl">📝</span>
-                                <div>
-                                  <div className="text-xs font-bold text-teal-950">Official Model Answers: {wsTitle}</div>
-                                  <div className="text-[10px] text-teal-700">Unlocked after homework submission</div>
+                            <div className="p-4 bg-teal-50/90 border border-teal-200 rounded-2xl flex flex-col gap-3 shadow-2xs">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-xl">📝</span>
+                                  <div>
+                                    <div className="text-xs font-bold text-teal-950">Official Model Answers: {wsTitle}</div>
+                                    <div className="text-[10px] text-teal-700">Unlocked after homework submission</div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                                  {ws.answerPdfUrl && (
+                                    <a 
+                                      href={ws.answerPdfUrl} 
+                                      target="_blank" 
+                                      rel="noreferrer"
+                                      className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" /> Answer Sheet PDF
+                                    </a>
+                                  )}
+                                  {ws.answerVideoUrl && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => toggleSolutionVideo(`ws_vid_${ws.id}`)}
+                                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all ${
+                                        expandedSolutionVideos[`ws_vid_${ws.id}`]
+                                          ? 'bg-teal-800 text-white shadow-md ring-2 ring-teal-400/50'
+                                          : 'bg-teal-600 hover:bg-teal-700 text-white'
+                                      }`}
+                                    >
+                                      <PlayCircle className="w-3.5 h-3.5" />
+                                      {expandedSolutionVideos[`ws_vid_${ws.id}`] ? 'Hide Video Solution' : 'Watch Video Solution'}
+                                    </button>
+                                  )}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 w-full sm:w-auto">
-                                {ws.answerPdfUrl && (
-                                  <a 
-                                    href={ws.answerPdfUrl} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
-                                  >
-                                    <FileText className="w-3.5 h-3.5" /> Answer Sheet PDF
-                                  </a>
-                                )}
-                                {ws.answerVideoUrl && (
-                                  <a 
-                                    href={ws.answerVideoUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
-                                  >
-                                    <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
-                                  </a>
-                                )}
-                              </div>
+
+                              {/* INLINE VIDEO PLAYER for Homework Solution */}
+                              {ws.answerVideoUrl && expandedSolutionVideos[`ws_vid_${ws.id}`] && (
+                                <div className="w-full pt-3 border-t border-teal-200 space-y-2">
+                                  <div className="flex items-center justify-between text-xs font-bold text-teal-950">
+                                    <span className="flex items-center gap-1.5">
+                                      <Video className="w-3.5 h-3.5 text-teal-600" />
+                                      Teacher Video Breakdown: {wsTitle}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSolutionVideo(`ws_vid_${ws.id}`)}
+                                      className="text-[11px] text-teal-700 hover:text-teal-950 font-semibold underline"
+                                    >
+                                      Close Player
+                                    </button>
+                                  </div>
+                                  <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-teal-900/30 relative">
+                                    <VideoPlayer url={ws.answerVideoUrl} />
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1872,7 +1928,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 </button>
               )}
               {quizResult && (
-                 <button onClick={() => window.location.reload()} className="text-primary font-bold">Close & Save</button>
+                 <button onClick={() => {
+                   if (activeTopic?.id && typeof window !== 'undefined') {
+                     sessionStorage.setItem(`active_topic_${params.courseId}`, activeTopic.id);
+                   }
+                   window.location.reload();
+                 }} className="text-primary font-bold">Close & Save</button>
               )}
             </div>
 
@@ -2200,36 +2261,64 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                             {/* Model Answer / Mark Scheme (Unlocked after submission) */}
                             {submission && (quiz.answerPdfUrl || quiz.answerVideoUrl) && (
-                              <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                                <div className="flex items-center gap-2.5">
-                                  <span className="text-xl">📝</span>
-                                  <div>
-                                    <div className="text-xs font-bold text-teal-950">Official Model Answers: {quizTitle}</div>
-                                    <div className="text-[10px] text-teal-700">Unlocked after quiz submission</div>
+                              <div className="p-4 bg-teal-50/90 border border-teal-200 rounded-2xl flex flex-col gap-3 shadow-2xs">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="text-xl">📝</span>
+                                    <div>
+                                      <div className="text-xs font-bold text-teal-950">Official Model Answers: {quizTitle}</div>
+                                      <div className="text-[10px] text-teal-700">Unlocked after quiz submission</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                                    {quiz.answerPdfUrl && (
+                                      <a 
+                                        href={quiz.answerPdfUrl} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                                      >
+                                        <FileText className="w-3.5 h-3.5" /> Mark Scheme PDF
+                                      </a>
+                                    )}
+                                    {quiz.answerVideoUrl && (
+                                      <button 
+                                        type="button"
+                                        onClick={() => toggleSolutionVideo(`quiz_vid_${quiz.id}`)}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all ${
+                                          expandedSolutionVideos[`quiz_vid_${quiz.id}`]
+                                            ? 'bg-teal-800 text-white shadow-md ring-2 ring-teal-400/50'
+                                            : 'bg-teal-600 hover:bg-teal-700 text-white'
+                                        }`}
+                                      >
+                                        <PlayCircle className="w-3.5 h-3.5" />
+                                        {expandedSolutionVideos[`quiz_vid_${quiz.id}`] ? 'Hide Video Solution' : 'Watch Video Solution'}
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2 w-full sm:w-auto">
-                                  {quiz.answerPdfUrl && (
-                                    <a 
-                                      href={quiz.answerPdfUrl} 
-                                      target="_blank" 
-                                      rel="noreferrer"
-                                      className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
-                                    >
-                                      <FileText className="w-3.5 h-3.5" /> Mark Scheme PDF
-                                    </a>
-                                  )}
-                                  {quiz.answerVideoUrl && (
-                                    <a 
-                                      href={quiz.answerVideoUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="px-3.5 py-1.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
-                                    >
-                                      <PlayCircle className="w-3.5 h-3.5" /> Video Solution Breakdown
-                                    </a>
-                                  )}
-                                </div>
+
+                                {/* INLINE VIDEO PLAYER for Quiz Solution */}
+                                {quiz.answerVideoUrl && expandedSolutionVideos[`quiz_vid_${quiz.id}`] && (
+                                  <div className="w-full pt-3 border-t border-teal-200 space-y-2">
+                                    <div className="flex items-center justify-between text-xs font-bold text-teal-950">
+                                      <span className="flex items-center gap-1.5">
+                                        <Video className="w-3.5 h-3.5 text-teal-600" />
+                                        Teacher Video Solution: {quizTitle}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleSolutionVideo(`quiz_vid_${quiz.id}`)}
+                                        className="text-[11px] text-teal-700 hover:text-teal-950 font-semibold underline"
+                                      >
+                                        Close Player
+                                      </button>
+                                    </div>
+                                    <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-teal-900/30 relative">
+                                      <VideoPlayer url={quiz.answerVideoUrl} />
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
