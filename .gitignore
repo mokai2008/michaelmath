@@ -34,3 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# uploaded media & videos on VPS
+/public/uploads/*
+!/public/uploads/.gitkeep

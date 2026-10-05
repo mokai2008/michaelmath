@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { writeFile, mkdir } from "fs/promises";
+import { createWriteStream } from "fs";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
+import path from "path";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,62 +16,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // Create unique filename
-    const fileExt = file.name.split('.').pop() || 'bin';
+    // Generate safe unique filename
+    const origExt = file.name ? file.name.split('.').pop()?.replace(/[^a-zA-Z0-9]/g, '') : '';
+    const fileExt = origExt || 'bin';
     const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `uploads/${filename}`;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // Target directory: public/uploads on the VPS disk
+    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    await mkdir(uploadsDir, { recursive: true });
 
-    let supabaseClient;
+    const diskPath = path.join(uploadsDir, filename);
 
-    if (serviceRoleKey) {
-      // Service role key bypasses RLS — best option
-      supabaseClient = createClient(supabaseUrl, serviceRoleKey);
+    // Stream directly to VPS disk for high performance, fast IO, and low memory usage
+    if (typeof file.stream === "function") {
+      const stream = Readable.fromWeb(file.stream() as any);
+      await pipeline(stream, createWriteStream(diskPath));
     } else {
-      // Fallback: create client with user's JWT so storage RLS sees them as 'authenticated'
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-      const authHeader = request.headers.get("authorization");
-      const token = authHeader?.replace("Bearer ", "");
-
-      if (token) {
-        supabaseClient = createClient(supabaseUrl, anonKey, {
-          global: {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        });
-      } else {
-        supabaseClient = createClient(supabaseUrl, anonKey);
-      }
+      const bytes = await file.arrayBuffer();
+      await writeFile(diskPath, Buffer.from(bytes));
     }
 
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabaseClient.storage
-      .from("course-assets")
-      .upload(filePath, buffer, {
-        contentType: file.type,
-        upsert: true,
-      });
+    // Return public relative path served directly by VPS Nginx / Next.js
+    const publicUrl = `/uploads/${filename}`;
 
-    if (uploadError) {
-      console.error("Supabase upload error:", uploadError);
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
-    }
-
-    // Return the public URL
-    const { data: { publicUrl } } = supabaseClient.storage
-      .from("course-assets")
-      .getPublicUrl(filePath);
-
-    return NextResponse.json({ url: publicUrl });
+    return NextResponse.json({ url: publicUrl, path: publicUrl });
   } catch (error: any) {
-    console.error("Upload error:", error);
-    return NextResponse.json({ error: "Failed to upload file: " + error.message }, { status: 500 });
+    console.error("VPS Upload error:", error);
+    return NextResponse.json(
+      { error: "Failed to upload file to VPS: " + error.message },
+      { status: 500 }
+    );
   }
 }

@@ -27,59 +27,28 @@ export default function AdminCourseEditor() {
 
     setUploadingField(fieldId);
     try {
-      const fileExt = file.name.split('.').pop() || 'bin';
-      const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `uploads/${filename}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const formData = new FormData();
+      formData.append("file", file);
 
-      let uploadedUrl: string | null = null;
+      // Upload directly to VPS disk via /api/upload
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: session?.access_token ? {
+          Authorization: `Bearer ${session.access_token}`
+        } : {},
+        body: formData,
+      });
 
-      // 1. Direct Supabase Storage Upload
-      try {
-        const { error: uploadError } = await supabase.storage
-          .from('course-assets')
-          .upload(filePath, file, {
-            upsert: true,
-          });
-
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage
-            .from('course-assets')
-            .getPublicUrl(filePath);
-          uploadedUrl = publicUrl;
-        } else {
-          console.warn("Direct upload error, falling back to /api/upload:", uploadError.message);
-        }
-      } catch (directErr: any) {
-        console.warn("Direct upload exception, trying /api/upload:", directErr);
+      const data = await res.json();
+      if (!res.ok || data.error || !data.url) {
+        throw new Error(data.error || "Upload to VPS failed.");
       }
 
-      // 2. Fallback to /api/upload if direct upload didn't succeed
-      if (!uploadedUrl) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          headers: session?.access_token ? {
-            Authorization: `Bearer ${session.access_token}`
-          } : {},
-          body: formData,
-        });
-
-        const data = await res.json();
-        if (!res.ok || data.error || !data.url) {
-          throw new Error(data.error || "Upload failed via all methods.");
-        }
-        uploadedUrl = data.url;
-      }
-
-      if (uploadedUrl) {
-        callback(uploadedUrl);
-      }
+      callback(data.url);
     } catch (err: any) {
       console.error("Upload error:", err);
-      alert("Failed to upload: " + err.message);
+      alert("Failed to upload to VPS: " + err.message);
     } finally {
       setUploadingField(null);
       if (e.target) {
