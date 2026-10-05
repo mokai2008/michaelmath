@@ -56,14 +56,25 @@ export async function GET(
       ".mp3": "audio/mpeg",
     };
     const contentType = mimeTypes[ext] || "application/octet-stream";
+    const isVideo = contentType.startsWith("video/");
 
     const range = request.headers.get("range");
 
-    // HTTP 206 Partial Content (crucial for Safari/iOS video scrubbing & range requests)
+    // HTTP 206 Partial Content (Range request handling for fast video streaming)
     if (range) {
       const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      let end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      // Performance Optimization for Video:
+      // If client requests open-ended range (e.g. "bytes=0-"), clamp chunk size to ~2.5MB.
+      // This delivers the first playable seconds in ~2s rather than waiting 20+ seconds for the entire file.
+      if (isVideo && !parts[1]) {
+        const MAX_CHUNK_SIZE = 2.5 * 1024 * 1024; // 2.5 MB chunk
+        if (end - start + 1 > MAX_CHUNK_SIZE) {
+          end = start + MAX_CHUNK_SIZE - 1;
+        }
+      }
 
       if (isNaN(start) || start >= fileSize || end >= fileSize || start > end) {
         return new NextResponse("Requested Range Not Satisfiable", {
@@ -86,6 +97,8 @@ export async function GET(
           "Content-Length": chunkSize.toString(),
           "Content-Type": contentType,
           "Cache-Control": "public, max-age=31536000, immutable",
+          "X-Accel-Buffering": "no", // Disable Nginx proxy buffering for zero-lag streaming
+          "Access-Control-Allow-Origin": "*",
         },
       });
     }
@@ -101,6 +114,8 @@ export async function GET(
         "Content-Length": fileSize.toString(),
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   } catch (err: any) {
