@@ -119,36 +119,39 @@ export default function ProfilePage() {
 
     setUploadingAvatar(true);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
 
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${session.user.id}/avatar.${fileExt}`;
+      const formData = new FormData();
+      formData.append("file", file);
 
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from("avatars")
-      .upload(fileName, file, { upsert: true });
+      // Upload directly to VPS disk via /api/upload
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: session?.access_token ? {
+          Authorization: `Bearer ${session.access_token}`
+        } : {},
+        body: formData,
+      });
 
-    if (error) {
-      console.error("Upload error:", error);
-      // If storage bucket doesn't exist, use a data URL fallback
+      const data = await res.json();
+      if (!res.ok || data.error || !data.url) {
+        throw new Error(data.error || "Upload to VPS failed.");
+      }
+
+      setProfile(prev => ({ ...prev, avatar_url: data.url }));
+    } catch (err: any) {
+      console.error("Avatar upload error:", err);
+      // Fallback to data URL if network error
       const reader = new FileReader();
       reader.onloadend = () => {
         setProfile(prev => ({ ...prev, avatar_url: reader.result as string }));
-        setUploadingAvatar(false);
       };
       reader.readAsDataURL(file);
-      return;
+    } finally {
+      setUploadingAvatar(false);
     }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from("avatars")
-      .getPublicUrl(fileName);
-
-    setProfile(prev => ({ ...prev, avatar_url: urlData.publicUrl }));
-    setUploadingAvatar(false);
   };
 
   if (isLoading) {

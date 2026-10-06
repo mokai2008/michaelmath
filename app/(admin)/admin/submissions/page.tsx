@@ -55,24 +55,28 @@ export default function SubmissionsPage() {
 
     setIsUploadingFeedbackFile(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `feedback_${selectedSubmission.student_id}_${selectedSubmission.topic_id}_${Date.now()}.${fileExt}`;
-      const filePath = `feedback_files/${fileName}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const formData = new FormData();
+      formData.append("file", file);
 
-      const { error: uploadError } = await supabase.storage
-        .from('course-assets')
-        .upload(filePath, file, { upsert: true });
+      // Upload directly to VPS disk via /api/upload
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: session?.access_token ? {
+          Authorization: `Bearer ${session.access_token}`
+        } : {},
+        body: formData,
+      });
 
-      if (uploadError) throw uploadError;
+      const data = await res.json();
+      if (!res.ok || data.error || !data.url) {
+        throw new Error(data.error || "Upload to VPS failed.");
+      }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('course-assets')
-        .getPublicUrl(filePath);
-
-      setFeedbackFileUrl(publicUrl);
+      setFeedbackFileUrl(data.url);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to upload feedback file: " + err.message);
+      alert("Failed to upload feedback file to VPS: " + err.message);
     } finally {
       setIsUploadingFeedbackFile(false);
     }

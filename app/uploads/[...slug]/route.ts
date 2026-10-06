@@ -96,6 +96,7 @@ export async function GET(
           "Accept-Ranges": "bytes",
           "Content-Length": chunkSize.toString(),
           "Content-Type": contentType,
+          "Content-Disposition": `inline; filename="${path.basename(filePath)}"`,
           "Cache-Control": "public, max-age=31536000, immutable",
           "X-Accel-Buffering": "no", // Disable Nginx proxy buffering for zero-lag streaming
           "Access-Control-Allow-Origin": "*",
@@ -113,6 +114,7 @@ export async function GET(
         "Accept-Ranges": "bytes",
         "Content-Length": fileSize.toString(),
         "Content-Type": contentType,
+        "Content-Disposition": `inline; filename="${path.basename(filePath)}"`,
         "Cache-Control": "public, max-age=31536000, immutable",
         "X-Accel-Buffering": "no",
         "Access-Control-Allow-Origin": "*",
