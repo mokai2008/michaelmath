@@ -1114,37 +1114,52 @@ export default function AdminNewCourse() {
 
                                       <div className="space-y-2">
                                         {(item.urls && item.urls.length > 0 ? item.urls : [item.url || '']).map((mirrorUrl: string, mIdx: number) => (
-                                          <div key={mIdx} className="flex items-center gap-2">
-                                            <span className="text-[11px] font-bold text-gray-500 min-w-[75px] shrink-0">
-                                              {mIdx === 0 ? 'Link 1 (Main):' : `Link ${mIdx + 1}:`}
-                                            </span>
-                                            <input 
-                                              type="text" 
-                                              value={mirrorUrl}
-                                              onChange={(e) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, e.target.value)}
-                                              className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
-                                              placeholder={mIdx === 0 ? "https://drive.google.com/..., https://onedrive.live.com/..., or YouTube URL" : `Alternative Link ${mIdx + 1} (Google Drive / OneDrive)`}
-                                            />
-                                            <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
-                                              {uploadingField === `vid_${item.id}_${mIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                          <div key={mIdx} className="p-2 sm:p-0 bg-gray-50/70 sm:bg-transparent rounded-xl border sm:border-0 border-gray-200/60 flex flex-col sm:flex-row sm:items-center gap-2">
+                                            <div className="flex items-center justify-between sm:justify-start gap-2 shrink-0">
+                                              <span className="text-[11px] font-bold text-gray-700 sm:text-gray-500 sm:min-w-[75px]">
+                                                {mIdx === 0 ? 'Link 1 (Main):' : `Link ${mIdx + 1}:`}
+                                              </span>
+                                              {mIdx > 0 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteMirrorUrl(section.id, topic.id, item.id, mIdx)}
+                                                  className="sm:hidden p-1 text-red-400 hover:text-red-600 rounded hover:bg-red-50"
+                                                  title="Remove mirror link"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              )}
+                                            </div>
+
+                                            <div className="flex items-center gap-2 flex-1 min-w-0">
                                               <input 
-                                                type="file" 
-                                                accept="video/*" 
-                                                className="hidden" 
-                                                onChange={(e) => handleFileUpload(e, `vid_${item.id}_${mIdx}`, (url) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, url), mirrorUrl)} 
-                                                disabled={uploadingField === `vid_${item.id}_${mIdx}`} 
+                                                type="text" 
+                                                value={mirrorUrl}
+                                                onChange={(e) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, e.target.value)}
+                                                className="flex-1 min-w-0 text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white"
+                                                placeholder={mIdx === 0 ? "https://drive.google.com/..., OneDrive, or YouTube URL" : `Alternative Link ${mIdx + 1} (Google Drive / OneDrive)`}
                                               />
-                                            </label>
-                                            {mIdx > 0 && (
-                                              <button
-                                                type="button"
-                                                onClick={() => handleDeleteMirrorUrl(section.id, topic.id, item.id, mIdx)}
-                                                className="p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-red-50 shrink-0"
-                                                title="Remove mirror link"
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            )}
+                                              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center shrink-0">
+                                                {uploadingField === `vid_${item.id}_${mIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                                <input 
+                                                  type="file" 
+                                                  accept="video/*" 
+                                                  className="hidden" 
+                                                  onChange={(e) => handleFileUpload(e, `vid_${item.id}_${mIdx}`, (url) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, url), mirrorUrl)} 
+                                                  disabled={uploadingField === `vid_${item.id}_${mIdx}`} 
+                                                />
+                                              </label>
+                                              {mIdx > 0 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteMirrorUrl(section.id, topic.id, item.id, mIdx)}
+                                                  className="hidden sm:block p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-red-50 shrink-0"
+                                                  title="Remove mirror link"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              )}
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
