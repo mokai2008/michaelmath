@@ -70,19 +70,19 @@ export default function AdminCoursesPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 md:mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-text">Course Management</h1>
-          <p className="text-text/60 text-sm">Manage your syllabus, pricing, and content.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-text">Course Management</h1>
+          <p className="text-text/60 text-xs sm:text-sm">Manage your syllabus, pricing, and content.</p>
         </div>
-        <div className="flex gap-4">
-          <button onClick={fetchCourses} className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors">
+        <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
+          <button onClick={fetchCourses} className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-text px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors">
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
-          <Link href="/admin/courses/new" className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors">
-            <Plus className="w-5 h-5" />
-            Create New Course
+          <Link href="/admin/courses/new" className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium shadow-sm transition-colors">
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span>Create Course</span>
           </Link>
         </div>
       </div>

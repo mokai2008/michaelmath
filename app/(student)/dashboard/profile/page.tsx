@@ -125,6 +125,9 @@ export default function ProfilePage() {
 
       const formData = new FormData();
       formData.append("file", file);
+      if (profile.avatar_url) {
+        formData.append("oldUrl", profile.avatar_url);
+      }
 
       // Upload directly to VPS disk via /api/upload
       const res = await fetch("/api/upload", {

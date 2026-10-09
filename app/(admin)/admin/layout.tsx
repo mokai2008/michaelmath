@@ -27,7 +27,8 @@ import {
   Bell,
   FileText,
   ClipboardCheck,
-  CheckCircle2
+  CheckCircle2,
+  ExternalLink
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -512,30 +513,43 @@ export default function AdminLayout({
       </div>
 
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14 md:hidden">
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="p-2 -ml-2 rounded-lg text-text/70 hover:bg-gray-100 transition-colors relative"
-          aria-label="Open menu"
-        >
-          <Menu className="w-6 h-6" />
-          {(unreadMessages > 0 || pendingRequests > 0 || pendingSubmissions > 0) && (
-            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
-          )}
-        </button>
-        <Link href="/admin/stats" className="flex items-center gap-2">
-          <div className="bg-primary/10 p-1.5 rounded-lg">
-            <Leaf className="w-4 h-4 text-primary" />
-          </div>
-          <span className="font-bold text-text tracking-tight">Admin Area</span>
-        </Link>
-        <button
-          onClick={() => setAiAssistantOpen(true)}
-          className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
-          aria-label="Open AI Co-Pilot"
-        >
-          <Bot className="w-5 h-5" />
-        </button>
+      <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-4 h-14 md:hidden shadow-xs">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 -ml-1 rounded-lg text-text/70 hover:bg-gray-100 transition-colors relative"
+            aria-label="Open menu"
+          >
+            <Menu className="w-6 h-6" />
+            {(unreadMessages > 0 || pendingRequests > 0 || pendingSubmissions > 0) && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+            )}
+          </button>
+          <Link href="/admin/stats" className="flex items-center gap-1.5">
+            <div className="bg-primary/10 p-1.5 rounded-lg">
+              <Leaf className="w-4 h-4 text-primary" />
+            </div>
+            <span className="font-bold text-sm sm:text-base text-text tracking-tight">Admin Area</span>
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Link
+            href="/"
+            className="px-2.5 py-1.5 text-xs font-bold text-slate-700 bg-gray-100 hover:bg-gray-200 active:scale-95 rounded-lg transition-all flex items-center gap-1 border border-gray-200"
+            title="Browse Public Website"
+          >
+            <span>View Site</span>
+            <ExternalLink className="w-3 h-3 text-gray-500" />
+          </Link>
+          <button
+            onClick={() => setAiAssistantOpen(true)}
+            className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
+            aria-label="Open AI Co-Pilot"
+          >
+            <Bot className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Backdrop overlay (mobile only) */}
@@ -643,20 +657,20 @@ export default function AdminLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0 relative">
+      <main className="flex-1 overflow-y-auto pt-14 pb-20 md:pb-0 md:pt-0 relative">
         {children}
 
         {/* Floating AI Admin Assistant Trigger Button */}
         {!aiAssistantOpen && (
           <button
             onClick={() => setAiAssistantOpen(true)}
-            className="fixed bottom-6 right-6 z-40 bg-slate-900 hover:bg-slate-800 text-white p-3.5 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700 hover:scale-105 transition-all group"
+            className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-30 bg-slate-900 hover:bg-slate-800 text-white p-3 md:p-3.5 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700 hover:scale-105 transition-all group"
             title="Open AI Admin Co-Pilot"
           >
-            <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
-              <Bot className="w-5 h-5 text-primary group-hover:rotate-12 transition-transform" />
+            <div className="w-7 h-7 md:w-8 md:h-8 bg-primary/20 rounded-full flex items-center justify-center">
+              <Bot className="w-4 h-4 md:w-5 md:h-5 text-primary group-hover:rotate-12 transition-transform" />
             </div>
-            <span className="text-xs font-bold pr-2 hidden sm:inline">AI Co-Pilot</span>
+            <span className="text-xs font-bold pr-1.5 hidden sm:inline">AI Co-Pilot</span>
           </button>
         )}
 
@@ -666,6 +680,73 @@ export default function AdminLayout({
           onClose={() => setAiAssistantOpen(false)} 
         />
       </main>
+
+      {/* Mobile Bottom Navigation Bar (Persistent quick access to primary sections) */}
+      <nav 
+        aria-label="Admin mobile navigation"
+        className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-gray-200 flex items-center justify-around px-2 py-1.5 md:hidden shadow-lg safe-area-pb"
+      >
+        <Link
+          href="/admin/stats"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-all ${
+            pathname === "/admin/stats" ? "text-primary font-black" : "text-text/60 hover:text-text"
+          }`}
+        >
+          <BarChart3 className="w-5 h-5" />
+          <span className="mt-0.5">Stats</span>
+        </Link>
+
+        <Link
+          href="/admin/courses"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-all ${
+            pathname?.startsWith("/admin/courses") ? "text-primary font-black" : "text-text/60 hover:text-text"
+          }`}
+        >
+          <BookOpen className="w-5 h-5" />
+          <span className="mt-0.5">Courses</span>
+        </Link>
+
+        <Link
+          href="/admin/submissions"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-all relative ${
+            pathname === "/admin/submissions" ? "text-primary font-black" : "text-text/60 hover:text-text"
+          }`}
+        >
+          <div className="relative">
+            <ClipboardCheck className="w-5 h-5" />
+            {pendingSubmissions > 0 && (
+              <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs animate-pulse">
+                {pendingSubmissions}
+              </span>
+            )}
+          </div>
+          <span className="mt-0.5">Reviews</span>
+        </Link>
+
+        <Link
+          href="/admin/students"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-all ${
+            pathname?.startsWith("/admin/students") ? "text-primary font-black" : "text-text/60 hover:text-text"
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="mt-0.5">Students</span>
+        </Link>
+
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          className="flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold text-text/60 hover:text-text relative"
+        >
+          <div className="relative">
+            <Menu className="w-5 h-5" />
+            {(unreadMessages > 0 || pendingRequests > 0) && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+            )}
+          </div>
+          <span className="mt-0.5">More</span>
+        </button>
+      </nav>
     </div>
   );
 }

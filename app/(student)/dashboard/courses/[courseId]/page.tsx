@@ -708,6 +708,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const formData = new FormData();
       formData.append("file", file);
 
+      const existingUrl = manualSubmissions[`${topicId}_${subType}`]?.file_url || manualSubmissions[`${topicId}_worksheet`]?.file_url;
+      if (existingUrl) {
+        formData.append("oldUrl", existingUrl);
+      }
+
       // Upload directly to VPS disk via /api/upload
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -805,6 +810,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const formData = new FormData();
       formData.append("file", file);
 
+      const subType = `pdf_quiz_${quizId}`;
+      const existingUrl = manualSubmissions[`${activeTopic.id}_${subType}`]?.file_url || manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.file_url;
+      if (existingUrl) {
+        formData.append("oldUrl", existingUrl);
+      }
+
       // Upload directly to VPS disk via /api/upload
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -822,7 +833,6 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const finalUrl = data.url;
 
       // Insert or update manual_submissions for PDF Quiz (per-quiz key with backward compatibility)
-      const subType = `pdf_quiz_${quizId}`;
       const { data: existing } = await supabase.from('manual_submissions')
          .select('id')
          .eq('student_id', sessionUser.id)

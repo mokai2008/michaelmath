@@ -47,7 +47,12 @@ export default function AdminNewCourse() {
     }
   ]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldId: string, callback: (url: string) => void) => {
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    fieldId: string,
+    callback: (url: string) => void,
+    currentUrl?: string
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -56,6 +61,9 @@ export default function AdminNewCourse() {
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("file", file);
+      if (currentUrl) {
+        formData.append("oldUrl", currentUrl);
+      }
 
       // Upload directly to VPS disk via /api/upload
       const res = await fetch("/api/upload", {
@@ -285,7 +293,16 @@ export default function AdminNewCourse() {
                 ...topic,
                 items: (topic.items || []).map((item: any) => {
                   if (item.id === itemId) {
-                    let urls = (item.urls || [item.url || '']).filter((_: any, idx: number) => idx !== urlIndex);
+                    const currentUrls = (item.urls || [item.url || '']);
+                    const removedUrl = currentUrls[urlIndex];
+                    if (removedUrl && removedUrl.startsWith('/uploads/')) {
+                      fetch('/api/upload', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: removedUrl }),
+                      }).catch(() => {});
+                    }
+                    let urls = currentUrls.filter((_: any, idx: number) => idx !== urlIndex);
                     if (urls.length === 0) urls = [''];
                     return { ...item, urls, url: urls[0] || '' };
                   }
@@ -631,17 +648,17 @@ export default function AdminNewCourse() {
   const roundedAllocated = Math.round(totalAllocatedPercentage * 10) / 10;
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
+    <div className="p-4 sm:p-6 md:p-8 max-w-5xl mx-auto space-y-6 sm:space-y-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text">Create New Course</h1>
-          <p className="text-text/60 text-sm">Build your syllabus and set up pricing.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-text">Create New Course</h1>
+          <p className="text-text/60 text-xs sm:text-sm">Build your syllabus and set up pricing.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 w-full sm:w-auto">
           <button 
             onClick={() => handleSave(false)}
             disabled={isSaving}
-            className="flex items-center gap-2 bg-white border border-gray-200 text-text px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+            className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-white border border-gray-200 text-text px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-text/70" />}
             Save Draft
@@ -650,27 +667,27 @@ export default function AdminNewCourse() {
       </div>
 
       {/* Progress Steps */}
-      <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-        <div className={`flex items-center gap-2 font-semibold ${step === 1 ? 'text-primary' : 'text-text/50'}`}>
-          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs ${step === 1 ? 'bg-primary text-white' : 'bg-gray-100'}`}>1</span>
+      <div className="flex items-center gap-3 sm:gap-4 bg-white p-3.5 sm:p-4 rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+        <div className={`flex items-center gap-2 font-semibold text-xs sm:text-sm shrink-0 ${step === 1 ? 'text-primary' : 'text-text/50'}`}>
+          <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs ${step === 1 ? 'bg-primary text-white' : 'bg-gray-100'}`}>1</span>
           Course Information
         </div>
-        <ChevronRight className="w-4 h-4 text-text/30" />
-        <div className={`flex items-center gap-2 font-semibold ${step === 2 ? 'text-primary' : 'text-text/50'}`}>
-          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs ${step === 2 ? 'bg-primary text-white' : 'bg-gray-100'}`}>2</span>
+        <ChevronRight className="w-4 h-4 text-text/30 shrink-0" />
+        <div className={`flex items-center gap-2 font-semibold text-xs sm:text-sm shrink-0 ${step === 2 ? 'text-primary' : 'text-text/50'}`}>
+          <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs ${step === 2 ? 'bg-primary text-white' : 'bg-gray-100'}`}>2</span>
           Curriculum Builder & Lessons
         </div>
       </div>
 
       {step === 1 && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
           <div>
             <label className="block text-sm font-medium text-text mb-2">Course Title</label>
             <input 
               type="text" 
               value={courseTitle}
               onChange={(e) => setCourseTitle(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" 
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" 
               placeholder="e.g. Pure Mathematics 1 (P1) Masterclass"
             />
           </div>
@@ -680,24 +697,24 @@ export default function AdminNewCourse() {
               rows={4} 
               value={courseDescription}
               onChange={(e) => setCourseDescription(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" 
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" 
               placeholder="Write a detailed description..."
             ></textarea>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <label className="block text-sm font-medium text-text mb-2">Thumbnail URL or Upload</label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input 
                   type="text" 
                   value={courseThumbnail}
                   onChange={(e) => setCourseThumbnail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" 
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" 
                   placeholder="https://..." 
                 />
-                <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center min-w-[100px] text-sm shrink-0">
+                <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center sm:min-w-[100px] text-sm shrink-0">
                   {uploadingField === 'thumbnail' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'thumbnail', setCourseThumbnail)} disabled={uploadingField === 'thumbnail'} />
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'thumbnail', setCourseThumbnail, courseThumbnail)} disabled={uploadingField === 'thumbnail'} />
                 </label>
               </div>
             </div>
@@ -707,24 +724,24 @@ export default function AdminNewCourse() {
                 type="number" 
                 value={coursePrice}
                 onChange={(e) => setCoursePrice(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" 
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" 
                 placeholder="99.00" 
               />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-2">Course Entrance / Intro Video (YouTube, Google Drive, or Upload)</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input 
                 type="text" 
                 value={courseIntroVideo}
                 onChange={(e) => setCourseIntroVideo(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none" 
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" 
                 placeholder="YouTube, Google Drive link, or upload video" 
               />
-              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center min-w-[120px] text-sm shrink-0">
+              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center sm:min-w-[120px] text-sm shrink-0">
                 {uploadingField === 'intro_video' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
-                <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, 'intro_video', setCourseIntroVideo)} disabled={uploadingField === 'intro_video'} />
+                <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, 'intro_video', setCourseIntroVideo, courseIntroVideo)} disabled={uploadingField === 'intro_video'} />
               </label>
             </div>
           </div>
@@ -1114,7 +1131,7 @@ export default function AdminNewCourse() {
                                                 type="file" 
                                                 accept="video/*" 
                                                 className="hidden" 
-                                                onChange={(e) => handleFileUpload(e, `vid_${item.id}_${mIdx}`, (url) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, url))} 
+                                                onChange={(e) => handleFileUpload(e, `vid_${item.id}_${mIdx}`, (url) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, url), mirrorUrl)} 
                                                 disabled={uploadingField === `vid_${item.id}_${mIdx}`} 
                                               />
                                             </label>
@@ -1199,7 +1216,7 @@ export default function AdminNewCourse() {
                                                         worksheetPdfUrl: url,
                                                         hasWorksheetPdf: true
                                                       });
-                                                    })}
+                                                    }, item.worksheetPdfUrl)}
                                                     disabled={uploadingField === `video_worksheet_${item.id}`}
                                                   />
                                                 </label>
@@ -1207,6 +1224,13 @@ export default function AdminNewCourse() {
                                                   <button
                                                     type="button"
                                                     onClick={() => {
+                                                      if (item.worksheetPdfUrl && item.worksheetPdfUrl.startsWith('/uploads/')) {
+                                                        fetch('/api/upload', {
+                                                          method: 'DELETE',
+                                                          headers: { 'Content-Type': 'application/json' },
+                                                          body: JSON.stringify({ url: item.worksheetPdfUrl }),
+                                                        }).catch(() => {});
+                                                      }
                                                       handleUpdateItemFields(section.id, topic.id, item.id, {
                                                         worksheetPdfUrl: '',
                                                         hasWorksheetPdf: false
@@ -1241,7 +1265,7 @@ export default function AdminNewCourse() {
                                           />
                                           <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
                                             {uploadingField === `pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-                                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url))} disabled={uploadingField === `pdf_${item.id}`} />
+                                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url), item.url)} disabled={uploadingField === `pdf_${item.id}`} />
                                           </label>
                                         </div>
                                       </div>
@@ -1264,7 +1288,7 @@ export default function AdminNewCourse() {
                                               />
                                               <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
                                                 {uploadingField === `ans_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-                                                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url))} disabled={uploadingField === `ans_pdf_${item.id}`} />
+                                                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url), item.answerPdfUrl)} disabled={uploadingField === `ans_pdf_${item.id}`} />
                                               </label>
                                             </div>
                                           </div>
@@ -1280,7 +1304,7 @@ export default function AdminNewCourse() {
                                               />
                                               <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
                                                 {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
-                                                <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url))} disabled={uploadingField === `ans_vid_${item.id}`} />
+                                                <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url), item.answerVideoUrl)} disabled={uploadingField === `ans_vid_${item.id}`} />
                                               </label>
                                             </div>
                                           </div>
@@ -1409,7 +1433,7 @@ export default function AdminNewCourse() {
                                             />
                                             <label className="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
                                               {uploadingField === `quiz_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-                                              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `quiz_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'quizPdfUrl', url))} disabled={uploadingField === `quiz_pdf_${item.id}`} />
+                                              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `quiz_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'quizPdfUrl', url), item.quizPdfUrl)} disabled={uploadingField === `quiz_pdf_${item.id}`} />
                                             </label>
                                           </div>
                                         </div>
@@ -1465,7 +1489,7 @@ export default function AdminNewCourse() {
                                                   />
                                                   <label className="cursor-pointer bg-gray-200 hover:bg-gray-300 text-text p-1.5 rounded-md font-medium text-xs shrink-0">
                                                     {uploadingField === `q_img_${item.id}_${qIndex}` ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Upload className="w-3.5 h-3.5" />}
-                                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `q_img_${item.id}_${qIndex}`, (url) => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'imageUrl', url))} disabled={uploadingField === `q_img_${item.id}_${qIndex}`} />
+                                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, `q_img_${item.id}_${qIndex}`, (url) => handleUpdateQuestionInItem(section.id, topic.id, item.id, qIndex, 'imageUrl', url), q.imageUrl)} disabled={uploadingField === `q_img_${item.id}_${qIndex}`} />
                                                   </label>
                                                 </div>
 
@@ -1522,7 +1546,7 @@ export default function AdminNewCourse() {
                                             />
                                             <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
                                               {uploadingField === `ans_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
-                                              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url))} disabled={uploadingField === `ans_pdf_${item.id}`} />
+                                              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url), item.answerPdfUrl)} disabled={uploadingField === `ans_pdf_${item.id}`} />
                                             </label>
                                           </div>
                                         </div>
@@ -1538,7 +1562,7 @@ export default function AdminNewCourse() {
                                             />
                                             <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
                                               {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
-                                              <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url))} disabled={uploadingField === `ans_vid_${item.id}`} />
+                                              <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url), item.answerVideoUrl)} disabled={uploadingField === `ans_vid_${item.id}`} />
                                             </label>
                                           </div>
                                         </div>

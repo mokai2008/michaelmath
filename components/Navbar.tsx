@@ -79,12 +79,25 @@ export function Navbar() {
           {/* Desktop auth buttons + mobile hamburger */}
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
             {isLoggedIn ? (
-              <Link 
-                href={isAdmin ? "/admin/courses" : "/dashboard"} 
-                className="bg-primary text-white px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold hover:bg-primary/90 transition-all hover:shadow-md hover:-translate-y-0.5 text-sm md:text-base whitespace-nowrap shrink-0"
-              >
-                Dashboard
-              </Link>
+              <div className="flex items-center gap-2">
+                {isAdmin ? (
+                  <Link 
+                    href="/admin/stats" 
+                    className="bg-slate-900 text-white hover:bg-slate-800 px-3.5 md:px-5 py-2 md:py-2.5 rounded-full font-bold transition-all hover:shadow-md text-xs md:text-sm whitespace-nowrap shrink-0 flex items-center gap-1.5 border border-slate-700"
+                    title="Go to Admin Dashboard"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Admin Panel</span>
+                  </Link>
+                ) : (
+                  <Link 
+                    href="/dashboard" 
+                    className="bg-primary text-white px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold hover:bg-primary/90 transition-all hover:shadow-md hover:-translate-y-0.5 text-sm md:text-base whitespace-nowrap shrink-0"
+                  >
+                    Dashboard
+                  </Link>
+                )}
+              </div>
             ) : (
               <>
                 <Link 
@@ -122,6 +135,19 @@ export function Navbar() {
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-gray-100 bg-white shadow-lg">
           <div className="px-4 py-4 space-y-1">
+            {isLoggedIn && isAdmin && (
+              <Link
+                href="/admin/stats"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between px-4 py-3 rounded-xl bg-slate-900 text-white font-bold text-sm mb-2 shadow-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Admin Dashboard
+                </span>
+                <span className="text-xs text-white/70">Enter Admin →</span>
+              </Link>
+            )}
             {navLinks.map((link) => (
               <Link
                 key={link.href}

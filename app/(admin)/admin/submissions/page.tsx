@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft } from "lucide-react";
 import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
 
 export default function SubmissionsPage() {
@@ -98,6 +98,9 @@ export default function SubmissionsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("file", file);
+      if (feedbackFileUrl) {
+        formData.append("oldUrl", feedbackFileUrl);
+      }
 
       // Upload directly to VPS disk via /api/upload
       const res = await fetch("/api/upload", {
@@ -247,8 +250,8 @@ export default function SubmissionsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Submissions List */}
-        <div className="md:col-span-1 space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+        {/* Submissions List: hidden on mobile if an item is selected */}
+        <div className={`md:col-span-1 space-y-3 max-h-[70vh] overflow-y-auto pr-1 md:pr-2 ${selectedSubmission ? 'hidden md:block' : 'block'}`}>
           {filteredSubmissions.length === 0 ? (
             <div className="bg-white p-8 rounded-2xl border border-gray-100 text-center">
               {activeTab === 'pending' ? (
@@ -273,7 +276,7 @@ export default function SubmissionsPage() {
                   setFeedbackText(sub.feedback_text || '');
                   setFeedbackFileUrl(sub.feedback_file_url || '');
                 }}
-                className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${selectedSubmission?.id === sub.id ? 'border-primary shadow-sm' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${selectedSubmission?.id === sub.id ? 'border-primary shadow-sm ring-2 ring-primary/20' : 'border-gray-200 hover:border-gray-300'}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${sub.type === 'worksheet' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
@@ -293,39 +296,49 @@ export default function SubmissionsPage() {
           )}
         </div>
 
-        {/* Review Panel */}
-        <div className="md:col-span-2">
+        {/* Review Panel: shown when selected on mobile, or alongside list on desktop */}
+        <div className={`md:col-span-2 ${selectedSubmission ? 'block' : 'hidden md:block'}`}>
           {selectedSubmission ? (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
               {/* Header */}
-              <div className="p-6 border-b border-gray-100 bg-gray-50">
-                <div className="flex justify-between items-start">
+              <div className="p-4 sm:p-6 border-b border-gray-100 bg-gray-50">
+                {/* Mobile Back Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubmission(null)}
+                  className="md:hidden mb-3 inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-gray-100 px-3 py-1.5 rounded-xl border border-gray-200 shadow-xs transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-primary" />
+                  <span>← Back to Submissions List</span>
+                </button>
+
+                <div className="flex justify-between items-start gap-3">
                   <div>
-                    <h3 className="font-bold text-lg text-text">{selectedSubmission.profiles?.full_name}</h3>
-                    <p className="text-sm text-text/60">{selectedSubmission.topics?.title}</p>
-                    <p className="text-xs text-text/40 mt-1">Submitted: {new Date(selectedSubmission.submitted_at).toLocaleString()}</p>
+                    <h3 className="font-bold text-base sm:text-lg text-text">{selectedSubmission.profiles?.full_name}</h3>
+                    <p className="text-xs sm:text-sm text-text/60">{selectedSubmission.topics?.title}</p>
+                    <p className="text-[11px] sm:text-xs text-text/40 mt-1">Submitted: {new Date(selectedSubmission.submitted_at).toLocaleString()}</p>
                   </div>
-                  <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full ${selectedSubmission.status === 'reviewed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                  <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full shrink-0 ${selectedSubmission.status === 'reviewed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                     {selectedSubmission.status}
                   </span>
                 </div>
               </div>
 
               {/* Student's Submission - Download/View */}
-              <div className="p-6 border-b border-gray-100">
+              <div className="p-4 sm:p-6 border-b border-gray-100">
                 <h4 className="font-bold text-xs text-text/50 uppercase tracking-wider mb-3">Student&apos;s Submission</h4>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
                   <a 
                     href={selectedSubmission.file_url} 
                     target="_blank" 
                     rel="noreferrer"
-                    className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-bold text-text hover:bg-gray-50 shadow-sm transition-colors"
+                    className="flex items-center justify-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-bold text-text hover:bg-gray-50 shadow-sm transition-colors"
                   >
                     <Eye className="w-4 h-4" /> View in Browser
                   </a>
                   <button
                     onClick={handleDownloadSubmission}
-                    className="flex items-center gap-2 bg-text text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-text/90 shadow-sm transition-colors"
+                    className="flex items-center justify-center gap-2 bg-text text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-text/90 shadow-sm transition-colors"
                   >
                     <Download className="w-4 h-4" /> Download PDF
                   </button>
@@ -333,11 +346,11 @@ export default function SubmissionsPage() {
               </div>
               
               {/* Grading & Feedback */}
-              <div className="p-6 bg-white">
+              <div className="p-4 sm:p-6 bg-white">
                 <h4 className="font-bold text-xs text-text/50 uppercase tracking-wider mb-4">Grading & Feedback</h4>
                 
                 <div className="space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-text/50 uppercase tracking-wider mb-1">Score</label>
                       <input 
@@ -349,7 +362,7 @@ export default function SubmissionsPage() {
                       />
                     </div>
                     <div className="flex items-end">
-                      <p className="text-xs text-text/40 pb-3">Enter a score out of total marks</p>
+                      <p className="text-xs text-text/40 pb-2 sm:pb-3">Enter a score out of total marks</p>
                     </div>
                   </div>
                   
@@ -369,7 +382,7 @@ export default function SubmissionsPage() {
                     <label className="block text-xs font-bold text-text/50 uppercase tracking-wider mb-1">Upload Reviewed / Annotated File</label>
                     <p className="text-xs text-text/40 mb-2">Download the student&apos;s PDF above, annotate it, then upload your reviewed version here. The student will be able to download it.</p>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       <label className="cursor-pointer flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-text rounded-lg text-sm font-bold transition-colors shadow-sm border border-gray-200">
                         {isUploadingFeedbackFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                         {isUploadingFeedbackFile ? 'Uploading...' : (feedbackFileUrl ? 'Replace File' : 'Choose File')}
@@ -381,9 +394,9 @@ export default function SubmissionsPage() {
                           href={feedbackFileUrl} 
                           target="_blank" 
                           rel="noreferrer"
-                          className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm font-bold"
+                          className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm font-bold break-all"
                         >
-                          <CheckCircle2 className="w-4 h-4" /> File uploaded — Preview
+                          <CheckCircle2 className="w-4 h-4 shrink-0" /> File uploaded — Preview
                         </a>
                       )}
                     </div>
