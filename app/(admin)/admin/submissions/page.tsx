@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles } from "lucide-react";
+import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'reviewed'>('pending');
+  const [desktopNotificationGranted, setDesktopNotificationGranted] = useState(false);
   
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
   const [score, setScore] = useState<string>('');
@@ -16,8 +18,27 @@ export default function SubmissionsPage() {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isUploadingFeedbackFile, setIsUploadingFeedbackFile] = useState(false);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setDesktopNotificationGranted(Notification.permission === 'granted');
+    }
+  }, []);
+
+  const handleEnableAlerts = async () => {
+    const granted = await requestDesktopNotificationPermission();
+    setDesktopNotificationGranted(granted);
+    playNotificationSound();
+    if (granted) {
+      showDesktopNotification(
+        "Submission Alerts Enabled! 🔔",
+        "You will receive live desktop alerts whenever students submit homework or quizzes.",
+        undefined,
+        'michaelmath-submission-alert'
+      );
+    }
+  };
+
   const fetchSubmissions = async () => {
-    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('manual_submissions')
@@ -36,7 +57,10 @@ export default function SubmissionsPage() {
           throw error;
         }
       } else {
-        setSubmissions(data || []);
+        const subs = data || [];
+        setSubmissions(subs);
+        const pendingCount = subs.filter((s: any) => s.status === 'pending').length;
+        window.dispatchEvent(new CustomEvent('submissions_count_updated', { detail: pendingCount }));
       }
     } catch (err: any) {
       console.error(err);
@@ -47,6 +71,22 @@ export default function SubmissionsPage() {
 
   useEffect(() => {
     fetchSubmissions();
+
+    // Subscribe to realtime changes on manual_submissions
+    const channel = supabase
+      .channel('admin_submissions_page_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'manual_submissions' },
+        () => {
+          fetchSubmissions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleFeedbackFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +144,9 @@ export default function SubmissionsPage() {
 
       if (updateError) throw updateError;
 
+      // Immediately notify layout to decrement sidebar pending badge
+      window.dispatchEvent(new CustomEvent('submission_reviewed'));
+
       // Send notification to student
       const { error: notifyError } = await supabase.from('notifications').insert({
         student_id: selectedSubmission.student_id,
@@ -129,6 +172,8 @@ export default function SubmissionsPage() {
     }
   };
 
+  const pendingCount = submissions.filter(s => s.status === 'pending').length;
+  const reviewedCount = submissions.filter(s => s.status === 'reviewed').length;
   const filteredSubmissions = submissions.filter(s => s.status === activeTab);
 
   if (isLoading) {
@@ -141,25 +186,63 @@ export default function SubmissionsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-start md:items-center mb-8 flex-col sm:flex-row gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text">Student Submissions</h1>
-          <p className="text-text/60 text-sm">Download, review, and upload annotated feedback for student work.</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-text">Student Submissions</h1>
+            {pendingCount > 0 ? (
+              <span className="bg-rose-500 text-white text-xs font-black px-2.5 py-0.5 rounded-full shadow-xs animate-pulse">
+                {pendingCount} remaining to check
+              </span>
+            ) : (
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                All reviewed ✓
+              </span>
+            )}
+          </div>
+          <p className="text-text/60 text-sm mt-0.5">Download, review, and upload annotated feedback for student work.</p>
         </div>
+
+        <button
+          onClick={handleEnableAlerts}
+          className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shadow-xs ${
+            desktopNotificationGranted
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+              : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 animate-pulse'
+          }`}
+          title={desktopNotificationGranted ? 'Live desktop alerts are active' : 'Click to enable desktop alerts for new student submissions'}
+        >
+          <Bell className={`w-3.5 h-3.5 ${desktopNotificationGranted ? 'text-emerald-600' : 'text-amber-600 animate-bounce'}`} />
+          {desktopNotificationGranted ? 'Desktop Alerts Active' : 'Enable Live Alerts'}
+        </button>
       </div>
 
       <div className="flex gap-4 mb-6 border-b border-gray-200">
         <button 
           onClick={() => setActiveTab('pending')}
-          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors ${activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-text/60 hover:text-text'}`}
+          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-text/60 hover:text-text'
+          }`}
         >
-          Pending Review ({submissions.filter(s => s.status === 'pending').length})
+          <span>Pending Review</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-black ${
+            pendingCount > 0 
+              ? 'bg-rose-500 text-white animate-pulse' 
+              : 'bg-gray-100 text-text/60'
+          }`}>
+            {pendingCount}
+          </span>
         </button>
         <button 
           onClick={() => setActiveTab('reviewed')}
-          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors ${activeTab === 'reviewed' ? 'border-primary text-primary' : 'border-transparent text-text/60 hover:text-text'}`}
+          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'reviewed' ? 'border-primary text-primary' : 'border-transparent text-text/60 hover:text-text'
+          }`}
         >
-          Reviewed ({submissions.filter(s => s.status === 'reviewed').length})
+          <span>Reviewed</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-text/60 font-bold">
+            {reviewedCount}
+          </span>
         </button>
       </div>
 
@@ -167,8 +250,18 @@ export default function SubmissionsPage() {
         {/* Submissions List */}
         <div className="md:col-span-1 space-y-3 max-h-[70vh] overflow-y-auto pr-2">
           {filteredSubmissions.length === 0 ? (
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 text-center text-text/50 text-sm">
-              No {activeTab} submissions found.
+            <div className="bg-white p-8 rounded-2xl border border-gray-100 text-center">
+              {activeTab === 'pending' ? (
+                <>
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-text text-sm mb-1">All Caught Up! 🎉</h3>
+                  <p className="text-text/50 text-xs">There are no pending submissions remaining to check.</p>
+                </>
+              ) : (
+                <p className="text-text/50 text-sm">No reviewed submissions found.</p>
+              )}
             </div>
           ) : (
             filteredSubmissions.map(sub => (

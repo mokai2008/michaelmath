@@ -63,7 +63,8 @@ export async function requestDesktopNotificationPermission(): Promise<boolean> {
 export function showDesktopNotification(
   title: string,
   body: string,
-  onClick?: () => void
+  onClick?: () => void,
+  tag?: string
 ) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
 
@@ -72,7 +73,7 @@ export function showDesktopNotification(
       const notif = new Notification(title, {
         body,
         icon: '/favicon.ico',
-        tag: 'michaelmath-contact-message',
+        tag: tag || `michaelmath-${Date.now()}`,
       });
       if (onClick) {
         notif.onclick = () => {

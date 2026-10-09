@@ -677,11 +677,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       }
 
       // Notify admin about quiz completion
+      const studentName = sessionUser.user_metadata?.full_name || sessionUser.email || 'Student';
       await supabase.from('admin_notifications').insert({
         student_id: sessionUser.id,
         type: 'quiz_completed',
         title: `Quiz ${passed ? 'Passed' : 'Failed'}: ${activeTopic?.title || 'Unknown Topic'}`,
-        message: `scored ${interactiveScore}/${total} (${pct}%)`,
+        message: `${studentName} scored ${interactiveScore}/${total} (${pct}%)`,
         metadata: {
           quiz_id: quizId,
           course_id: params.courseId,
@@ -689,7 +690,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           score: interactiveScore,
           total,
           percentage: pct,
-          passed
+          passed,
+          student_name: studentName,
+          student_email: sessionUser.email
         }
       }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
     }
@@ -748,16 +751,19 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       setManualSubmissions(updatedManualSubs);
 
       // Notify admin about worksheet submission
+      const studentName = sessionUser.user_metadata?.full_name || sessionUser.email || 'Student';
       await supabase.from('admin_notifications').insert({
         student_id: sessionUser.id,
         type: 'worksheet_submitted',
         title: `Worksheet Submitted: ${worksheetTitle ? `${worksheetTitle} (${activeTopic?.title || ''})` : (activeTopic?.title || 'Unknown Topic')}`,
-        message: 'uploaded worksheet answers for review',
+        message: `${studentName} uploaded worksheet answers for review`,
         metadata: {
           course_id: params.courseId,
           topic_id: topicId,
           topic_title: activeTopic?.title,
-          worksheet_title: worksheetTitle
+          worksheet_title: worksheetTitle,
+          student_name: studentName,
+          student_email: sessionUser.email
         }
       }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
 
@@ -846,17 +852,20 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       if (dbError) throw dbError;
 
       // Notify admin about PDF quiz submission with specific quiz title
+      const studentName = sessionUser.user_metadata?.full_name || sessionUser.email || 'Student';
       await supabase.from('admin_notifications').insert({
         student_id: sessionUser.id,
         type: 'pdf_quiz_submitted',
         title: `Quiz Submitted: ${quizTitle || activeTopic.title || 'Unknown Quiz'}`,
-        message: `uploaded PDF quiz answers for ${quizTitle || 'Quiz'}`,
+        message: `${studentName} uploaded PDF quiz answers for ${quizTitle || 'Quiz'}`,
         metadata: {
           course_id: params.courseId,
           topic_id: activeTopic.id,
           topic_title: activeTopic.title,
           quiz_id: quizId,
-          quiz_title: quizTitle
+          quiz_title: quizTitle,
+          student_name: studentName,
+          student_email: sessionUser.email
         }
       }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
 
@@ -3164,6 +3173,24 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           handleMarkComplete(activeTopic.id, true);
                         }
                       }
+
+                      // Notify admin about Canva quiz completion
+                      const studentName = sessionUser.user_metadata?.full_name || sessionUser.email || 'Student';
+                      await supabase.from('admin_notifications').insert({
+                        student_id: sessionUser.id,
+                        type: 'quiz_completed',
+                        title: `Quiz Completed: ${canvaQuizModal.title || activeTopic?.title || 'Quiz'}`,
+                        message: `${studentName} completed quiz with score ${scoreToSubmit}`,
+                        metadata: {
+                          quiz_id: canvaQuizModal.id,
+                          course_id: params.courseId,
+                          topic_title: activeTopic?.title,
+                          quiz_title: canvaQuizModal.title,
+                          score: scoreToSubmit,
+                          student_name: studentName,
+                          student_email: sessionUser.email
+                        }
+                      }).then(({ error: nErr }) => { if (nErr) console.error('Admin notify error:', nErr); });
                     }
 
                     const { data: updatedCourse } = await supabase

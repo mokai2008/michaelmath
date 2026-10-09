@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { AdminAiAssistant } from "@/components/AdminAiAssistant";
 import { playNotificationSound, showDesktopNotification } from "@/lib/sound";
@@ -24,7 +24,10 @@ import {
   X,
   Bot,
   Sparkles,
-  Bell
+  Bell,
+  FileText,
+  ClipboardCheck,
+  CheckCircle2
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -36,15 +39,29 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [pendingRequests, setPendingRequests] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [pendingSubmissions, setPendingSubmissions] = useState(0);
   const [incomingMessageToast, setIncomingMessageToast] = useState<{
     id: string;
     name: string;
     email: string;
     message: string;
   } | null>(null);
+  const [incomingSubmissionToast, setIncomingSubmissionToast] = useState<{
+    id: string;
+    studentName: string;
+    studentEmail?: string;
+    type: string;
+    typeLabel: string;
+    title: string;
+    topicTitle: string;
+    message?: string;
+    remainingCount: number;
+  } | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+
+  const lastProcessedSubmissionRef = useRef<{ id: string; time: number } | null>(null);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -71,6 +88,118 @@ export default function AdminLayout({
     }
   }, [incomingMessageToast]);
 
+  // Auto-dismiss incoming submission toast after 12 seconds
+  useEffect(() => {
+    if (incomingSubmissionToast) {
+      const timer = setTimeout(() => {
+        setIncomingSubmissionToast(null);
+      }, 12000);
+      return () => clearTimeout(timer);
+    }
+  }, [incomingSubmissionToast]);
+
+  const triggerSubmissionNotification = async (payloadItem: any, fallbackRemaining?: number) => {
+    const studentId = payloadItem.student_id;
+    const topicId = payloadItem.topic_id || payloadItem.metadata?.topic_id;
+    const eventType = payloadItem.type || 'worksheet';
+    
+    // Dedup check: ignore if same student + event within 3.5 seconds
+    const dedupKey = `${studentId}_${topicId || ''}_${eventType}`;
+    const now = Date.now();
+    if (lastProcessedSubmissionRef.current && 
+        lastProcessedSubmissionRef.current.id === dedupKey && 
+        (now - lastProcessedSubmissionRef.current.time) < 3500) {
+      return;
+    }
+    lastProcessedSubmissionRef.current = { id: dedupKey, time: now };
+
+    // Fetch student profile if not provided
+    let studentName = payloadItem.metadata?.student_name || '';
+    let studentEmail = payloadItem.metadata?.student_email || '';
+    if (!studentName && studentId) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', studentId)
+          .maybeSingle();
+        studentName = profile?.full_name || profile?.email || 'Student';
+        studentEmail = profile?.email || '';
+      } catch (e) {
+        studentName = 'Student';
+      }
+    }
+    if (!studentName) studentName = 'Student';
+
+    // Fetch topic title if needed
+    let topicTitle = payloadItem.metadata?.topic_title || '';
+    if (!topicTitle && topicId) {
+      try {
+        const { data: topic } = await supabase
+          .from('topics')
+          .select('title')
+          .eq('id', topicId)
+          .maybeSingle();
+        topicTitle = topic?.title || 'Lesson / Assignment';
+      } catch (e) {
+        topicTitle = 'Assignment';
+      }
+    }
+    if (!topicTitle) topicTitle = 'Lesson Assignment';
+
+    // Format type label
+    let typeLabel = 'Worksheet';
+    if (eventType.includes('pdf_quiz')) {
+      typeLabel = 'PDF Quiz';
+    } else if (eventType.includes('quiz')) {
+      typeLabel = 'Quiz';
+    } else if (eventType.includes('worksheet')) {
+      typeLabel = 'Worksheet';
+    }
+
+    // Get current remaining pending count from manual_submissions
+    let countToDisplay = fallbackRemaining;
+    try {
+      const { count: freshPendingCount } = await supabase
+        .from('manual_submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      if (freshPendingCount !== null && freshPendingCount !== undefined) {
+        countToDisplay = freshPendingCount;
+        setPendingSubmissions(freshPendingCount);
+      }
+    } catch (e) {}
+
+    const remainingNum = countToDisplay !== undefined ? countToDisplay : 1;
+
+    // Play notification chime
+    playNotificationSound();
+
+    const titleText = payloadItem.title || `${typeLabel} Submitted: ${topicTitle}`;
+    const descText = payloadItem.message || `${studentName} submitted ${typeLabel.toLowerCase()} answers for review.`;
+
+    setIncomingSubmissionToast({
+      id: payloadItem.id || String(now),
+      studentName,
+      studentEmail,
+      type: eventType,
+      typeLabel,
+      title: titleText,
+      topicTitle,
+      message: descText,
+      remainingCount: remainingNum,
+    });
+
+    showDesktopNotification(
+      `📝 New ${typeLabel} from ${studentName}`,
+      `${studentName} submitted ${typeLabel} for "${topicTitle}". ${remainingNum} submission${remainingNum === 1 ? '' : 's'} remaining to check.`,
+      () => {
+        router.push('/admin/submissions');
+      },
+      'michaelmath-submission'
+    );
+  };
+
   useEffect(() => {
     let channel: any = null;
     let interval: any = null;
@@ -95,15 +224,17 @@ export default function AdminLayout({
       
       setIsChecking(false);
 
-      // 2. Fetch pending requests & unread messages count
+      // 2. Fetch pending requests, unread messages & pending submissions count
       const fetchCounts = async () => {
         try {
-          const [{ count: bookingCount }, { count: msgCount }] = await Promise.all([
+          const [{ count: bookingCount }, { count: msgCount }, { count: subCount }] = await Promise.all([
             supabase.from("booking_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
             supabase.from("contact_messages").select("*", { count: "exact", head: true }).eq("status", "unread"),
+            supabase.from("manual_submissions").select("*", { count: "exact", head: true }).eq("status", "pending"),
           ]);
           setPendingRequests(bookingCount || 0);
           setUnreadMessages(msgCount || 0);
+          setPendingSubmissions(subCount || 0);
         } catch (err) {
           console.debug("Failed to fetch admin notification counts:", err);
         }
@@ -111,9 +242,10 @@ export default function AdminLayout({
 
       await fetchCounts();
 
-      // 3. Set up Supabase Realtime channel for instant contact message notifications
+      // 3. Set up Supabase Realtime channel for instant notifications
       channel = supabase
-        .channel('admin_contact_messages_notifications')
+        .channel('admin_global_realtime_dashboard')
+        // Contact messages
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'contact_messages' },
@@ -135,7 +267,8 @@ export default function AdminLayout({
               newMsg.message || 'You received a new inquiry on the contact form.',
               () => {
                 router.push('/admin/messages');
-              }
+              },
+              'michaelmath-contact'
             );
           }
         )
@@ -156,6 +289,44 @@ export default function AdminLayout({
             }
           }
         )
+        // Manual Submissions (Worksheets & PDF Quizzes)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'manual_submissions' },
+          async (payload: any) => {
+            try {
+              const { count } = await supabase
+                .from("manual_submissions")
+                .select("*", { count: "exact", head: true })
+                .eq("status", "pending");
+              const freshCount = count || 0;
+              setPendingSubmissions(freshCount);
+
+              if (payload.eventType === 'INSERT') {
+                await triggerSubmissionNotification(payload.new, freshCount);
+              } else if (payload.eventType === 'UPDATE' && payload.new?.status === 'pending' && payload.old?.status !== 'pending') {
+                await triggerSubmissionNotification(payload.new, freshCount);
+              }
+            } catch (e) {
+              console.debug("Error updating submission count from realtime:", e);
+            }
+          }
+        )
+        // Admin Notifications (Interactive Quizzes, Canva Quizzes, etc.)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'admin_notifications' },
+          async (payload: any) => {
+            try {
+              const notif = payload.new;
+              if (['worksheet_submitted', 'pdf_quiz_submitted', 'quiz_completed'].includes(notif?.type)) {
+                await triggerSubmissionNotification(notif);
+              }
+            } catch (e) {
+              console.debug("Error handling admin_notifications realtime:", e);
+            }
+          }
+        )
         .subscribe();
     };
 
@@ -165,17 +336,34 @@ export default function AdminLayout({
     const handleMessageReadEvent = () => {
       setUnreadMessages((prev) => Math.max(0, prev - 1));
     };
+
+    // Listen to local client event when submission is marked as reviewed
+    const handleSubmissionReviewedEvent = () => {
+      setPendingSubmissions((prev) => Math.max(0, prev - 1));
+    };
+
+    // Listen to exact submission count updates from SubmissionsPage
+    const handleSubmissionCountUpdated = (e: any) => {
+      if (typeof e.detail === 'number') {
+        setPendingSubmissions(e.detail);
+      }
+    };
+
     window.addEventListener('contact_message_read', handleMessageReadEvent);
+    window.addEventListener('submission_reviewed', handleSubmissionReviewedEvent);
+    window.addEventListener('submissions_count_updated', handleSubmissionCountUpdated);
 
     // Regular interval polling fallback
     interval = setInterval(async () => {
       try {
-        const [{ count: bookingCount }, { count: msgCount }] = await Promise.all([
+        const [{ count: bookingCount }, { count: msgCount }, { count: subCount }] = await Promise.all([
           supabase.from("booking_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
           supabase.from("contact_messages").select("*", { count: "exact", head: true }).eq("status", "unread"),
+          supabase.from("manual_submissions").select("*", { count: "exact", head: true }).eq("status", "pending"),
         ]);
         setPendingRequests(bookingCount || 0);
         setUnreadMessages(msgCount || 0);
+        setPendingSubmissions(subCount || 0);
       } catch (err) {
         console.debug("Polling error for admin notifications:", err);
       }
@@ -185,6 +373,8 @@ export default function AdminLayout({
       if (interval) clearInterval(interval);
       if (channel) supabase.removeChannel(channel);
       window.removeEventListener('contact_message_read', handleMessageReadEvent);
+      window.removeEventListener('submission_reviewed', handleSubmissionReviewedEvent);
+      window.removeEventListener('submissions_count_updated', handleSubmissionCountUpdated);
     };
   }, [router]);
 
@@ -198,8 +388,8 @@ export default function AdminLayout({
     { href: "/admin/courses", icon: BookOpen, label: "Course Builder" },
     { href: "/admin/students", icon: Users, label: "Students" },
     { href: "/admin/performance", icon: TrendingUp, label: "Performance" },
-    { href: "/admin/submissions", icon: MessageSquare, label: "Submissions" },
-    { href: "/admin/messages", icon: Mail, label: "Contact Messages", badge: unreadMessages },
+    { href: "/admin/submissions", icon: MessageSquare, label: "Submissions", badge: pendingSubmissions, badgeColor: "bg-rose-500" },
+    { href: "/admin/messages", icon: Mail, label: "Contact Messages", badge: unreadMessages, badgeColor: "bg-red-500" },
     { href: "/admin/wallet", icon: Wallet, label: "Wallet" },
     { href: "/admin/chat-logs", icon: MessageSquare, label: "AI Chat Logs" },
     { href: "/admin/settings", icon: Settings, label: "Settings" },
@@ -207,48 +397,119 @@ export default function AdminLayout({
 
   return (
     <div className="flex h-screen bg-gray-50 relative overflow-hidden">
-      {/* Real-time Incoming Message Toast Notification */}
-      {incomingMessageToast && (
-        <div className="fixed top-5 right-5 z-50 max-w-sm w-full bg-white rounded-2xl shadow-2xl border-2 border-emerald-500/40 p-4 animate-in slide-in-from-top-4 duration-300 ring-4 ring-emerald-500/10">
-          <div className="flex items-start justify-between gap-3">
-            <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600 flex-shrink-0">
-              <Mail className="w-5 h-5 animate-bounce" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">New Message</span>
-                <span className="text-[10px] text-text/40">Just now</span>
+      {/* Real-time Toast Notifications Floating Container */}
+      <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        {/* Incoming Student Submission Toast */}
+        {incomingSubmissionToast && (
+          <div className="pointer-events-auto w-full bg-white rounded-2xl shadow-2xl border-2 border-rose-500/40 p-4 animate-in slide-in-from-top-4 duration-300 ring-4 ring-rose-500/10">
+            <div className="flex items-start justify-between gap-3">
+              <div className={`p-2.5 rounded-xl flex-shrink-0 ${
+                incomingSubmissionToast.type.includes('worksheet') 
+                  ? 'bg-blue-50 text-blue-600' 
+                  : incomingSubmissionToast.type === 'quiz_completed'
+                  ? 'bg-amber-50 text-amber-600'
+                  : 'bg-purple-50 text-purple-600'
+              }`}>
+                {incomingSubmissionToast.type.includes('worksheet') ? (
+                  <FileText className="w-5 h-5 animate-pulse" />
+                ) : incomingSubmissionToast.type === 'quiz_completed' ? (
+                  <Sparkles className="w-5 h-5 animate-pulse" />
+                ) : (
+                  <ClipboardCheck className="w-5 h-5 animate-pulse" />
+                )}
               </div>
-              <h4 className="font-bold text-text text-sm truncate">{incomingMessageToast.name}</h4>
-              <p className="text-xs text-text/60 truncate">{incomingMessageToast.email}</p>
-              <p className="text-xs text-text/80 line-clamp-2 mt-1.5 bg-gray-50 p-2 rounded-lg border border-gray-100 italic">
-                "{incomingMessageToast.message}"
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                <Link
-                  href="/admin/messages"
-                  onClick={() => setIncomingMessageToast(null)}
-                  className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
-                >
-                  View Message &rarr;
-                </Link>
-                <button
-                  onClick={() => setIncomingMessageToast(null)}
-                  className="text-xs font-semibold text-text/50 hover:text-text px-2 py-1.5 rounded-lg transition-colors"
-                >
-                  Dismiss
-                </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    incomingSubmissionToast.type.includes('worksheet')
+                      ? 'bg-blue-100 text-blue-700'
+                      : incomingSubmissionToast.type === 'quiz_completed'
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-purple-100 text-purple-700'
+                  }`}>
+                    {incomingSubmissionToast.typeLabel}
+                  </span>
+                  <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                    {incomingSubmissionToast.remainingCount} to check
+                  </span>
+                </div>
+                <h4 className="font-bold text-text text-sm truncate">{incomingSubmissionToast.studentName}</h4>
+                {incomingSubmissionToast.studentEmail && (
+                  <p className="text-[11px] text-text/50 truncate">{incomingSubmissionToast.studentEmail}</p>
+                )}
+                <p className="text-xs text-text/80 line-clamp-2 mt-1.5 bg-gray-50 p-2 rounded-lg border border-gray-100 font-medium">
+                  {incomingSubmissionToast.title}
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    href="/admin/submissions"
+                    onClick={() => setIncomingSubmissionToast(null)}
+                    className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                  >
+                    Review Now &rarr;
+                  </Link>
+                  <button
+                    onClick={() => setIncomingSubmissionToast(null)}
+                    className="text-xs font-semibold text-text/50 hover:text-text px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
+              <button
+                onClick={() => setIncomingSubmissionToast(null)}
+                className="text-text/40 hover:text-text p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={() => setIncomingMessageToast(null)}
-              className="text-text/40 hover:text-text p-1 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Incoming Contact Message Toast */}
+        {incomingMessageToast && (
+          <div className="pointer-events-auto w-full bg-white rounded-2xl shadow-2xl border-2 border-emerald-500/40 p-4 animate-in slide-in-from-top-4 duration-300 ring-4 ring-emerald-500/10">
+            <div className="flex items-start justify-between gap-3">
+              <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600 flex-shrink-0">
+                <Mail className="w-5 h-5 animate-bounce" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">New Message</span>
+                  <span className="text-[10px] text-text/40">Just now</span>
+                </div>
+                <h4 className="font-bold text-text text-sm truncate">{incomingMessageToast.name}</h4>
+                <p className="text-xs text-text/60 truncate">{incomingMessageToast.email}</p>
+                <p className="text-xs text-text/80 line-clamp-2 mt-1.5 bg-gray-50 p-2 rounded-lg border border-gray-100 italic">
+                  "{incomingMessageToast.message}"
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    href="/admin/messages"
+                    onClick={() => setIncomingMessageToast(null)}
+                    className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                  >
+                    View Message &rarr;
+                  </Link>
+                  <button
+                    onClick={() => setIncomingMessageToast(null)}
+                    className="text-xs font-semibold text-text/50 hover:text-text px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => setIncomingMessageToast(null)}
+                className="text-text/40 hover:text-text p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Mobile Header */}
       <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14 md:hidden">
@@ -258,7 +519,7 @@ export default function AdminLayout({
           aria-label="Open menu"
         >
           <Menu className="w-6 h-6" />
-          {(unreadMessages > 0 || pendingRequests > 0) && (
+          {(unreadMessages > 0 || pendingRequests > 0 || pendingSubmissions > 0) && (
             <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
           )}
         </button>
@@ -323,7 +584,7 @@ export default function AdminLayout({
             <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
           </button>
 
-          {navLinks.map(({ href, icon: Icon, label, badge }) => {
+          {navLinks.map(({ href, icon: Icon, label, badge, badgeColor }: any) => {
             const isActive = pathname === href || (href !== "/" && pathname?.startsWith(href));
             return (
               <Link
@@ -340,7 +601,7 @@ export default function AdminLayout({
                   <span>{label}</span>
                 </div>
                 {badge !== undefined && badge > 0 && (
-                  <span className="bg-red-500 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse flex items-center justify-center min-w-[20px] h-5">
+                  <span className={`${badgeColor || 'bg-red-500'} text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse flex items-center justify-center min-w-[20px] h-5`}>
                     {badge}
                   </span>
                 )}

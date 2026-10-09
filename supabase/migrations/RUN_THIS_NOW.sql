@@ -234,13 +234,15 @@ CREATE POLICY "Allow admin delete on contact_messages"
 ALTER TABLE public.topics 
 ADD COLUMN IF NOT EXISTS progress_percentage numeric DEFAULT 0;
 
--- 10. Enable Realtime on contact_messages table
+-- 10. Enable Realtime on contact_messages, manual_submissions, and admin_notifications
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.contact_messages;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.manual_submissions;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.admin_notifications;
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN
