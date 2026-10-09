@@ -21,13 +21,17 @@ import {
   Minimize2,
   Eye,
   EyeOff,
-  BookOpen
+  BookOpen,
+  FlaskConical,
+  Gamepad2,
+  RotateCcw
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
 import VideoPlayer from "@/components/VideoPlayer";
 import { calculateCourseProgress, getTopicWeight } from "@/lib/progress";
+import { prepareLabSrcDoc } from "@/lib/lab";
 
 function InlinePdfViewer({ 
   url, 
@@ -234,6 +238,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [canvaLiveScores, setCanvaLiveScores] = useState<Record<string, { score: number; total: number }>>({});
   const [expandedSolutionVideos, setExpandedSolutionVideos] = useState<Record<string, boolean>>({});
   const [expandedInlinePdfs, setExpandedInlinePdfs] = useState<Record<string, boolean>>({});
+  const [selectedLabIndex, setSelectedLabIndex] = useState(0);
+  const [isLabFullscreen, setIsLabFullscreen] = useState(false);
+  const [labReloadKey, setLabReloadKey] = useState(0);
 
   const toggleSolutionVideo = (id: string) => {
     setExpandedSolutionVideos(prev => ({
@@ -252,6 +259,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   // Remember the student's active lesson across page refreshes and submissions
   useEffect(() => {
     if (activeTopic?.id && typeof window !== 'undefined') {
+      setSelectedLabIndex(0);
+      setIsLabFullscreen(false);
       try {
         localStorage.setItem(`active_topic_${params.courseId}`, String(activeTopic.id));
         sessionStorage.setItem(`active_topic_${params.courseId}`, String(activeTopic.id));
@@ -1243,6 +1252,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         const isActive = activeTopic?.id === topic.id;
                         const isTopicRowUnlocked = isTopicUnlocked(section, topic, sIdx);
                         const topicRowPrice = getTopicPrice(topic);
+                        const hasLab = (Array.isArray(topic.content_items) ? topic.content_items : []).some((i: any) => i && i.type === 'lab');
                         return (
                           <div 
                             key={topic.id}
@@ -1269,6 +1279,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               <div className="flex items-center justify-between gap-1">
                                 <div className={`text-sm font-medium ${!isTopicRowUnlocked ? 'text-text/50' : isActive ? 'text-primary' : 'text-text'} truncate`}>{topic.title}</div>
                                 <div className="flex items-center gap-1.5 shrink-0">
+                                  {hasLab && (
+                                    <span 
+                                      className="text-[10px] font-bold text-cyan-700 bg-cyan-50 border border-cyan-200/80 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" 
+                                      title="Contains Interactive Math Lab / Game"
+                                    >
+                                      <FlaskConical className="w-2.5 h-2.5 text-cyan-600" />
+                                      <span>Lab</span>
+                                    </span>
+                                  )}
                                   {!isTopicRowUnlocked && topicRowPrice > 0 && (
                                     <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded">
                                       £{topicRowPrice}
@@ -1500,6 +1519,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             const contentNotes = contentItems.filter((i: any) => i && i.type === 'notes' && (i.url || i.file_url));
             const legacyNotes = (Array.isArray(activeTopic.topic_pdfs) ? activeTopic.topic_pdfs : []).filter((p: any) => p && p.type === 'notes');
             const allNotes: any[] = contentNotes.length > 0 ? contentNotes : legacyNotes;
+
+            // Extract all labs (from content_items)
+            const contentLabs = contentItems.filter((i: any) => i && i.type === 'lab' && (i.labCode || i.labUrl || i.url));
+            const currentLab = contentLabs.length > 0 ? (contentLabs[selectedLabIndex] || contentLabs[0]) : null;
 
             // Extract all quizzes (from content_items and quizzes table)
             const contentQuizzes = contentItems.filter((i: any) => i && i.type === 'quiz');
@@ -1807,6 +1830,156 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   </div>
                 )}
               </div>
+
+              {/* INTERACTIVE MATH LAB & PRACTICE PLAYGROUND CONTAINER */}
+              {contentLabs.length > 0 && currentLab && (
+                <div 
+                  className={`bg-white rounded-3xl border border-cyan-200/90 shadow-sm transition-all mb-8 ${
+                    isLabFullscreen 
+                      ? 'fixed inset-2 sm:inset-4 z-50 shadow-2xl flex flex-col overflow-hidden bg-slate-900 border-slate-700' 
+                      : 'p-6 md:p-8 space-y-6'
+                  }`}
+                >
+                  {/* Top Header Bar */}
+                  <div className={`flex items-center justify-between border-b pb-4 flex-wrap gap-3 ${isLabFullscreen ? 'p-4 bg-slate-900 border-slate-800 text-white shrink-0' : 'border-gray-100'}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-600 to-teal-500 text-white flex items-center justify-center font-black text-xl shadow-md shadow-cyan-500/20">
+                        🧪
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className={`text-xl font-black ${isLabFullscreen ? 'text-white' : 'text-text'}`}>
+                            Interactive Math Lab & Playground
+                          </h2>
+                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 tracking-wider">
+                            Explore & Practice
+                          </span>
+                        </div>
+                        <p className={`text-xs ${isLabFullscreen ? 'text-slate-400' : 'text-text/60'}`}>
+                          {contentLabs.length > 1
+                            ? `${contentLabs.length} Interactive simulations & practice games available`
+                            : 'Explore math concepts interactively with live simulations and game practice'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons: Reload, Fullscreen, Open in Tab */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLabReloadKey(prev => prev + 1)}
+                        className={`text-xs font-bold px-3 py-2 rounded-xl border transition-all flex items-center gap-1.5 ${
+                          isLabFullscreen 
+                            ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' 
+                            : 'bg-cyan-50 border-cyan-200 text-cyan-800 hover:bg-cyan-100'
+                        }`}
+                        title="Restart game / Reset simulation"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Restart</span>
+                      </button>
+
+                      {(currentLab.labUrl || currentLab.url) && (
+                        <a
+                          href={currentLab.labUrl || currentLab.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`text-xs font-bold px-3 py-2 rounded-xl border transition-all flex items-center gap-1.5 ${
+                            isLabFullscreen 
+                              ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' 
+                              : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          title="Open simulation in new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Open Tab</span>
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setIsLabFullscreen(prev => !prev)}
+                        className={`text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm ${
+                          isLabFullscreen 
+                            ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black' 
+                            : 'bg-primary hover:bg-primary/90 text-white'
+                        }`}
+                        title={isLabFullscreen ? "Exit Fullscreen" : "Fullscreen Playground"}
+                      >
+                        {isLabFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                        <span>{isLabFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Multi-Lab Tabs Switcher (if > 1 lab) */}
+                  {contentLabs.length > 1 && (
+                    <div className={`flex items-center gap-2 overflow-x-auto pb-1 ${isLabFullscreen ? 'px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0' : ''}`}>
+                      {contentLabs.map((lab: any, lIdx: number) => {
+                        const isSelected = lIdx === selectedLabIndex;
+                        return (
+                          <button
+                            key={lab.id || lIdx}
+                            type="button"
+                            onClick={() => {
+                              setSelectedLabIndex(lIdx);
+                              setLabReloadKey(prev => prev + 1);
+                            }}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                              isSelected
+                                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                                : (isLabFullscreen ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')
+                            }`}
+                          >
+                            <Gamepad2 className="w-3.5 h-3.5" />
+                            <span>{lab.title || `Lab ${lIdx + 1}`}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Teacher Mission & Exploration Instructions (if provided) */}
+                  {currentLab.labInstructions && (
+                    <div className={`p-4 rounded-2xl border transition-all ${
+                      isLabFullscreen
+                        ? 'mx-4 my-2 bg-cyan-950/40 border-cyan-800/60 text-cyan-200 shrink-0'
+                        : 'bg-gradient-to-r from-cyan-50/70 to-teal-50/70 border-cyan-200/80 text-cyan-950'
+                    }`}>
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-xl shrink-0">🎯</span>
+                        <div className="min-w-0 flex-1">
+                          <div className={`text-xs font-black uppercase tracking-wider mb-0.5 ${isLabFullscreen ? 'text-cyan-300' : 'text-cyan-900'}`}>
+                            Student Mission & Instructions
+                          </div>
+                          <div className={`text-xs font-medium leading-relaxed ${isLabFullscreen ? 'text-slate-300' : 'text-slate-800'}`}>
+                            <MathText text={currentLab.labInstructions} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Interactive Lab Viewport / Sandbox */}
+                  <div 
+                    className={`w-full rounded-2xl overflow-hidden border relative bg-slate-950 ${
+                      isLabFullscreen 
+                        ? 'flex-1 m-4 border-slate-800 shadow-2xl' 
+                        : 'h-[520px] sm:h-[620px] border-cyan-200 shadow-inner'
+                    }`}
+                  >
+                    <iframe
+                      key={`${currentLab.id || selectedLabIndex}_${labReloadKey}`}
+                      src={currentLab.labType === 'url' ? (currentLab.labUrl || currentLab.url) : undefined}
+                      srcDoc={currentLab.labType !== 'url' ? prepareLabSrcDoc(currentLab.labCode || currentLab.url) : undefined}
+                      className="w-full h-full border-0 bg-white"
+                      title={currentLab.title || 'Interactive Math Lab'}
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; gamepad"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* HOMEWORK PLACE CONTAINER */}
               <div className="bg-white rounded-3xl border border-gray-200/80 p-6 md:p-8 shadow-sm space-y-6 mb-8">

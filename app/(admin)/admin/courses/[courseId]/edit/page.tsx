@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, 
-  Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Eye, Server, Percent 
+  Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Eye, Server, Percent,
+  FlaskConical, Gamepad2, RotateCcw, ExternalLink
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import MathText from "@/components/MathText";
 import { distributeEqualPercentages } from "@/lib/progress";
+import { prepareLabSrcDoc, SAMPLE_MATH_LAB_TEMPLATE, PRESET_LAB_URLS } from "@/lib/lab";
 
 export default function AdminCourseEditor() {
   const { courseId } = useParams();
@@ -359,7 +361,7 @@ export default function AdminCourseEditor() {
     } : s));
   };
 
-  const handleAddItemToTopic = (sectionId: string | number, topicId: string | number, type: 'video' | 'quiz' | 'worksheet' | 'notes') => {
+  const handleAddItemToTopic = (sectionId: string | number, topicId: string | number, type: 'video' | 'quiz' | 'worksheet' | 'notes' | 'lab') => {
     setSections(sections.map(section => {
       if (section.id === sectionId) {
         return {
@@ -373,6 +375,7 @@ export default function AdminCourseEditor() {
               else if (type === 'quiz') defaultTitle = `Quiz ${items.filter((i: any) => i.type === 'quiz').length + 1}`;
               else if (type === 'worksheet') defaultTitle = `Worksheet ${items.filter((i: any) => i.type === 'worksheet').length + 1}`;
               else if (type === 'notes') defaultTitle = `Notes ${items.filter((i: any) => i.type === 'notes').length + 1}`;
+              else if (type === 'lab') defaultTitle = `Interactive Lab ${items.filter((i: any) => i.type === 'lab').length + 1}`;
 
               const newItem: any = {
                 id: newItemId,
@@ -390,7 +393,11 @@ export default function AdminCourseEditor() {
                 quizShuffleQuestions: false,
                 quizShuffleOptions: false,
                 answerPdfUrl: '',
-                answerVideoUrl: ''
+                answerVideoUrl: '',
+                labType: 'code',
+                labCode: '',
+                labUrl: '',
+                labInstructions: ''
               };
 
               return {
@@ -1196,6 +1203,13 @@ export default function AdminCourseEditor() {
                             >
                               <BookOpen className="w-3.5 h-3.5" /> + Notes
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAddItemToTopic(section.id, topic.id, 'lab')}
+                              className="px-3 py-1.5 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                            >
+                              <FlaskConical className="w-3.5 h-3.5 text-cyan-600" /> + Lab
+                            </button>
                           </div>
                         </div>
 
@@ -1207,6 +1221,7 @@ export default function AdminCourseEditor() {
                               const isQuiz = item.type === 'quiz';
                               const isWorksheet = item.type === 'worksheet';
                               const isNotes = item.type === 'notes';
+                              const isLab = item.type === 'lab';
 
                               return (
                                 <div 
@@ -1215,6 +1230,7 @@ export default function AdminCourseEditor() {
                                     isVideo ? 'border-blue-200 border-l-4 border-l-blue-500' :
                                     isQuiz ? 'border-purple-200 border-l-4 border-l-purple-500' :
                                     isWorksheet ? 'border-emerald-200 border-l-4 border-l-emerald-500' :
+                                    isLab ? 'border-cyan-200 border-l-4 border-l-cyan-500' :
                                     'border-amber-200 border-l-4 border-l-amber-500'
                                   }`}
                                 >
@@ -1225,13 +1241,15 @@ export default function AdminCourseEditor() {
                                         isVideo ? 'bg-blue-100 text-blue-800' :
                                         isQuiz ? 'bg-purple-100 text-purple-800' :
                                         isWorksheet ? 'bg-emerald-100 text-emerald-800' :
+                                        isLab ? 'bg-cyan-100 text-cyan-800' :
                                         'bg-amber-100 text-amber-800'
                                       }`}>
                                         {isVideo && <Video className="w-3 h-3" />}
                                         {isQuiz && <HelpCircle className="w-3 h-3" />}
                                         {isWorksheet && <FileText className="w-3 h-3" />}
                                         {isNotes && <BookOpen className="w-3 h-3" />}
-                                        {item.type}
+                                        {isLab && <FlaskConical className="w-3 h-3 text-cyan-700" />}
+                                        {isLab ? 'Lab / Game' : item.type}
                                       </span>
 
                                       <input 
@@ -1769,6 +1787,191 @@ export default function AdminCourseEditor() {
                                           </div>
                                         </div>
                                       </div>
+                                    </div>
+                                  )}
+
+                                  {/* Item Body: LAB / INTERACTIVE SIMULATION & GAME */}
+                                  {isLab && (
+                                    <div className="space-y-4 pt-3 border-t border-cyan-100">
+                                      {/* Mode Selector Tabs */}
+                                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-bold text-text flex items-center gap-1.5">
+                                            <FlaskConical className="w-4 h-4 text-cyan-600" />
+                                            Lab / Game Integration Type:
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'labType', 'code')}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                              (item.labType || 'code') === 'code' ? 'bg-white text-cyan-800 shadow-sm' : 'text-text/60 hover:text-text'
+                                            }`}
+                                          >
+                                            <Code className="w-3.5 h-3.5 text-cyan-600" />
+                                            <span>HTML / JS / iframe Code</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'labType', 'url')}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                              item.labType === 'url' ? 'bg-white text-cyan-800 shadow-sm' : 'text-text/60 hover:text-text'
+                                            }`}
+                                          >
+                                            <Gamepad2 className="w-3.5 h-3.5 text-cyan-600" />
+                                            <span>Simulation / Game Web URL</span>
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Student Mission & Instructions Input */}
+                                      <div className="bg-cyan-50/50 p-3.5 rounded-xl border border-cyan-200/70 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-xs font-bold text-cyan-950 flex items-center gap-1.5">
+                                            <span>🎯</span> Student Mission & Practice Goal (Optional)
+                                          </label>
+                                          <span className="text-[10px] font-semibold text-cyan-700 bg-cyan-100/70 px-2 py-0.5 rounded-full">
+                                            Markdown & LaTeX supported
+                                          </span>
+                                        </div>
+                                        <textarea
+                                          value={item.labInstructions || ''}
+                                          onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'labInstructions', e.target.value)}
+                                          rows={2}
+                                          placeholder="e.g. Mission: Move the curvature slider until the projectile scores a direct hit! Note down the vertex coordinates (h, k) in your worksheet."
+                                          className="w-full text-xs p-2.5 border border-cyan-200 rounded-lg outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
+                                        />
+                                      </div>
+
+                                      {/* Code Input Mode */}
+                                      {(item.labType || 'code') === 'code' && (
+                                        <div className="space-y-2.5">
+                                          <div className="flex items-center justify-between flex-wrap gap-2">
+                                            <label className="text-xs font-bold text-text flex items-center gap-1.5">
+                                              <span>Interactive HTML / JS or &lt;iframe&gt; Embed Code</span>
+                                              <span className="text-[11px] text-gray-500 font-normal">
+                                                (Claude, ChatGPT, Canvas game, GeoGebra / Desmos embed)
+                                              </span>
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'labCode', SAMPLE_MATH_LAB_TEMPLATE)}
+                                                className="text-xs font-bold text-cyan-700 hover:text-cyan-800 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                                              >
+                                                <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
+                                                <span>+ Insert Sample Math Game Template</span>
+                                              </button>
+                                              {item.labCode && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleUpdateItemField(section.id, topic.id, item.id, 'labCode', '')}
+                                                  className="text-xs font-semibold text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                                                >
+                                                  Clear
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          <textarea
+                                            value={item.labCode || ''}
+                                            onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'labCode', e.target.value)}
+                                            rows={8}
+                                            placeholder={`<!-- Paste HTML, JS, CSS, or <iframe> embed code here -->\n<!-- Example: Complete interactive canvas game, GeoGebra iframe, or Desmos widget -->`}
+                                            className="w-full text-xs font-mono p-3 border border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400 bg-slate-900 text-cyan-300 shadow-inner"
+                                            spellCheck={false}
+                                          />
+                                          <p className="text-[11px] text-gray-500 italic">
+                                            💡 Tip: Ask Claude or ChatGPT for &quot;a self-contained HTML5 / JavaScript math game for [Topic]&quot; and paste the complete code here!
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {/* URL Input Mode */}
+                                      {item.labType === 'url' && (
+                                        <div className="space-y-3">
+                                          <div className="space-y-1.5">
+                                            <label className="text-xs font-bold text-text flex items-center gap-1.5">
+                                              <span>Simulator / Game Web App URL</span>
+                                              <span className="text-[11px] text-gray-500 font-normal">
+                                                (PhET interactive simulation, GeoGebra activity, Desmos calculator)
+                                              </span>
+                                            </label>
+                                            <div className="flex gap-2">
+                                              <input
+                                                type="text"
+                                                value={item.labUrl || ''}
+                                                onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'labUrl', e.target.value)}
+                                                className="w-full text-xs px-3 py-2 border border-cyan-200 rounded-lg outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
+                                                placeholder="https://phet.colorado.edu/... or https://www.geogebra.org/..."
+                                              />
+                                              {item.labUrl && (
+                                                <a
+                                                  href={item.labUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                                                  title="Test URL in new tab"
+                                                >
+                                                  <ExternalLink className="w-3.5 h-3.5" />
+                                                  <span>Test Link</span>
+                                                </a>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Preset shortcuts */}
+                                          <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/80 space-y-2">
+                                            <span className="text-[11px] font-bold text-gray-600 block">
+                                              ⚡ 1-Click Educational Math Lab Presets:
+                                            </span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {PRESET_LAB_URLS.map((preset, pIdx) => (
+                                                <button
+                                                  key={pIdx}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleUpdateItemField(section.id, topic.id, item.id, 'labUrl', preset.url);
+                                                    if (!item.title || item.title.startsWith('Interactive Lab')) {
+                                                      handleUpdateItemField(section.id, topic.id, item.id, 'title', preset.name);
+                                                    }
+                                                  }}
+                                                  className="px-2.5 py-1 bg-white hover:bg-cyan-50 text-cyan-800 border border-gray-200 hover:border-cyan-300 rounded-lg text-[11px] font-semibold transition-all shadow-2xs flex items-center gap-1"
+                                                >
+                                                  <span>{preset.name}</span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Live Admin Interactive Preview Sandbox */}
+                                      {(item.labCode || item.labUrl) && (
+                                        <div className="mt-3 rounded-2xl border border-cyan-300 overflow-hidden bg-slate-900 shadow-sm">
+                                          <div className="px-3.5 py-2 bg-slate-800 text-white flex items-center justify-between text-xs font-bold border-b border-slate-700">
+                                            <span className="flex items-center gap-1.5 text-cyan-300">
+                                              <FlaskConical className="w-3.5 h-3.5 text-cyan-400" />
+                                              Live Interactive Lab Preview (Test Game / Simulation Below)
+                                            </span>
+                                            <span className="text-[10px] text-gray-400 font-medium">
+                                              Interactive Sandbox
+                                            </span>
+                                          </div>
+                                          <div className="w-full h-[380px] bg-white relative">
+                                            <iframe
+                                              src={item.labType === 'url' ? item.labUrl : undefined}
+                                              srcDoc={item.labType !== 'url' ? prepareLabSrcDoc(item.labCode) : undefined}
+                                              className="w-full h-full border-0"
+                                              title={`Preview: ${item.title}`}
+                                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation"
+                                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; gamepad"
+                                            />
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
