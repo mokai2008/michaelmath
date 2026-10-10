@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { 
   Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, 
   Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Eye, Server, Percent,
-  FlaskConical, Gamepad2, RotateCcw, ExternalLink
+  FlaskConical, Gamepad2, RotateCcw, ExternalLink, Copy, AlertTriangle
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -20,6 +20,8 @@ export default function AdminCourseEditor() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
+  const [openSectionMenuId, setOpenSectionMenuId] = useState<string | number | null>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
 
@@ -309,6 +311,88 @@ export default function AdminCourseEditor() {
       }
       return section;
     }));
+  };
+
+  const handleDeleteSection = async (sectionId: string | number) => {
+    const targetSection = sections.find(s => s.id === sectionId);
+    const lessonCount = targetSection?.topics?.length || 0;
+    const confirmMessage = lessonCount > 0
+      ? `Are you sure you want to delete "${targetSection?.title || 'this section'}" and its ${lessonCount} lesson${lessonCount === 1 ? '' : 's'}? All content inside it will be permanently removed.`
+      : `Are you sure you want to delete "${targetSection?.title || 'this section'}"?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    if (typeof sectionId === 'string') {
+      try {
+        const { error } = await supabase.from('sections').delete().eq('id', sectionId);
+        if (error) {
+          console.error("Error deleting section from DB:", error);
+          alert("Could not delete section from database: " + error.message);
+          return;
+        }
+      } catch (err: any) {
+        console.error("Section delete error:", err);
+      }
+    }
+
+    setSections(prev => prev.filter(s => s.id !== sectionId));
+  };
+
+  const handleDuplicateSection = (sectionId: string | number) => {
+    const targetIdx = sections.findIndex(s => s.id === sectionId);
+    if (targetIdx === -1) return;
+    const original = sections[targetIdx];
+
+    const clonedTopics = (original.topics || []).map((topic: any, tIdx: number) => ({
+      ...topic,
+      id: Date.now() + tIdx + 1,
+      items: (topic.items || []).map((item: any, iIdx: number) => ({
+        ...item,
+        id: `cloned_${Date.now()}_${tIdx}_${iIdx}`
+      }))
+    }));
+
+    const clonedSection = {
+      ...original,
+      id: Date.now(),
+      title: `${original.title} (Copy)`,
+      topics: clonedTopics
+    };
+
+    const nextSections = [...sections];
+    nextSections.splice(targetIdx + 1, 0, clonedSection);
+    setSections(nextSections);
+  };
+
+  const handleMoveSection = (sectionId: string | number, direction: 'up' | 'down') => {
+    const idx = sections.findIndex(s => s.id === sectionId);
+    if (idx === -1) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === sections.length - 1) return;
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const updated = [...sections];
+    const [moved] = updated.splice(idx, 1);
+    updated.splice(targetIdx, 0, moved);
+    setSections(updated);
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!window.confirm(`⚠️ DANGER: Are you sure you want to permanently delete "${courseTitle}"?\n\nThis will permanently erase all sections, lessons, videos, quizzes, and student progress for this course. This action CANNOT be undone.`)) {
+      return;
+    }
+
+    setIsDeletingCourse(true);
+    try {
+      const { error } = await supabase.from('courses').delete().eq('id', courseId);
+      if (error) throw error;
+      alert("Course successfully deleted.");
+      router.push('/admin/courses');
+    } catch (err: any) {
+      console.error("Error deleting course:", err);
+      alert("Failed to delete course: " + err.message);
+      setIsDeletingCourse(false);
+    }
   };
 
   const updateSectionTitle = (id: string | number, title: string) => {
@@ -863,8 +947,18 @@ export default function AdminCourseEditor() {
         </div>
         <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button 
+            type="button"
+            onClick={handleDeleteCourse}
+            disabled={isSaving || isDeletingCourse}
+            className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
+            title="Permanently delete this course"
+          >
+            {isDeletingCourse ? <Loader2 className="w-4 h-4 animate-spin text-red-600" /> : <Trash2 className="w-4 h-4" />}
+            Delete Course
+          </button>
+          <button 
             onClick={() => handleSave(false)}
-            disabled={isSaving}
+            disabled={isSaving || isDeletingCourse}
             className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-text px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors disabled:opacity-50"
           >
             {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -872,7 +966,7 @@ export default function AdminCourseEditor() {
           </button>
           <button 
             onClick={() => handleSave(true)}
-            disabled={isSaving}
+            disabled={isSaving || isDeletingCourse}
             className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
           >
             {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -1068,7 +1162,7 @@ export default function AdminCourseEditor() {
             </div>
           </div>
 
-          {sections.map(section => (
+          {sections.map((section, sIdx) => (
             <div key={section.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-3 w-full max-w-md">
@@ -1088,7 +1182,106 @@ export default function AdminCourseEditor() {
                     onChange={(e) => updateSectionPrice(section.id, parseFloat(e.target.value) || 0)}
                     className="w-20 px-2 py-1 text-sm border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary"
                   />
-                  <button className="text-gray-400 hover:text-primary ml-2"><Settings className="w-4 h-4" /></button>
+                  
+                  {/* Section Settings Popover Menu */}
+                  <div className="relative">
+                    <button 
+                      type="button"
+                      onClick={() => setOpenSectionMenuId(openSectionMenuId === section.id ? null : section.id)}
+                      className={`p-1.5 rounded-lg transition-colors border ${
+                        openSectionMenuId === section.id 
+                          ? 'bg-primary text-white border-primary shadow-xs' 
+                          : 'text-gray-500 hover:text-primary hover:bg-gray-200/60 border-transparent'
+                      }`}
+                      title="Section Settings & Actions"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+
+                    {openSectionMenuId === section.id && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-30" 
+                          onClick={() => setOpenSectionMenuId(null)} 
+                        />
+                        <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-40 text-xs animate-in fade-in duration-100">
+                          <div className="px-3 py-1.5 border-b border-gray-100 font-bold text-[10px] text-text/50 uppercase tracking-wider flex items-center justify-between">
+                            <span>Section Settings</span>
+                            <span className="text-[10px] text-primary font-bold">#{sIdx + 1}</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={sIdx === 0}
+                            onClick={() => {
+                              handleMoveSection(section.id, 'up');
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 disabled:opacity-40 disabled:hover:bg-transparent font-medium transition-colors"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5 text-text/60" /> Move Section Up
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={sIdx === sections.length - 1}
+                            onClick={() => {
+                              handleMoveSection(section.id, 'down');
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 disabled:opacity-40 disabled:hover:bg-transparent font-medium transition-colors"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5 text-text/60" /> Move Section Down
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleDuplicateSection(section.id);
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 font-medium transition-colors"
+                          >
+                            <Copy className="w-3.5 h-3.5 text-text/60" /> Duplicate Section
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateSectionPrice(section.id, section.price > 0 ? 0 : 15);
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 font-medium transition-colors"
+                          >
+                            <Percent className="w-3.5 h-3.5 text-text/60" /> {section.price > 0 ? 'Make Free (£0)' : 'Set Price (£15)'}
+                          </button>
+
+                          <div className="my-1 border-t border-gray-100" />
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenSectionMenuId(null);
+                              handleDeleteSection(section.id);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 text-red-600 hover:bg-red-50 font-bold transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-500" /> Delete Section
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Direct Delete Section Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSection(section.id)}
+                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-0.5"
+                    title="Delete Section"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
@@ -2007,6 +2200,27 @@ export default function AdminCourseEditor() {
             <Plus className="w-5 h-5" /> Add New Section
           </button>
           
+          {/* Danger Zone: Delete Course */}
+          <div className="bg-red-50/40 border border-red-200 rounded-2xl p-5 mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h4 className="text-sm font-bold text-red-900 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600" /> Danger Zone: Course Deletion
+              </h4>
+              <p className="text-xs text-red-700/80 mt-1">
+                Permanently delete this entire course, all sections, lessons, videos, and quizzes. This cannot be undone.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleDeleteCourse}
+              disabled={isDeletingCourse || isSaving}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-xs shrink-0 disabled:opacity-50"
+            >
+              {isDeletingCourse ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Delete This Course
+            </button>
+          </div>
+
           <div className="pt-8 flex justify-between">
             <button 
               onClick={() => setStep(1)}

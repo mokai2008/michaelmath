@@ -4,7 +4,7 @@ import { useState } from "react";
 import { 
   Save, Plus, GripVertical, Settings, ChevronRight, Loader2, Upload, Trash2, 
   Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Percent,
-  FlaskConical, Gamepad2, RotateCcw, ExternalLink
+  FlaskConical, Gamepad2, RotateCcw, ExternalLink, Copy
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
@@ -14,6 +14,7 @@ import { prepareLabSrcDoc, SAMPLE_MATH_LAB_TEMPLATE, PRESET_LAB_URLS } from "@/l
 export default function AdminNewCourse() {
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [openSectionMenuId, setOpenSectionMenuId] = useState<number | null>(null);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
 
   const [courseTitle, setCourseTitle] = useState("");
@@ -132,6 +133,56 @@ export default function AdminNewCourse() {
       }
       return section;
     }));
+  };
+
+  const handleDeleteSection = (sectionId: number) => {
+    const targetSection = sections.find(s => s.id === sectionId);
+    const lessonCount = targetSection?.topics?.length || 0;
+    const confirmMessage = lessonCount > 0
+      ? `Are you sure you want to delete "${targetSection?.title || 'this section'}" and its ${lessonCount} lesson${lessonCount === 1 ? '' : 's'}? All content inside it will be removed.`
+      : `Are you sure you want to delete "${targetSection?.title || 'this section'}"?`;
+
+    if (!window.confirm(confirmMessage)) return;
+    setSections(prev => prev.filter(s => s.id !== sectionId));
+  };
+
+  const handleDuplicateSection = (sectionId: number) => {
+    const targetIdx = sections.findIndex(s => s.id === sectionId);
+    if (targetIdx === -1) return;
+    const original = sections[targetIdx];
+
+    const clonedTopics = (original.topics || []).map((topic: any, tIdx: number) => ({
+      ...topic,
+      id: Date.now() + tIdx + 1,
+      items: (topic.items || []).map((item: any, iIdx: number) => ({
+        ...item,
+        id: `cloned_${Date.now()}_${tIdx}_${iIdx}`
+      }))
+    }));
+
+    const clonedSection = {
+      ...original,
+      id: Date.now(),
+      title: `${original.title} (Copy)`,
+      topics: clonedTopics
+    };
+
+    const nextSections = [...sections];
+    nextSections.splice(targetIdx + 1, 0, clonedSection);
+    setSections(nextSections);
+  };
+
+  const handleMoveSection = (sectionId: number, direction: 'up' | 'down') => {
+    const idx = sections.findIndex(s => s.id === sectionId);
+    if (idx === -1) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === sections.length - 1) return;
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const updated = [...sections];
+    const [moved] = updated.splice(idx, 1);
+    updated.splice(targetIdx, 0, moved);
+    setSections(updated);
   };
 
   const updateSectionTitle = (id: number, title: string) => {
@@ -893,7 +944,7 @@ export default function AdminNewCourse() {
             </div>
           </div>
 
-          {sections.map(section => (
+          {sections.map((section, sIdx) => (
             <div key={section.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-3 w-full max-w-md">
@@ -913,7 +964,106 @@ export default function AdminNewCourse() {
                     onChange={(e) => updateSectionPrice(section.id, parseFloat(e.target.value) || 0)}
                     className="w-20 px-2 py-1 text-sm border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary"
                   />
-                  <button className="text-gray-400 hover:text-primary ml-2"><Settings className="w-4 h-4" /></button>
+                  
+                  {/* Section Settings Popover Menu */}
+                  <div className="relative">
+                    <button 
+                      type="button"
+                      onClick={() => setOpenSectionMenuId(openSectionMenuId === section.id ? null : section.id)}
+                      className={`p-1.5 rounded-lg transition-colors border ${
+                        openSectionMenuId === section.id 
+                          ? 'bg-primary text-white border-primary shadow-xs' 
+                          : 'text-gray-500 hover:text-primary hover:bg-gray-200/60 border-transparent'
+                      }`}
+                      title="Section Settings & Actions"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+
+                    {openSectionMenuId === section.id && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-30" 
+                          onClick={() => setOpenSectionMenuId(null)} 
+                        />
+                        <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-40 text-xs animate-in fade-in duration-100">
+                          <div className="px-3 py-1.5 border-b border-gray-100 font-bold text-[10px] text-text/50 uppercase tracking-wider flex items-center justify-between">
+                            <span>Section Settings</span>
+                            <span className="text-[10px] text-primary font-bold">#{sIdx + 1}</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={sIdx === 0}
+                            onClick={() => {
+                              handleMoveSection(section.id, 'up');
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 disabled:opacity-40 disabled:hover:bg-transparent font-medium transition-colors"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5 text-text/60" /> Move Section Up
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={sIdx === sections.length - 1}
+                            onClick={() => {
+                              handleMoveSection(section.id, 'down');
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 disabled:opacity-40 disabled:hover:bg-transparent font-medium transition-colors"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5 text-text/60" /> Move Section Down
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleDuplicateSection(section.id);
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 font-medium transition-colors"
+                          >
+                            <Copy className="w-3.5 h-3.5 text-text/60" /> Duplicate Section
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateSectionPrice(section.id, section.price > 0 ? 0 : 15);
+                              setOpenSectionMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 text-text/80 font-medium transition-colors"
+                          >
+                            <Percent className="w-3.5 h-3.5 text-text/60" /> {section.price > 0 ? 'Make Free (£0)' : 'Set Price (£15)'}
+                          </button>
+
+                          <div className="my-1 border-t border-gray-100" />
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenSectionMenuId(null);
+                              handleDeleteSection(section.id);
+                            }}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 text-red-600 hover:bg-red-50 font-bold transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-500" /> Delete Section
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Direct Delete Section Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSection(section.id)}
+                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-0.5"
+                    title="Delete Section"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
