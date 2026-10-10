@@ -419,6 +419,18 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
     const trackOpen = async () => {
       try {
+        const cacheKey = `vso_${sessionUser.id}_${activeTopic.id}_${contentItemId}_${currentMirrorIndex}`;
+        const lastTracked = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null;
+        const now = Date.now();
+        // 5-minute cooldown before logging another open for the exact same lesson, item, and mirror
+        if (lastTracked && now - parseInt(lastTracked, 10) < 5 * 60 * 1000) {
+          return;
+        }
+
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(cacheKey, now.toString());
+        }
+
         await supabase.from('video_server_opens').insert({
           student_id: sessionUser.id,
           course_id: params.courseId,

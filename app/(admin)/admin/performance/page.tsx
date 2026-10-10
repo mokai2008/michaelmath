@@ -16,6 +16,7 @@ interface StudentPerformance {
   student_whatsapp: string | null;
   parent_whatsapp: string | null;
   videosWatched: number;
+  rawVideoOpensCount: number;
   uniqueTopicsWatched: number;
   homeworkDelivered: number;
   quizzesDelivered: number;
@@ -26,13 +27,20 @@ interface StudentPerformance {
   quizDetails: any[];
   homeworkDetails: any[];
   videoDetails: {
-    id: string;
     topicId: string;
     topicTitle: string;
     courseTitle?: string | null;
     courseId?: string;
-    serverIndex: number;
-    createdAt: string;
+    totalOpens: number;
+    firstWatchedAt: string;
+    latestWatchedAt: string;
+    serverCounts: Record<number, number>;
+    primaryServerIndex: number;
+    openHistory: {
+      id: string;
+      serverIndex: number;
+      createdAt: string;
+    }[];
   }[];
 }
 
@@ -46,6 +54,7 @@ export default function PerformancePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<'name' | 'videos' | 'homework' | 'quizzes' | 'score'>('name');
   const [sortAsc, setSortAsc] = useState(true);
+  const [expandedVideoTopicId, setExpandedVideoTopicId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -422,21 +431,83 @@ export default function PerformancePage() {
         // Enrollments
         const studentEnrollments = (enrollments || []).filter(e => e.student_id === sid).length;
 
-        // Video details with resolved topic title and course title
-        const videoDetails = studentVideos
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .map(v => {
-            const topicInfo = v.topic_id ? topicsMap.get(v.topic_id) : null;
-            return {
-              id: v.id,
+        // Group video opens by unique topic (lesson)
+        const videoGroupsMap = new Map<string, {
+          topicId: string;
+          topicTitle: string;
+          courseTitle: string | null;
+          courseId?: string;
+          totalOpens: number;
+          firstWatchedAt: string;
+          latestWatchedAt: string;
+          serverCounts: Record<number, number>;
+          primaryServerIndex: number;
+          openHistory: {
+            id: string;
+            serverIndex: number;
+            createdAt: string;
+          }[];
+        }>();
+
+        studentVideos.forEach(v => {
+          const tId = v.topic_id || v.course_id || v.id;
+          const topicInfo = v.topic_id ? topicsMap.get(v.topic_id) : null;
+          const topicTitle = topicInfo?.title || 'Video Lesson';
+          const courseTitle = topicInfo?.courseTitle || (v.course_id ? coursesTitleMap.get(v.course_id) : null) || null;
+          const sIdx = v.server_index ?? 0;
+
+          const existing = videoGroupsMap.get(tId);
+          if (!existing) {
+            videoGroupsMap.set(tId, {
               topicId: v.topic_id,
-              topicTitle: topicInfo?.title || 'Video Lesson',
-              courseTitle: topicInfo?.courseTitle || null,
+              topicTitle,
+              courseTitle,
               courseId: v.course_id,
-              serverIndex: v.server_index,
+              totalOpens: 1,
+              firstWatchedAt: v.created_at,
+              latestWatchedAt: v.created_at,
+              serverCounts: { [sIdx]: 1 },
+              primaryServerIndex: sIdx,
+              openHistory: [{
+                id: v.id,
+                serverIndex: sIdx,
+                createdAt: v.created_at
+              }]
+            });
+          } else {
+            existing.totalOpens++;
+            existing.serverCounts[sIdx] = (existing.serverCounts[sIdx] || 0) + 1;
+            if (new Date(v.created_at).getTime() > new Date(existing.latestWatchedAt).getTime()) {
+              existing.latestWatchedAt = v.created_at;
+            }
+            if (new Date(v.created_at).getTime() < new Date(existing.firstWatchedAt).getTime()) {
+              existing.firstWatchedAt = v.created_at;
+            }
+            existing.openHistory.push({
+              id: v.id,
+              serverIndex: sIdx,
               createdAt: v.created_at
-            };
+            });
+          }
+        });
+
+        // Finalize primary server and sort openHistory
+        const videoDetails = Array.from(videoGroupsMap.values()).map(group => {
+          let maxCount = -1;
+          let primIdx = 0;
+          Object.entries(group.serverCounts).forEach(([idxStr, count]) => {
+            const idxNum = parseInt(idxStr, 10);
+            if (count > maxCount) {
+              maxCount = count;
+              primIdx = idxNum;
+            }
           });
+          group.primaryServerIndex = primIdx;
+          group.openHistory.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          return group;
+        }).sort((a, b) => new Date(b.latestWatchedAt).getTime() - new Date(a.latestWatchedAt).getTime());
+
+        const uniqueVideoLessonsCount = videoDetails.length;
 
         return {
           id: sid,
@@ -445,8 +516,9 @@ export default function PerformancePage() {
           avatar_url: student.avatar_url,
           student_whatsapp: student.student_whatsapp,
           parent_whatsapp: student.parent_whatsapp,
-          videosWatched: studentVideos.length,
-          uniqueTopicsWatched: uniqueTopics,
+          videosWatched: uniqueVideoLessonsCount,
+          rawVideoOpensCount: studentVideos.length,
+          uniqueTopicsWatched: uniqueVideoLessonsCount,
           homeworkDelivered: totalHomework,
           quizzesDelivered: totalQuizzes,
           quizAvgScore: quizAvg,
@@ -477,7 +549,10 @@ export default function PerformancePage() {
       let cmp = 0;
       switch (sortBy) {
         case 'name': cmp = a.full_name.localeCompare(b.full_name); break;
-        case 'videos': cmp = a.videosWatched - b.videosWatched; break;
+        case 'videos': 
+          cmp = a.videosWatched - b.videosWatched;
+          if (cmp === 0) cmp = a.rawVideoOpensCount - b.rawVideoOpensCount;
+          break;
         case 'homework': cmp = a.homeworkDelivered - b.homeworkDelivered; break;
         case 'quizzes': cmp = a.quizzesDelivered - b.quizzesDelivered; break;
         case 'score': cmp = a.quizAvgScore - b.quizAvgScore; break;
@@ -524,10 +599,10 @@ export default function PerformancePage() {
 
   // Export CSV
   const exportCSV = () => {
-    const headers = ['Student', 'Email', 'Student WhatsApp', 'Parent WhatsApp', 'Videos Watched', 'Unique Topics Watched', 'Homework Delivered', 'Quizzes Delivered', 'Avg Quiz Score %', 'Quiz Pass Rate %', 'Topics Completed', 'Enrolled Courses'];
+    const headers = ['Student', 'Email', 'Student WhatsApp', 'Parent WhatsApp', 'Video Lessons Watched', 'Total Video Opens', 'Homework Delivered', 'Quizzes Delivered', 'Avg Quiz Score %', 'Quiz Pass Rate %', 'Topics Completed', 'Enrolled Courses'];
     const rows = sortedStudents.map(s => [
       s.full_name, s.email, s.student_whatsapp || '', s.parent_whatsapp || '',
-      s.videosWatched, s.uniqueTopicsWatched, s.homeworkDelivered,
+      s.videosWatched, s.rawVideoOpensCount, s.homeworkDelivered,
       s.quizzesDelivered, s.quizAvgScore, s.quizPassRate,
       s.topicsCompleted, s.enrolledCourses
     ]);
@@ -547,6 +622,7 @@ export default function PerformancePage() {
 
   // Totals for KPI
   const totalVideos = studentPerformance.reduce((sum, s) => sum + s.videosWatched, 0);
+  const totalVideoOpens = studentPerformance.reduce((sum, s) => sum + s.rawVideoOpensCount, 0);
   const totalHomework = studentPerformance.reduce((sum, s) => sum + s.homeworkDelivered, 0);
   const totalQuizzes = studentPerformance.reduce((sum, s) => sum + s.quizzesDelivered, 0);
   const avgScore = studentPerformance.length > 0
@@ -569,7 +645,11 @@ export default function PerformancePage() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
           <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center"><PlayCircle className="w-5 h-5 text-purple-500" /></div>
-          <div><div className="text-text/50 text-xs font-medium">Videos Watched</div><div className="text-2xl font-bold text-text">{totalVideos}</div></div>
+          <div>
+            <div className="text-text/50 text-xs font-medium">Video Lessons</div>
+            <div className="text-2xl font-bold text-text">{totalVideos}</div>
+            <div className="text-[10px] text-purple-600 font-semibold">{totalVideoOpens} total opens</div>
+          </div>
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
           <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center"><BookOpen className="w-5 h-5 text-blue-500" /></div>
@@ -649,9 +729,20 @@ export default function PerformancePage() {
                         </div>
                       </td>
                       <td className="p-4 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${student.videosWatched > 0 ? 'bg-purple-50 text-purple-700' : 'bg-gray-50 text-gray-400'}`}>
-                          {student.videosWatched}
-                        </span>
+                        {student.videosWatched > 0 ? (
+                          <div className="inline-flex flex-col items-center justify-center px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700">
+                            <span className="text-xs font-bold leading-tight">
+                              {student.videosWatched} {student.videosWatched === 1 ? 'lesson' : 'lessons'}
+                            </span>
+                            {student.rawVideoOpensCount > student.videosWatched && (
+                              <span className="text-[10px] text-purple-500 font-medium leading-none mt-0.5">
+                                ({student.rawVideoOpensCount} opens)
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">0</span>
+                        )}
                       </td>
                       <td className="p-4 text-center">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${student.homeworkDelivered > 0 ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-400'}`}>
@@ -708,8 +799,15 @@ export default function PerformancePage() {
                   </div>
                   <div className="flex gap-5 flex-wrap">
                     <div className="text-center">
-                      <div className="text-2xl font-black text-purple-600">{selectedStudent.videosWatched}</div>
-                      <div className="text-[10px] text-text/40 uppercase font-bold">Videos</div>
+                      <div className="text-2xl font-black text-purple-600 leading-none">{selectedStudent.videosWatched}</div>
+                      <div className="text-[10px] text-text/40 uppercase font-bold mt-1">
+                        {selectedStudent.videosWatched === 1 ? 'Video' : 'Videos'}
+                      </div>
+                      {selectedStudent.rawVideoOpensCount > selectedStudent.videosWatched && (
+                        <div className="text-[10px] text-purple-500 font-medium mt-0.5">
+                          ({selectedStudent.rawVideoOpensCount} opens)
+                        </div>
+                      )}
                     </div>
                     <div className="text-center">
                       <div className="text-2xl font-black text-blue-600">{selectedStudent.homeworkDelivered}</div>
@@ -745,8 +843,8 @@ export default function PerformancePage() {
                     <div className="bg-purple-50/50 rounded-xl p-4 border border-purple-100">
                       <PlayCircle className="w-5 h-5 text-purple-500 mb-2" />
                       <div className="text-2xl font-black text-text">{selectedStudent.videosWatched}</div>
-                      <div className="text-xs text-text/50">Total Video Opens</div>
-                      <div className="text-[10px] text-text/30 mt-1">{selectedStudent.uniqueTopicsWatched} unique topics</div>
+                      <div className="text-xs text-text/50">Video Lessons Watched</div>
+                      <div className="text-[10px] text-purple-600 font-semibold mt-1">{selectedStudent.rawVideoOpensCount} total server opens</div>
                     </div>
                     <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
                       <BookOpen className="w-5 h-5 text-blue-500 mb-2" />
@@ -774,27 +872,80 @@ export default function PerformancePage() {
                     {selectedStudent.videoDetails.length === 0 ? (
                       <div className="text-center text-text/40 py-8">
                         <PlayCircle className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                        <p>No videos watched yet.</p>
+                        <p>No video lessons watched yet.</p>
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-[45vh] overflow-y-auto">
-                        {selectedStudent.videoDetails.map((v, i) => (
-                          <div key={v.id || i} className="flex items-center gap-3 p-3.5 rounded-xl bg-purple-50/40 border border-purple-100 hover:border-purple-200 transition-colors">
-                            <PlayCircle className="w-5 h-5 text-purple-600 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-bold text-text truncate">{v.topicTitle}</div>
-                              <div className="text-xs text-text/50 flex items-center gap-2 mt-0.5 flex-wrap">
-                                <span className="bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded text-[10px]">
-                                  Server {v.serverIndex + 1}
-                                </span>
-                                {v.courseTitle && (
-                                  <span className="text-[11px] text-text/50 truncate">• {v.courseTitle}</span>
-                                )}
+                      <div className="space-y-3 max-h-[48vh] overflow-y-auto pr-1">
+                        {selectedStudent.videoDetails.map((v) => {
+                          const isExpanded = expandedVideoTopicId === v.topicId;
+                          const serverIndices = Object.keys(v.serverCounts).map(Number).sort((a, b) => a - b);
+
+                          return (
+                            <div key={v.topicId || v.topicTitle} className="rounded-xl bg-purple-50/40 border border-purple-100 transition-colors overflow-hidden">
+                              <div className="flex items-center gap-3 p-3.5 flex-wrap sm:flex-nowrap">
+                                <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+                                  <PlayCircle className="w-5 h-5 text-purple-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-bold text-text truncate">{v.topicTitle}</div>
+                                  <div className="text-xs text-text/50 flex items-center gap-2 mt-1 flex-wrap">
+                                    {serverIndices.map(sIdx => (
+                                      <span key={sIdx} className="bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded text-[10px]">
+                                        Server {sIdx + 1}{v.serverCounts[sIdx] > 1 ? ` (${v.serverCounts[sIdx]}×)` : ''}
+                                      </span>
+                                    ))}
+                                    <span className="bg-white border border-purple-200 text-purple-700 font-bold px-2 py-0.5 rounded text-[10px]">
+                                      {v.totalOpens} {v.totalOpens === 1 ? 'open' : 'total opens'}
+                                    </span>
+                                    {v.courseTitle && (
+                                      <span className="text-[11px] text-text/50 truncate">• {v.courseTitle}</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end mt-2 sm:mt-0 flex-shrink-0">
+                                  <div className="text-right">
+                                    <div className="text-[11px] text-text/60 font-semibold">Last watched</div>
+                                    <div className="text-[10px] text-text/40 whitespace-nowrap">{formatDate(v.latestWatchedAt)}</div>
+                                  </div>
+
+                                  {v.openHistory.length > 1 && (
+                                    <button
+                                      onClick={() => setExpandedVideoTopicId(isExpanded ? null : v.topicId)}
+                                      className="px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-100/70 hover:bg-purple-100 rounded-lg flex items-center gap-1 transition-colors"
+                                      title="View open timestamps"
+                                    >
+                                      <span>{v.openHistory.length} logs</span>
+                                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
+
+                              {/* Collapsible Open History */}
+                              {isExpanded && v.openHistory.length > 0 && (
+                                <div className="bg-white border-t border-purple-100 px-4 py-3">
+                                  <div className="text-[11px] font-bold text-text/60 mb-2 flex items-center justify-between">
+                                    <span>Detailed Open History ({v.openHistory.length} sessions logged)</span>
+                                    <span className="text-[10px] text-text/40">Newest first</span>
+                                  </div>
+                                  <div className="max-h-36 overflow-y-auto divide-y divide-gray-100">
+                                    {v.openHistory.map((h, hIdx) => (
+                                      <div key={h.id || hIdx} className="py-1.5 flex items-center justify-between text-[11px]">
+                                        <span className="font-medium text-purple-800">
+                                          Server {h.serverIndex + 1}
+                                        </span>
+                                        <span className="text-text/40">
+                                          {formatDate(h.createdAt)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <span className="text-[11px] text-text/40 whitespace-nowrap flex-shrink-0">{formatDate(v.createdAt)}</span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
