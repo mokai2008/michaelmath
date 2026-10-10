@@ -81,23 +81,31 @@ export const DownloadReportButton: React.FC<DownloadReportButtonProps> = ({
           }
 
           const allManual = ms || [];
-          const worksheets = allManual.filter((s: any) => s.type !== "pdf_quiz");
-          const pdfQuizzes = allManual.filter((s: any) => s.type === "pdf_quiz");
-          const formattedPdfQuizzes = pdfQuizzes.map((pq: any) => ({
-            id: pq.id,
-            student_id: pq.student_id,
-            score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
-            submitted_at: pq.submitted_at,
-            is_pdf_quiz: true,
-            feedback: pq.feedback_text || pq.feedback,
-            status: pq.status,
-            quizzes: {
+          const isPdfQuizSubmission = (s: any) =>
+            s.type === "pdf_quiz" || (typeof s.type === "string" && s.type.startsWith("pdf_quiz"));
+          const worksheets = allManual.filter((s: any) => !isPdfQuizSubmission(s));
+          const pdfQuizzes = allManual.filter(isPdfQuizSubmission);
+          const formattedPdfQuizzes = pdfQuizzes.map((pq: any) => {
+            const quizIdSuffix = typeof pq.type === "string" && pq.type.startsWith("pdf_quiz_")
+              ? pq.type.replace("pdf_quiz_", "")
+              : null;
+            return {
               id: pq.id,
-              title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : "PDF Quiz",
-              total_marks: 100,
-              passing_score: 50,
-            }
-          }));
+              student_id: pq.student_id,
+              quiz_id: quizIdSuffix || pq.id,
+              score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
+              submitted_at: pq.submitted_at,
+              is_pdf_quiz: true,
+              feedback: pq.feedback_text || pq.feedback,
+              status: pq.status,
+              quizzes: {
+                id: quizIdSuffix || pq.id,
+                title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : "PDF Quiz",
+                total_marks: 100,
+                passing_score: 50,
+              }
+            };
+          });
 
           const unifiedQuizzes = [...interactiveQuizSubs, ...formattedPdfQuizzes];
 

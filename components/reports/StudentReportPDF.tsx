@@ -326,28 +326,98 @@ export const StudentReportPDF: React.FC<StudentReportProps> = ({
 
   // Separate true worksheets from manual_submissions
   const allManual = student.all_manual_submissions || student.manual_submissions || [];
-  const worksheets = (student.manual_submissions || allManual).filter((s: any) => s.type !== 'pdf_quiz');
+  const isPdfQuizSubmission = (s: any) =>
+    s.type === 'pdf_quiz' || (typeof s.type === 'string' && s.type.startsWith('pdf_quiz'));
+  const rawWorksheets = (student.manual_submissions || allManual).filter((s: any) => !isPdfQuizSubmission(s));
+
+  // Deduplicate worksheets by topic_id + slot, keeping the latest/reviewed one
+  const wsSlotMap = new Map<string, any>();
+  rawWorksheets.forEach((sub: any) => {
+    let slotKey = '0';
+    if (typeof sub.type === 'string') {
+      const match = sub.type.match(/^worksheet(?:_([a-zA-Z0-9_-]+))?$/);
+      if (match && match[1] !== undefined) {
+        slotKey = match[1];
+      }
+    }
+    const dedupeKey = `${sub.topic_id || 'general'}_slot_${slotKey}`;
+    const existing = wsSlotMap.get(dedupeKey);
+    if (!existing) {
+      wsSlotMap.set(dedupeKey, sub);
+    } else {
+      if (sub.status === 'reviewed' && existing.status !== 'reviewed') {
+        wsSlotMap.set(dedupeKey, sub);
+      } else if (sub.status === existing.status) {
+        const timeA = new Date(sub.submitted_at || 0).getTime();
+        const timeB = new Date(existing.submitted_at || 0).getTime();
+        if (timeA > timeB) wsSlotMap.set(dedupeKey, sub);
+      }
+    }
+  });
+  const worksheets = Array.from(wsSlotMap.values());
 
   // Unified quizzes: if student.quiz_submissions already unified use it, otherwise merge any pdf_quiz from manual submissions
-  let quizzes = student.quiz_submissions || [];
-  const pdfQuizzesInManual = allManual.filter((s: any) => s.type === 'pdf_quiz');
-  if (pdfQuizzesInManual.length > 0 && !quizzes.some((q: any) => q.is_pdf_quiz)) {
-    const formattedPdfQuizzes = pdfQuizzesInManual.map((pq: any) => ({
-      id: pq.id,
-      score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
-      submitted_at: pq.submitted_at,
-      is_pdf_quiz: true,
-      feedback: pq.feedback_text || pq.feedback,
-      status: pq.status,
-      quizzes: {
+  let rawQuizzes = student.quiz_submissions || [];
+  const pdfQuizzesInManual = allManual.filter(isPdfQuizSubmission);
+  if (pdfQuizzesInManual.length > 0 && !rawQuizzes.some((q: any) => q.is_pdf_quiz)) {
+    const formattedPdfQuizzes = pdfQuizzesInManual.map((pq: any) => {
+      const quizIdSuffix = typeof pq.type === "string" && pq.type.startsWith("pdf_quiz_")
+        ? pq.type.replace("pdf_quiz_", "")
+        : null;
+      return {
         id: pq.id,
-        title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : 'PDF Quiz',
-        total_marks: 100,
-        passing_score: 50,
-      }
-    }));
-    quizzes = [...quizzes, ...formattedPdfQuizzes];
+        quiz_id: quizIdSuffix || pq.id,
+        score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
+        submitted_at: pq.submitted_at,
+        is_pdf_quiz: true,
+        feedback: pq.feedback_text || pq.feedback,
+        status: pq.status,
+        quizzes: {
+          id: quizIdSuffix || pq.id,
+          title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : 'PDF Quiz',
+          total_marks: 100,
+          passing_score: 50,
+        }
+      };
+    });
+    rawQuizzes = [...rawQuizzes, ...formattedPdfQuizzes];
   }
+
+  // Deduplicate and group quizzes by unique quiz ID so multiple retakes count as 1 quiz
+  const quizMap = new Map<string, any>();
+  rawQuizzes.forEach((q: any) => {
+    const qKey = q.is_pdf_quiz 
+      ? `pdf_${q.quiz_id || q.id}`
+      : `interactive_${q.quizzes?.id || q.quiz_id || q.id}`;
+    
+    const scoreVal = q.best_score !== null && q.best_score !== undefined 
+      ? q.best_score 
+      : (q.score !== null && q.score !== undefined ? Number(q.score) : null);
+    
+    const existing = quizMap.get(qKey);
+    if (!existing) {
+      quizMap.set(qKey, {
+        ...q,
+        score: scoreVal,
+        best_score: scoreVal,
+        attempts_count: q.attempts_count || (q.attempts ? q.attempts.length : 1),
+      });
+    } else {
+      const existingScore = existing.best_score ?? existing.score;
+      const isBetter = scoreVal !== null && (existingScore === null || scoreVal > existingScore);
+      if (isBetter || (q.status === 'reviewed' && existing.status !== 'reviewed')) {
+        quizMap.set(qKey, {
+          ...q,
+          score: scoreVal,
+          best_score: isBetter ? scoreVal : existingScore,
+          attempts_count: (existing.attempts_count || 1) + 1,
+        });
+      } else {
+        existing.attempts_count = (existing.attempts_count || 1) + 1;
+      }
+    }
+  });
+  const quizzes = Array.from(quizMap.values());
 
   return (
     <Document title={`Academic_Report_${student.student_code || 'Student'}`}>
@@ -505,7 +575,9 @@ export const StudentReportPDF: React.FC<StudentReportProps> = ({
               <Text style={styles.emptyText}>No worksheet submissions recorded yet.</Text>
             ) : (
               worksheets.map((sub: any, i: number) => {
-                const topicTitle = sub.topics?.title || 'Worksheet Assignment';
+                const topicTitle = sub.worksheet_title 
+                  ? `${sub.topics?.title || 'Worksheet'} (${sub.worksheet_title})` 
+                  : (sub.topics?.title || 'Worksheet Assignment');
                 const isReviewed = sub.status === 'reviewed';
                 const feedbackText = sub.feedback_text || sub.feedback;
                 return (
@@ -553,7 +625,9 @@ export const StudentReportPDF: React.FC<StudentReportProps> = ({
               <Text style={styles.emptyText}>No quiz attempts logged yet.</Text>
             ) : (
               quizzes.map((q: any, i: number) => {
-                const quizTitle = q.quizzes?.title || q.quizzes?.topics?.title || 'Quiz Evaluation';
+                const attemptsCount = q.attempts_count || (q.attempts ? q.attempts.length : 1);
+                const baseQuizTitle = q.quizzes?.title || q.quizzes?.topics?.title || 'Quiz Evaluation';
+                const quizTitle = `${baseQuizTitle}${attemptsCount > 1 ? ` (${attemptsCount} attempts)` : ''}`;
                 const totalMarks = q.quizzes?.total_marks || 100;
                 const passingScore = q.quizzes?.passing_score;
                 const scoreVal = q.score !== null && q.score !== undefined ? Number(q.score) : null;

@@ -26,9 +26,36 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   // Calculate quick metrics for preview
   const enrollmentsCount = student.enrollments?.length || 0;
   const completedLessonsCount = (student.topic_progress || []).filter((tp: any) => tp.is_completed).length;
+  
+  const isPdfQuizSubmission = (s: any) =>
+    s.type === "pdf_quiz" || (typeof s.type === "string" && s.type.startsWith("pdf_quiz"));
   const allManual = student.all_manual_submissions || student.manual_submissions || [];
-  const worksheetsCount = (student.manual_submissions || allManual).filter((s: any) => s.type !== 'pdf_quiz').length;
-  const quizzesCount = student.quiz_submissions?.length || 0;
+  const rawWorksheets = (student.manual_submissions || allManual).filter((s: any) => !isPdfQuizSubmission(s));
+  
+  // Deduplicate worksheets by topic and slot
+  const wsSlotMap = new Map<string, any>();
+  rawWorksheets.forEach((sub: any) => {
+    let slotKey = '0';
+    if (typeof sub.type === 'string') {
+      const match = sub.type.match(/^worksheet(?:_([a-zA-Z0-9_-]+))?$/);
+      if (match && match[1] !== undefined) slotKey = match[1];
+    }
+    const dedupeKey = `${sub.topic_id || 'general'}_slot_${slotKey}`;
+    if (!wsSlotMap.has(dedupeKey)) wsSlotMap.set(dedupeKey, sub);
+  });
+  const worksheetsCount = wsSlotMap.size;
+
+  // Deduplicate quizzes by unique quiz key
+  const rawQuizzes = student.quiz_submissions || [];
+  const uniqueQuizKeys = new Set(
+    rawQuizzes.map((q: any) => q.is_pdf_quiz ? `pdf_${q.quiz_id || q.id}` : `quiz_${q.quiz_id || q.quizzes?.id || q.id}`)
+  );
+  const pdfQuizzesInManual = allManual.filter(isPdfQuizSubmission);
+  pdfQuizzesInManual.forEach((pq: any) => {
+    const qSuffix = typeof pq.type === 'string' && pq.type.startsWith('pdf_quiz_') ? pq.type.replace('pdf_quiz_', '') : pq.id;
+    uniqueQuizKeys.add(`pdf_${qSuffix}`);
+  });
+  const quizzesCount = uniqueQuizKeys.size > 0 ? uniqueQuizKeys.size : (student.quiz_submissions?.length || 0);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">

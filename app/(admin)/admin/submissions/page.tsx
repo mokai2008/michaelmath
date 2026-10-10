@@ -365,9 +365,10 @@ export default function SubmissionsPage() {
         alert(`🎉 Review submitted! All requirements for "${topicTitle}" have been approved — lesson marked COMPLETE for the student and they have been notified!`);
       } else {
         // Send standard individual item review notification
+        const isWs = selectedSubmission.type === 'worksheet' || (typeof selectedSubmission.type === 'string' && selectedSubmission.type.startsWith('worksheet'));
         await supabase.from('notifications').insert({
           student_id: selectedSubmission.student_id,
-          title: `Your ${selectedSubmission.type === 'worksheet' ? 'Worksheet' : 'Quiz'} was Reviewed!`,
+          title: `Your ${isWs ? 'Worksheet' : 'Quiz'} was Reviewed!`,
           message: `Your submission for "${topicTitle}" has been reviewed.${score ? ` Score: ${score}` : ''} Check your course for details.`,
           type: 'system',
           link_url: linkUrl
@@ -538,8 +539,8 @@ export default function SubmissionsPage() {
                 className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${selectedSubmission?.id === sub.id ? 'border-primary shadow-sm ring-2 ring-primary/20' : 'border-gray-200 hover:border-gray-300'}`}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${sub.type === 'worksheet' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                    {sub.type === 'worksheet' ? 'Worksheet' : 'PDF Quiz'}
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${(sub.type === 'worksheet' || (typeof sub.type === 'string' && sub.type.startsWith('worksheet'))) ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                    {(sub.type === 'worksheet' || (typeof sub.type === 'string' && sub.type.startsWith('worksheet'))) ? 'Worksheet' : 'PDF Quiz'}
                   </span>
                   <span className="text-[10px] text-text/40">{new Date(sub.submitted_at).toLocaleDateString()}</span>
                 </div>

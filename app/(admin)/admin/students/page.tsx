@@ -67,7 +67,8 @@ function generateWhatsAppReport(student: any): string {
   student.topic_progress?.forEach((tp: any) => totalSecs += (tp.time_spent_seconds || 0));
   const enrollmentCount = student.enrollments?.length || 0;
   const worksheetCount = student.manual_submissions?.length || 0;
-  const quizCount = student.quiz_submissions?.length || 0;
+  const uniqueQuizzes = student.quiz_submissions || [];
+  const totalQuizAttempts = uniqueQuizzes.reduce((acc: number, q: any) => acc + (q.attempts_count || 1), 0);
 
   text += `📊 *Overall Summary:*\n`;
   text += `───────────────────────────\n`;
@@ -75,7 +76,7 @@ function generateWhatsAppReport(student: any): string {
   text += `✅ Lessons Completed: ${totalCompleted}\n`;
   text += `⏱️ Total Study Time: ${formatTime(totalSecs)}\n`;
   text += `📝 Worksheets Submitted: ${worksheetCount}\n`;
-  text += `🧠 Quizzes Attempted: ${quizCount}\n\n`;
+  text += `🧠 Quizzes Completed: ${uniqueQuizzes.length}${totalQuizAttempts > uniqueQuizzes.length ? ` (${totalQuizAttempts} total attempts)` : ''}\n\n`;
 
   // Enrolled Courses & Progress (with section-level details)
   text += `📚 *Enrolled Courses & Progress:*\n`;
@@ -138,17 +139,18 @@ function generateWhatsAppReport(student: any): string {
   if (submissions.length > 0) {
     submissions.forEach((sub: any, idx: number) => {
       const topicTitle = sub.topics?.title || 'Worksheet Assignment';
+      const wsTitle = sub.worksheet_title ? ` (${sub.worksheet_title})` : '';
       const submitDate = sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString("en-GB") : 'N/A';
       
       if (sub.status === 'reviewed') {
-        text += `${idx + 1}. ✅ *${topicTitle}*\n`;
+        text += `${idx + 1}. ✅ *${topicTitle}*${wsTitle}\n`;
         text += `   📊 Score: *${sub.score || 'N/A'}*\n`;
         if (sub.feedback) {
           text += `   💬 Feedback: "${sub.feedback}"\n`;
         }
         text += `   📅 Submitted: ${submitDate}\n`;
       } else {
-        text += `${idx + 1}. ⏳ *${topicTitle}*\n`;
+        text += `${idx + 1}. ⏳ *${topicTitle}*${wsTitle}\n`;
         text += `   Status: Pending Review\n`;
         text += `   📅 Submitted: ${submitDate}\n`;
       }
@@ -161,30 +163,33 @@ function generateWhatsAppReport(student: any): string {
   // Quiz Performance
   text += `🧠 *Quiz Performance & Results:*\n`;
   text += `───────────────────────────\n`;
-  const quizzes = student.quiz_submissions || [];
-  if (quizzes.length > 0) {
+  if (uniqueQuizzes.length > 0) {
     let totalScore = 0;
     let totalMaxScore = 0;
     let passCount = 0;
 
-    quizzes.forEach((qs: any, idx: number) => {
+    uniqueQuizzes.forEach((qs: any, idx: number) => {
       const qTitle = qs.quizzes?.title || qs.quizzes?.topics?.title || 'Quiz';
-      const totalMarks = qs.quizzes?.total_marks || 100;
-      const passingScore = qs.quizzes?.passing_score;
-      const scorePct = totalMarks > 0 ? Math.round(((qs.score ?? 0) / totalMarks) * 100) : 0;
-      const passed = passingScore != null ? (qs.score ?? 0) >= passingScore : scorePct >= 50;
+      const totalMarks = qs.quizzes?.total_marks || qs.total_marks || 100;
+      const passingScore = qs.quizzes?.passing_score || qs.passing_score;
+      const scoreVal = qs.best_score !== null && qs.best_score !== undefined ? qs.best_score : qs.score;
+      const scorePct = totalMarks > 0 && scoreVal !== null && scoreVal !== undefined ? Math.round((Number(scoreVal) / totalMarks) * 100) : 0;
+      const passed = qs.is_passed !== undefined ? qs.is_passed : (passingScore != null ? (scoreVal ?? 0) >= passingScore : scorePct >= 50);
       const statusIcon = passed ? '✅ Passed' : '❌ Failed';
-      const quizDate = qs.submitted_at ? new Date(qs.submitted_at).toLocaleDateString("en-GB") : 'N/A';
+      const quizDate = qs.latest_submitted_at || qs.submitted_at ? new Date(qs.latest_submitted_at || qs.submitted_at).toLocaleDateString("en-GB") : 'N/A';
+      const attemptsCount = qs.attempts_count || (qs.attempts ? qs.attempts.length : 1);
       
-      text += `${idx + 1}. *${qTitle}*\n`;
-      text += `   📊 Score: *${qs.score ?? 'N/A'}/${totalMarks}* (${scorePct}%) — ${statusIcon}\n`;
+      text += `${idx + 1}. *${qTitle}*${attemptsCount > 1 ? ` (${attemptsCount} attempts)` : ''}\n`;
+      text += `   📊 Best Score: *${scoreVal ?? 'N/A'}/${totalMarks}* (${scorePct}%) — ${statusIcon}\n`;
       if (passingScore != null) {
         text += `   🎯 Passing score: ${passingScore}/${totalMarks}\n`;
       }
       text += `   📅 Date: ${quizDate}\n`;
 
-      totalScore += (qs.score ?? 0);
-      totalMaxScore += totalMarks;
+      if (scoreVal !== null && scoreVal !== undefined) {
+        totalScore += Number(scoreVal);
+        totalMaxScore += totalMarks;
+      }
       if (passed) passCount++;
     });
 
@@ -192,7 +197,7 @@ function generateWhatsAppReport(student: any): string {
     const avgPct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
     text += `\n📈 *Quiz Summary:*\n`;
     text += `   • Average Score: ${avgPct}%\n`;
-    text += `   • Pass Rate: ${passCount}/${quizzes.length} quizzes (${Math.round((passCount / quizzes.length) * 100)}%)\n`;
+    text += `   • Pass Rate: ${passCount}/${uniqueQuizzes.length} quizzes (${Math.round((passCount / uniqueQuizzes.length) * 100)}%)\n`;
   } else {
     text += `• No quiz attempts yet.\n`;
   }
@@ -534,7 +539,7 @@ export default function AdminStudentsPage() {
       if (allTopicIds.length > 0) {
         const { data: tList } = await supabase
           .from("topics")
-          .select("id, title, section_id, sections(id, course_id)")
+          .select("id, title, section_id, content_items, sections(id, course_id)")
           .in("id", allTopicIds);
         (tList || []).forEach((t: any) => {
           topicsMap.set(t.id, t);
@@ -575,34 +580,190 @@ export default function AdminStudentsPage() {
         };
       });
 
-      // Separate worksheets vs PDF quizzes
-      const worksheetsData = enrichedManualSubs.filter((s: any) => s.type !== "pdf_quiz");
-      const pdfQuizzesData = enrichedManualSubs.filter((s: any) => s.type === "pdf_quiz");
+      // 1. Separate genuine Worksheets vs PDF Quizzes correctly
+      const isPdfQuizSubmission = (s: any) =>
+        s.type === "pdf_quiz" || (typeof s.type === "string" && s.type.startsWith("pdf_quiz"));
 
-      // Format PDF quizzes into quiz submissions format
-      const formattedPdfQuizzes = pdfQuizzesData.map((pq: any) => ({
-        id: pq.id,
-        student_id: pq.student_id,
-        quiz_id: pq.id,
-        score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
-        submitted_at: pq.submitted_at,
-        is_pdf_quiz: true,
-        file_url: pq.file_url,
-        feedback: pq.feedback_text || pq.feedback,
-        feedback_file_url: pq.feedback_file_url || pq.reviewed_file_url,
-        status: pq.status,
-        quizzes: {
-          id: pq.id,
-          title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : "PDF Quiz",
-          total_marks: 100,
-          passing_score: 50,
-          topics: pq.topics || null
+      const rawWorksheets = enrichedManualSubs.filter((s: any) => !isPdfQuizSubmission(s));
+      const rawPdfQuizzes = enrichedManualSubs.filter(isPdfQuizSubmission);
+
+      // Deduplicate worksheets by topic & worksheet slot (resolve duplicates like 'worksheet' vs 'worksheet_0')
+      const worksheetsMap = new Map<string, any>();
+      rawWorksheets.forEach((s: any) => {
+        const topicObj = topicsMap.get(s.topic_id);
+        const contentItems = Array.isArray(topicObj?.content_items)
+          ? topicObj.content_items
+          : (typeof topicObj?.content_items === "string"
+              ? (() => { try { return JSON.parse(topicObj.content_items); } catch { return []; } })()
+              : []);
+        const topicWorksheets = contentItems.filter((i: any) => i && i.type === "worksheet");
+
+        let slotIdx = 0;
+        if (s.type === "worksheet" || s.type === "worksheet_0") {
+          slotIdx = 0;
+        } else if (typeof s.type === "string" && s.type.startsWith("worksheet_")) {
+          const suffix = s.type.replace("worksheet_", "");
+          const num = parseInt(suffix, 10);
+          if (!isNaN(num)) {
+            slotIdx = num;
+          } else {
+            const matchIdx = topicWorksheets.findIndex((w: any) => w.id === suffix);
+            if (matchIdx >= 0) slotIdx = matchIdx;
+          }
         }
-      }));
 
-      // Unified quiz submissions list (both interactive & PDF quizzes)
-      const unifiedQuizzes = [...enrichedInteractiveQuizzes, ...formattedPdfQuizzes].sort(
+        const matchedWs = topicWorksheets[slotIdx] || null;
+        const wsTitle = matchedWs?.title || (topicWorksheets.length > 1 ? `Homework ${slotIdx + 1}` : "Topic Homework");
+        const dedupeKey = `${s.topic_id}_slot_${slotIdx}`;
+
+        const existing = worksheetsMap.get(dedupeKey);
+        if (!existing) {
+          worksheetsMap.set(dedupeKey, {
+            ...s,
+            worksheet_title: wsTitle,
+            worksheet_slot: slotIdx,
+          });
+        } else {
+          // Keep reviewed version, or more recent submission
+          const isNewer = new Date(s.submitted_at).getTime() > new Date(existing.submitted_at).getTime();
+          if (s.status === "reviewed" && existing.status !== "reviewed") {
+            worksheetsMap.set(dedupeKey, {
+              ...s,
+              worksheet_title: wsTitle,
+              worksheet_slot: slotIdx,
+            });
+          } else if (isNewer && (s.status === existing.status || s.status === "reviewed")) {
+            worksheetsMap.set(dedupeKey, {
+              ...s,
+              worksheet_title: wsTitle,
+              worksheet_slot: slotIdx,
+            });
+          }
+        }
+      });
+
+      const worksheetsData = Array.from(worksheetsMap.values()).sort(
         (a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+      );
+
+      // 2. Format PDF quizzes
+      const formattedPdfQuizzes = rawPdfQuizzes.map((pq: any) => {
+        const quizIdSuffix = typeof pq.type === "string" && pq.type.startsWith("pdf_quiz_")
+          ? pq.type.replace("pdf_quiz_", "")
+          : null;
+        return {
+          id: pq.id,
+          student_id: pq.student_id,
+          quiz_id: quizIdSuffix || pq.id,
+          topic_id: pq.topic_id,
+          score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
+          submitted_at: pq.submitted_at,
+          is_pdf_quiz: true,
+          file_url: pq.file_url,
+          feedback: pq.feedback_text || pq.feedback,
+          feedback_file_url: pq.feedback_file_url || pq.reviewed_file_url,
+          status: pq.status,
+          quizzes: {
+            id: quizIdSuffix || pq.id,
+            title: pq.topics?.title ? `${pq.topics.title} (PDF Quiz)` : "PDF Quiz",
+            total_marks: 100,
+            passing_score: 50,
+            topics: pq.topics || null
+          }
+        };
+      });
+
+      // Filter out duplicate PDF upload submissions in interactiveQuizSubs if a corresponding PDF quiz exists
+      const trueInteractiveQuizzes = enrichedInteractiveQuizzes.filter((iq: any) => {
+        const isPdfUploadAnswer = iq.answers_data?.type === "pdf_upload";
+        if (isPdfUploadAnswer) {
+          const hasMatchingManual = formattedPdfQuizzes.some(
+            (pq: any) => (iq.quiz_id && pq.quiz_id === iq.quiz_id) || (iq.quizzes?.topic_id && pq.topic_id === iq.quizzes.topic_id)
+          );
+          if (hasMatchingManual) return false;
+        }
+        return true;
+      });
+
+      // 3. Group attempts by UNIQUE quiz so 5 attempts of 1 quiz count as 1 quiz
+      const quizMap = new Map<string, any>();
+
+      // A. Interactive Quizzes (group attempts)
+      trueInteractiveQuizzes.forEach((qs: any) => {
+        const qId = qs.quiz_id || qs.quizzes?.id || qs.topic_id || `quiz_${qs.id}`;
+        const quizKey = `interactive_${qId}`;
+
+        const scoreVal = qs.score !== null && qs.score !== undefined ? Number(qs.score) : 0;
+        const totalMarks = qs.quizzes?.total_marks || 100;
+        const passingScore = qs.quizzes?.passing_score;
+        const scorePct = totalMarks > 0 ? Math.round((scoreVal / totalMarks) * 100) : 0;
+        const isPassed = passingScore != null ? scoreVal >= passingScore : scorePct >= 50;
+
+        const attemptItem = {
+          id: qs.id,
+          score: scoreVal,
+          total_marks: totalMarks,
+          percentage: scorePct,
+          passed: isPassed,
+          submitted_at: qs.submitted_at,
+          answers_data: qs.answers_data,
+        };
+
+        if (!quizMap.has(quizKey)) {
+          quizMap.set(quizKey, {
+            ...qs,
+            quiz_key: quizKey,
+            best_score: scoreVal,
+            latest_score: scoreVal,
+            score: scoreVal,
+            total_marks: totalMarks,
+            passing_score: passingScore,
+            is_passed: isPassed,
+            attempts: [attemptItem],
+            attempts_count: 1,
+            latest_submitted_at: qs.submitted_at,
+          });
+        } else {
+          const existing = quizMap.get(quizKey);
+          existing.attempts.push(attemptItem);
+          existing.attempts_count = existing.attempts.length;
+          if (scoreVal > (existing.best_score ?? 0)) {
+            existing.best_score = scoreVal;
+          }
+          if (new Date(qs.submitted_at).getTime() > new Date(existing.latest_submitted_at).getTime()) {
+            existing.latest_score = scoreVal;
+            existing.latest_submitted_at = qs.submitted_at;
+            existing.score = scoreVal;
+          }
+          if (isPassed) existing.is_passed = true;
+        }
+      });
+
+      // B. PDF Quizzes
+      formattedPdfQuizzes.forEach((pq: any) => {
+        const quizKey = `pdf_${pq.topic_id}_${pq.quiz_id}`;
+        if (!quizMap.has(quizKey)) {
+          quizMap.set(quizKey, {
+            ...pq,
+            quiz_key: quizKey,
+            best_score: pq.score,
+            latest_score: pq.score,
+            score: pq.score,
+            attempts: [{
+              id: pq.id,
+              score: pq.score,
+              status: pq.status,
+              submitted_at: pq.submitted_at,
+              file_url: pq.file_url,
+            }],
+            attempts_count: 1,
+            latest_submitted_at: pq.submitted_at,
+          });
+        }
+      });
+
+      const unifiedQuizzes = Array.from(quizMap.values()).sort(
+        (a: any, b: any) => new Date(b.latest_submitted_at || b.submitted_at).getTime() - new Date(a.latest_submitted_at || a.submitted_at).getTime()
       );
 
       // 4. Robust course resolution: ensure student's courses are always found
@@ -1369,11 +1530,17 @@ export default function AdminStudentsPage() {
                           return (
                             <div key={sub.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
                               <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-2">
-                                  <FileText className="w-5 h-5 text-blue-500" />
-                                  <h5 className="font-bold text-text text-sm">{sub.topics?.title || "Worksheet Assignment"}</h5>
+                                <div className="flex items-start gap-2.5">
+                                  <FileText className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+                                  <div>
+                                    <h5 className="font-bold text-text text-sm">{sub.topics?.title || "Worksheet Assignment"}</h5>
+                                    <div className="text-xs font-semibold text-blue-600 mt-0.5 flex items-center gap-1">
+                                      <span>📄</span>
+                                      <span>{sub.worksheet_title || "Homework Assignment"}</span>
+                                    </div>
+                                  </div>
                                 </div>
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider shrink-0 ${
                                   sub.status === "reviewed"
                                     ? "bg-green-100 text-green-700"
                                     : "bg-orange-100 text-orange-700"
@@ -1431,30 +1598,45 @@ export default function AdminStudentsPage() {
                         </div>
                       ) : (
                         selectedStudent.quiz_submissions.map((qs: any) => {
-                          const totalMarks = qs.quizzes?.total_marks || 100;
-                          const passingScore = qs.quizzes?.passing_score;
-                          const scoreVal = qs.score !== null && qs.score !== undefined ? Number(qs.score) : null;
+                          const totalMarks = qs.quizzes?.total_marks || qs.total_marks || 100;
+                          const passingScore = qs.quizzes?.passing_score || qs.passing_score;
+                          const scoreVal = qs.best_score !== null && qs.best_score !== undefined 
+                            ? Number(qs.best_score) 
+                            : (qs.score !== null && qs.score !== undefined ? Number(qs.score) : null);
                           const scorePct = scoreVal !== null && totalMarks > 0 ? Math.round((scoreVal / totalMarks) * 100) : null;
-                          const isPassed = scoreVal !== null ? (passingScore != null ? scoreVal >= passingScore : scorePct !== null && scorePct >= 50) : false;
-                          const isReviewed = qs.status === "reviewed" || !qs.is_pdf_quiz;
+                          const isPassed = qs.is_passed !== undefined 
+                            ? qs.is_passed 
+                            : (scoreVal !== null ? (passingScore != null ? scoreVal >= passingScore : scorePct !== null && scorePct >= 50) : false);
                           const feedbackMsg = qs.feedback || qs.feedback_text;
+                          const attemptsCount = qs.attempts_count || (qs.attempts ? qs.attempts.length : 1);
 
                           return (
-                            <div key={qs.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
+                            <div key={qs.quiz_key || qs.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-3">
                               <div className="flex items-center justify-between gap-4">
                                 <div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <Award className="w-5 h-5 text-purple-600" />
                                     <h5 className="font-bold text-text text-sm">
                                       {qs.quizzes?.title || qs.quizzes?.topics?.title || "Quiz Evaluation"}
                                     </h5>
-                                    {qs.is_pdf_quiz && (
+                                    {qs.is_pdf_quiz ? (
                                       <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full border border-purple-200">
                                         PDF Upload
                                       </span>
+                                    ) : (
+                                      <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
+                                        Interactive Quiz
+                                      </span>
+                                    )}
+                                    {attemptsCount > 1 && (
+                                      <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200">
+                                        {attemptsCount} Attempts Logged
+                                      </span>
                                     )}
                                   </div>
-                                  <p className="text-xs text-text/50 mt-1">Submitted: {new Date(qs.submitted_at).toLocaleDateString("en-GB")}</p>
+                                  <p className="text-xs text-text/50 mt-1">
+                                    Submitted: {new Date(qs.latest_submitted_at || qs.submitted_at).toLocaleDateString("en-GB")}
+                                  </p>
                                 </div>
                                 <div className="flex items-center gap-3">
                                   {scoreVal !== null && (
@@ -1507,6 +1689,28 @@ export default function AdminStudentsPage() {
                                     </a>
                                   )}
                                 </div>
+                              )}
+
+                              {/* Interactive Quiz Attempt History (if multiple attempts) */}
+                              {!qs.is_pdf_quiz && Array.isArray(qs.attempts) && qs.attempts.length > 1 && (
+                                <details className="pt-2 border-t border-gray-100 text-xs group">
+                                  <summary className="cursor-pointer font-bold text-purple-700 hover:text-purple-800 select-none flex items-center justify-between py-1">
+                                    <span>View attempt history ({qs.attempts.length} attempts)</span>
+                                    <span className="text-[10px] text-text/40 group-open:rotate-180 transition-transform">▼</span>
+                                  </summary>
+                                  <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-purple-200">
+                                    {qs.attempts.map((att: any, attIdx: number) => (
+                                      <div key={att.id || attIdx} className="flex items-center justify-between py-1 text-xs">
+                                        <span className="text-text/70">
+                                          Attempt {qs.attempts.length - attIdx}: {new Date(att.submitted_at).toLocaleString("en-GB")}
+                                        </span>
+                                        <span className={`font-mono font-bold ${att.passed ? 'text-emerald-700' : 'text-red-600'}`}>
+                                          {att.score}/{att.total_marks} ({att.percentage}%) {att.passed ? '✓' : '✗'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
                               )}
                             </div>
                           );
