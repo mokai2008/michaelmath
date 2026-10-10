@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft, HelpCircle, X, ExternalLink, RefreshCw } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft, HelpCircle, X, ExternalLink, RefreshCw, XCircle, AlertCircle } from "lucide-react";
 import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
 import { NotificationDiagnosticModal } from "@/components/NotificationDiagnosticModal";
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pending' | 'reviewed'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'reviewed' | 'rejected'>('pending');
   const [desktopNotificationGranted, setDesktopNotificationGranted] = useState(false);
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [testAlertBanner, setTestAlertBanner] = useState<string | null>(null);
@@ -446,6 +446,83 @@ export default function SubmissionsPage() {
     }
   };
 
+  const handleRejectSubmit = async () => {
+    if (!selectedSubmission) return;
+
+    if (!feedbackText.trim()) {
+      alert("⚠️ Please provide a reason / written feedback explaining why this submission is refused, so the student knows what to correct before re-uploading.");
+      return;
+    }
+
+    const confirmReject = confirm(
+      `Are you sure you want to refuse this submission and request ${selectedSubmission.profiles?.full_name || 'the student'} to re-upload it?\n\nReason: "${feedbackText.trim()}"`
+    );
+    if (!confirmReject) return;
+
+    setIsSubmittingReview(true);
+    try {
+      // 1. Update manual_submissions to 'rejected'
+      const { error: updateError } = await supabase
+        .from('manual_submissions')
+        .update({
+          score: null,
+          feedback_text: feedbackText.trim(),
+          feedback_file_url: feedbackFileUrl || null,
+          status: 'rejected',
+          reviewed_at: new Date().toISOString()
+        })
+        .eq('id', selectedSubmission.id);
+
+      if (updateError) throw updateError;
+
+      // 2. Make sure topic_progress is NOT marked completed (revoke if it was previously completed)
+      await supabase
+        .from('topic_progress')
+        .update({ is_completed: false })
+        .eq('topic_id', selectedSubmission.topic_id)
+        .eq('student_id', selectedSubmission.student_id);
+
+      // 3. Immediately notify layout to decrement sidebar pending count
+      window.dispatchEvent(new CustomEvent('submission_reviewed'));
+
+      // 4. Send clear rejection notification to student
+      const details = getSubmissionDetails(selectedSubmission);
+      const topicTitle = selectedSubmission.topics?.title || 'Lesson';
+      
+      let courseId = '';
+      if (selectedSubmission.topics?.section_id) {
+        const { data: sec } = await supabase
+          .from('sections')
+          .select('course_id')
+          .eq('id', selectedSubmission.topics.section_id)
+          .single();
+        if (sec?.course_id) courseId = sec.course_id;
+      }
+      const linkUrl = courseId ? `/dashboard/courses/${courseId}` : '/dashboard/courses';
+
+      await supabase.from('notifications').insert({
+        student_id: selectedSubmission.student_id,
+        title: `⚠️ ${details.isWorksheet ? 'Homework' : 'Quiz'} Refused: ${topicTitle}`,
+        message: `Your teacher Michael Gad reviewed your submission and requested changes: "${feedbackText.trim()}". Please review the feedback and upload your answers again.`,
+        type: 'warning',
+        link_url: linkUrl
+      });
+
+      alert(`❌ Submission refused and marked for re-upload. ${selectedSubmission.profiles?.full_name || 'The student'} has been notified with your reason, and the lesson will remain incomplete until re-submitted and approved!`);
+
+      setSelectedSubmission(null);
+      setScore('');
+      setFeedbackText('');
+      setFeedbackFileUrl('');
+      fetchSubmissions();
+    } catch (err: any) {
+      console.error(err);
+      alert("Error refusing submission: " + err.message);
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
   const handleToggleSubmissionType = async () => {
     if (!selectedSubmission) return;
     const isCurrentlyWs = selectedSubmission.type === 'worksheet' || (typeof selectedSubmission.type === 'string' && selectedSubmission.type.startsWith('worksheet'));
@@ -478,6 +555,7 @@ export default function SubmissionsPage() {
 
   const pendingCount = submissions.filter(s => s.status === 'pending').length;
   const reviewedCount = submissions.filter(s => s.status === 'reviewed').length;
+  const rejectedCount = submissions.filter(s => s.status === 'rejected').length;
   const filteredSubmissions = submissions.filter(s => s.status === activeTab);
 
   if (isLoading) {
@@ -566,10 +644,10 @@ export default function SubmissionsPage() {
         </div>
       )}
 
-      <div className="flex gap-4 mb-6 border-b border-gray-200">
+      <div className="flex gap-4 mb-6 border-b border-gray-200 overflow-x-auto">
         <button 
           onClick={() => setActiveTab('pending')}
-          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
             activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-text/60 hover:text-text'
           }`}
         >
@@ -584,13 +662,26 @@ export default function SubmissionsPage() {
         </button>
         <button 
           onClick={() => setActiveTab('reviewed')}
-          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
             activeTab === 'reviewed' ? 'border-primary text-primary' : 'border-transparent text-text/60 hover:text-text'
           }`}
         >
-          <span>Reviewed</span>
+          <span>Reviewed & Approved</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-text/60 font-bold">
             {reviewedCount}
+          </span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('rejected')}
+          className={`pb-3 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
+            activeTab === 'rejected' ? 'border-rose-600 text-rose-600' : 'border-transparent text-text/60 hover:text-text'
+          }`}
+        >
+          <span>Refused / Re-upload</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+            rejectedCount > 0 ? 'bg-rose-100 text-rose-700 font-black' : 'bg-gray-100 text-text/60'
+          }`}>
+            {rejectedCount}
           </span>
         </button>
       </div>
@@ -607,6 +698,14 @@ export default function SubmissionsPage() {
                   </div>
                   <h3 className="font-bold text-text text-sm mb-1">All Caught Up! 🎉</h3>
                   <p className="text-text/50 text-xs">There are no pending submissions remaining to check.</p>
+                </>
+              ) : activeTab === 'rejected' ? (
+                <>
+                  <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-text text-sm mb-1">No Refused Items</h3>
+                  <p className="text-text/50 text-xs">No submissions currently have changes or re-upload requested.</p>
                 </>
               ) : (
                 <p className="text-text/50 text-sm">No reviewed submissions found.</p>
@@ -630,7 +729,14 @@ export default function SubmissionsPage() {
                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${details.badgeClass}`}>
                       {details.badgeText}
                     </span>
-                    <span className="text-[10px] text-text/40">{new Date(sub.submitted_at).toLocaleDateString()}</span>
+                    <div className="flex items-center gap-1.5">
+                      {sub.status === 'rejected' && (
+                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                          Refused
+                        </span>
+                      )}
+                      <span className="text-[10px] text-text/40">{new Date(sub.submitted_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
                   <h4 className="font-bold text-sm text-text truncate">{sub.profiles?.full_name || 'Unknown Student'}</h4>
                   <p className="text-xs text-text/60 truncate">{sub.topics?.title || 'Unknown Topic'}</p>
@@ -695,11 +801,24 @@ export default function SubmissionsPage() {
                     })()}
                     <p className="text-[11px] sm:text-xs text-text/40 mt-1.5">Submitted: {new Date(selectedSubmission.submitted_at).toLocaleString()}</p>
                   </div>
-                  <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full shrink-0 ${selectedSubmission.status === 'reviewed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                    {selectedSubmission.status}
+                  <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full shrink-0 ${
+                    selectedSubmission.status === 'reviewed' 
+                      ? 'bg-green-100 text-green-700' 
+                      : selectedSubmission.status === 'rejected'
+                      ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                      : 'bg-orange-100 text-orange-700'
+                  }`}>
+                    {selectedSubmission.status === 'rejected' ? 'Refused / Re-upload Required' : selectedSubmission.status}
                   </span>
                 </div>
               </div>
+
+              {selectedSubmission.status === 'rejected' && (
+                <div className="px-4 py-3 bg-rose-50 border-b border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>This submission is currently <strong>refused</strong>. The student was notified to re-upload their answers. The lesson will remain incomplete until re-uploaded and approved.</span>
+                </div>
+              )}
 
               {/* Student's Submission - Download/View */}
               <div className="p-4 sm:p-6 border-b border-gray-100">
@@ -779,15 +898,27 @@ export default function SubmissionsPage() {
                     </div>
                   </div>
 
-                  {/* Submit Button */}
-                  <div className="pt-4 border-t border-gray-100 flex gap-3">
+                  {/* Submit / Action Buttons */}
+                  <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
                     <button 
+                      type="button"
                       onClick={handleReviewSubmit}
                       disabled={isSubmittingReview}
-                      className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-3 rounded-lg font-bold transition-colors disabled:opacity-70 shadow-sm"
+                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-bold transition-all disabled:opacity-70 shadow-sm"
                     >
                       {isSubmittingReview ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                      {selectedSubmission.status === 'pending' ? 'Submit Review & Notify Student' : 'Update Review & Notify'}
+                      <span>{selectedSubmission.status === 'pending' ? 'Approve & Save Review' : 'Update Approval & Notify'}</span>
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={handleRejectSubmit}
+                      disabled={isSubmittingReview}
+                      className="flex items-center justify-center gap-2 bg-white hover:bg-rose-50 text-rose-600 border-2 border-rose-200 hover:border-rose-300 py-3 px-4 rounded-xl font-bold transition-all disabled:opacity-70 shadow-2xs"
+                      title="Refuse this submission with your feedback, keeping lesson incomplete until student re-uploads and you approve"
+                    >
+                      {isSubmittingReview ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4 text-rose-600" />}
+                      <span>Refuse & Request Re-upload</span>
                     </button>
                   </div>
                 </div>

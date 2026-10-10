@@ -27,7 +27,9 @@ import {
   RotateCcw,
   Clock,
   ClipboardCheck,
-  Sparkles
+  Sparkles,
+  XCircle,
+  AlertCircle
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -153,7 +155,7 @@ function checkTopicRequirementsSubmitted(
       const sub = safeSubMap[`${topic.id}_${subType}`]
         || (idx === 0 ? safeSubMap[`${topic.id}_worksheet`] : null)
         || safeSubMap[`${topic.id}_worksheet_${idx}`];
-      return !!sub;
+      return !!sub && sub.status !== 'rejected';
     });
     if (!allWsSubmitted) return false;
   }
@@ -189,13 +191,14 @@ function checkTopicRequirementsSubmitted(
   const safeQuizSubs = Array.isArray(quizSubsList) ? quizSubsList : [];
   if (allQuizzes.length > 0) {
     const allQzSubmitted = allQuizzes.every((quiz: any) => {
+      const pdfSub = safeSubMap[`${topic.id}_pdf_quiz_${quiz.id}`] || 
+          (quiz.matchedCqId && safeSubMap[`${topic.id}_pdf_quiz_${quiz.matchedCqId}`]) || 
+          safeSubMap[`${topic.id}_pdf_quiz`];
+      if (pdfSub) {
+        return pdfSub.status !== 'rejected';
+      }
       if (Array.isArray(quiz.quiz_submissions) && quiz.quiz_submissions.length > 0) return true;
       if (safeQuizSubs.some((s: any) => s && (s.quiz_id === quiz.id || (quiz.matchedCqId && s.quiz_id === quiz.matchedCqId)))) {
-        return true;
-      }
-      if (safeSubMap[`${topic.id}_pdf_quiz_${quiz.id}`] || 
-          (quiz.matchedCqId && safeSubMap[`${topic.id}_pdf_quiz_${quiz.matchedCqId}`]) || 
-          safeSubMap[`${topic.id}_pdf_quiz`]) {
         return true;
       }
       return false;
@@ -300,6 +303,84 @@ function checkTopicRequirementsApproved(
 
   const hasRequirements = allWorksheets.length > 0 || allQuizzes.length > 0;
   return hasRequirements;
+}
+
+function checkTopicRequirementsRejected(
+  topic: any, 
+  subMap: Record<string, any> = {}, 
+  quizSubsList: any[] = []
+): { isRejected: boolean; reason?: string; itemTitle?: string } {
+  if (!topic) return { isRejected: false };
+  
+  const contentItems = Array.isArray(topic.content_items)
+    ? topic.content_items
+    : (typeof topic.content_items === 'string'
+        ? (() => { try { return JSON.parse(topic.content_items); } catch { return []; } })()
+        : []);
+  
+  // 1. Check Worksheets
+  const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
+  const legacyWorksheets = (Array.isArray(topic.topic_pdfs) ? topic.topic_pdfs : []).filter((p: any) => p && p.type === 'worksheet');
+  const allWorksheets: any[] = contentWorksheets.length > 0 
+    ? contentWorksheets.map((cw: any, idx: number) => ({
+        id: cw.id || `ws_${idx}`,
+        title: cw.title || `Worksheet ${idx + 1}`
+      }))
+    : legacyWorksheets.map((p: any, idx: number) => ({
+        id: p.id || `legacy_ws_${idx}`,
+        title: p.title || `Worksheet ${idx + 1}`
+      }));
+
+  const safeSubMap = subMap || {};
+  for (let idx = 0; idx < allWorksheets.length; idx++) {
+    const ws = allWorksheets[idx];
+    const subType = allWorksheets.length === 1 
+      ? 'worksheet' 
+      : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
+    const sub = safeSubMap[`${topic.id}_${subType}`]
+      || (idx === 0 ? safeSubMap[`${topic.id}_worksheet`] : null)
+      || safeSubMap[`${topic.id}_worksheet_${idx}`];
+    if (sub && sub.status === 'rejected') {
+      return { isRejected: true, reason: sub.feedback_text, itemTitle: ws.title };
+    }
+  }
+
+  // 2. Check Quizzes
+  const contentQuizzes = contentItems.filter((i: any) => i && i.type === 'quiz');
+  const rawDbQuizzes = Array.isArray(topic.quizzes) ? topic.quizzes : [];
+  let allQuizzes: any[] = [];
+  if (rawDbQuizzes.length > 0) {
+    allQuizzes = rawDbQuizzes.map((dbQ: any, qIdx: number) => {
+      const matchedCq = contentQuizzes.find((cq: any) => 
+        (cq.id && dbQ.id && cq.id === dbQ.id) ||
+        (cq.quizPdfUrl && dbQ.quiz_pdf_url && cq.quizPdfUrl === dbQ.quiz_pdf_url) ||
+        (cq.quizEmbedCode && dbQ.embed_code && cq.quizEmbedCode === dbQ.embed_code) ||
+        (cq.title && dbQ.settings?.title && cq.title === dbQ.settings?.title)
+      ) || contentQuizzes[qIdx];
+      return {
+        id: dbQ.id,
+        matchedCqId: matchedCq?.id,
+        title: matchedCq?.title || dbQ.settings?.title || 'PDF Quiz'
+      };
+    });
+  } else if (contentQuizzes.length > 0) {
+    allQuizzes = contentQuizzes.map((cq: any, qIdx: number) => ({
+      id: cq.id || `quiz_${topic.id}_${qIdx}`,
+      matchedCqId: cq.id,
+      title: cq.title || 'PDF Quiz'
+    }));
+  }
+
+  for (const quiz of allQuizzes) {
+    const pdfSub = safeSubMap[`${topic.id}_pdf_quiz_${quiz.id}`] || 
+                   (quiz.matchedCqId && safeSubMap[`${topic.id}_pdf_quiz_${quiz.matchedCqId}`]) || 
+                   safeSubMap[`${topic.id}_pdf_quiz`];
+    if (pdfSub && pdfSub.status === 'rejected') {
+      return { isRejected: true, reason: pdfSub.feedback_text, itemTitle: quiz.title };
+    }
+  }
+
+  return { isRejected: false };
 }
 
 interface SubmissionToast {
@@ -585,8 +666,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           });
           t.quizzes = tQuizzes;
 
+          const rejectionInfo = checkTopicRequirementsRejected(t, subMap, quizSubs);
           const prog = topicProg.find((tp: any) => tp.topic_id === t.id);
-          if (prog) {
+          if (rejectionInfo.isRejected) {
+            progMap[t.id] = false;
+          } else if (prog) {
             progMap[t.id] = prog.is_completed;
           } else {
             // Check if topic was already approved via homework + quizzes
@@ -748,6 +832,22 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         if (hasWorksheets || hasQuizzes) {
           const isApproved = checkTopicRequirementsApproved(topicObj, manualSubmissions, allQuizSubmissions);
           if (!isApproved) {
+            const rejectionInfo = checkTopicRequirementsRejected(topicObj, manualSubmissions, allQuizSubmissions);
+            if (rejectionInfo.isRejected) {
+              setSubmissionToast({
+                type: 'error',
+                badge: 'Changes Requested ⚠️',
+                statusBadge: 'Refused / Re-upload Needed ❌',
+                title: 'Submission Refused by Teacher',
+                lessonTitle: `${topicObj?.title || 'Lesson'} • ${rejectionInfo.itemTitle || 'Assignment'}`,
+                message: rejectionInfo.reason 
+                  ? `Teacher Feedback: "${rejectionInfo.reason}"`
+                  : 'Your teacher has reviewed your submission and requested revisions.',
+                subMessage: '⚠️ Please review your teacher\'s comments and re-upload your answers below to complete this lesson.'
+              });
+              return;
+            }
+
             const isSubmitted = checkTopicRequirementsSubmitted(topicObj, manualSubmissions, allQuizSubmissions);
             if (isSubmitted) {
               setSubmissionToast({
@@ -1532,6 +1632,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               <Lock className={`w-4 h-4 mt-0.5 flex-shrink-0 text-orange-400`} />
                             ) : progress[topic.id] ? (
                               <CheckCircle2 className={`w-5 h-5 mt-0.5 flex-shrink-0 text-emerald-500`} />
+                            ) : checkTopicRequirementsRejected(topic, manualSubmissions, allQuizSubmissions).isRejected ? (
+                              <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 text-rose-500 animate-pulse`} />
                             ) : checkTopicRequirementsSubmitted(topic, manualSubmissions, allQuizSubmissions) ? (
                               <Clock className={`w-5 h-5 mt-0.5 flex-shrink-0 text-amber-500`} />
                             ) : (
@@ -1565,6 +1667,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               {progress[topic.id] ? (
                                 <div className="text-xs text-green-600 mt-1 flex items-center gap-1 font-semibold">
                                   <CheckCircle2 className="w-3 h-3" /> Completed
+                                </div>
+                              ) : checkTopicRequirementsRejected(topic, manualSubmissions, allQuizSubmissions).isRejected ? (
+                                <div className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-bold">
+                                  <AlertCircle className="w-3 h-3" /> Re-upload Needed
                                 </div>
                               ) : checkTopicRequirementsSubmitted(topic, manualSubmissions, allQuizSubmissions) ? (
                                 <div className="text-[11px] text-amber-600 mt-1 flex items-center gap-1 font-semibold">
@@ -2368,22 +2474,45 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                                 {/* Upload Status Card for this worksheet */}
                                 {sub ? (
-                                  <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <div className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
-                                      <div className="truncate">
-                                        <a href={sub.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
-                                          View Uploaded {wsTitle} PDF
-                                        </a>
-                                        <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
+                                  <div className="space-y-2">
+                                    {sub.status === 'rejected' && (
+                                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-1">
+                                        <div className="font-bold flex items-center gap-1.5 text-rose-700">
+                                          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                                          <span>Refused by Teacher — Re-upload Required</span>
+                                        </div>
+                                        <p className="text-rose-800 italic bg-white/70 p-2 rounded-lg border border-rose-200/50">
+                                          "{sub.feedback_text || 'Please review your solutions and upload again.'}"
+                                        </p>
                                       </div>
-                                    </div>
-                                    {sub.status !== 'reviewed' && (
-                                      <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50 shrink-0">
-                                        {isUploadingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
-                                        <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
-                                      </label>
                                     )}
+
+                                    <div className={`bg-white border rounded-xl p-3 flex items-center justify-between ${sub.status === 'rejected' ? 'border-rose-300 ring-2 ring-rose-100' : 'border-emerald-200'}`}>
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[10px] ${sub.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 'bg-red-100 text-red-600'}`}>
+                                          PDF
+                                        </div>
+                                        <div className="truncate">
+                                          <a href={sub.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
+                                            View {sub.status === 'rejected' ? 'Previous' : 'Uploaded'} {wsTitle} PDF
+                                          </a>
+                                          <span className={`text-[10px] block ${sub.status === 'rejected' ? 'text-rose-600 font-bold' : 'text-text/40'}`}>
+                                            {sub.status === 'rejected' ? 'Refused — Needs Re-upload' : 'Submitted for Grading'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {sub.status !== 'reviewed' && (
+                                        <label className={`cursor-pointer text-xs font-bold px-3 py-1.5 rounded-lg shrink-0 flex items-center gap-1.5 shadow-2xs transition-all ${
+                                          sub.status === 'rejected' 
+                                            ? 'bg-rose-600 hover:bg-rose-700 text-white' 
+                                            : 'text-gray-700 hover:text-gray-900 border border-gray-200 bg-gray-50'
+                                        }`}>
+                                          {isUploadingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (sub.status === 'rejected' ? <Upload className="w-3.5 h-3.5" /> : null)}
+                                          <span>{isUploadingThis ? 'Uploading...' : (sub.status === 'rejected' ? 'Re-upload Answers' : 'Update')}</span>
+                                          <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
+                                        </label>
+                                      )}
+                                    </div>
                                   </div>
                                 ) : (
                                   <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-orange-400/50 transition-colors">
@@ -2401,14 +2530,24 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                             </div>
 
                             {/* Box 2: Teacher Review & Result */}
-                            <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                            <div className={`border rounded-2xl p-5 space-y-3 flex flex-col justify-between ${sub?.status === 'rejected' ? 'bg-rose-50/40 border-rose-200' : 'bg-emerald-50/50 border-emerald-200/80'}`}>
                               <div>
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">Step 3: Teacher Review & Score</span>
+                                  <span className={`text-xs font-extrabold uppercase tracking-wider ${sub?.status === 'rejected' ? 'text-rose-800' : 'text-emerald-800'}`}>
+                                    Step 3: Teacher Review & Score
+                                  </span>
                                   {sub ? (
-                                    <span className={`text-xs font-black bg-white px-2.5 py-0.5 rounded-lg border shadow-sm ${sub.status === 'reviewed' ? 'text-emerald-700 border-emerald-200' : 'text-orange-600 border-orange-200'}`}>
+                                    <span className={`text-xs font-black px-2.5 py-0.5 rounded-lg border shadow-sm ${
+                                      sub.status === 'reviewed' 
+                                        ? 'bg-white text-emerald-700 border-emerald-200' 
+                                        : sub.status === 'rejected'
+                                        ? 'bg-rose-100 text-rose-700 border-rose-300'
+                                        : 'bg-white text-orange-600 border-orange-200'
+                                    }`}>
                                       {sub.status === 'reviewed' 
-                                        ? (sub.score !== null && sub.score !== undefined ? `Score: ${sub.score}` : 'Reviewed') 
+                                        ? (sub.score !== null && sub.score !== undefined ? `Score: ${sub.score}` : 'Reviewed ✓') 
+                                        : sub.status === 'rejected'
+                                        ? 'Refused / Re-upload Needed ❌'
                                         : 'Pending Review'}
                                     </span>
                                   ) : (
@@ -2420,15 +2559,31 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                                 {sub ? (
                                   <div className="space-y-3">
-                                    <div className="bg-white p-3.5 rounded-xl border border-emerald-100 space-y-1">
-                                      <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                        {sub.status === 'reviewed' ? 'Homework Reviewed & Graded' : 'Worksheet Submitted for Grading'}
+                                    {sub.status === 'rejected' ? (
+                                      <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-xl space-y-2">
+                                        <div className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
+                                          <XCircle className="w-4 h-4 text-rose-600" />
+                                          Homework Refused — Changes Requested
+                                        </div>
+                                        <div className="text-xs text-rose-800 bg-white/80 p-2.5 rounded-lg border border-rose-200/60 font-medium">
+                                          <span className="font-bold block text-[11px] text-rose-900 mb-0.5">Teacher's Reason:</span>
+                                          "{sub.feedback_text || 'Please review teacher comments and upload again.'}"
+                                        </div>
+                                        <p className="text-[11px] text-rose-700/80">
+                                          ⚠️ This lesson remains incomplete until you re-upload your answers in Step 2 and your teacher approves them.
+                                        </p>
                                       </div>
-                                      <p className="text-xs text-text/70 italic">
-                                        {sub.feedback_text ? `"${sub.feedback_text}"` : (sub.status === 'reviewed' ? 'No written feedback provided.' : 'Your submission is being reviewed by Michael Gad. Feedback and scores will appear here.')}
-                                      </p>
-                                    </div>
+                                    ) : (
+                                      <div className="bg-white p-3.5 rounded-xl border border-emerald-100 space-y-1">
+                                        <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                          {sub.status === 'reviewed' ? 'Homework Reviewed & Graded' : 'Worksheet Submitted for Grading'}
+                                        </div>
+                                        <p className="text-xs text-text/70 italic">
+                                          {sub.feedback_text ? `"${sub.feedback_text}"` : (sub.status === 'reviewed' ? 'No written feedback provided.' : 'Your submission is being reviewed by Michael Gad. Feedback and scores will appear here.')}
+                                        </p>
+                                      </div>
+                                    )}
 
                                     {sub.feedback_file_url && (
                                       <a 
@@ -2841,22 +2996,45 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     /* Past Paper PDF Quiz Answer Upload */
                                     <div>
                                       {submission && submission.answers_data?.file_url ? (
-                                        <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
-                                          <div className="flex items-center gap-2.5 min-w-0">
-                                            <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
-                                            <div className="truncate">
-                                              <a href={submission.answers_data.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
-                                                View Uploaded {quizTitle} Answers
-                                              </a>
-                                              <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
+                                        <div className="space-y-2">
+                                          {quizManualSub?.status === 'rejected' && (
+                                            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-1">
+                                              <div className="font-bold flex items-center gap-1.5 text-rose-700">
+                                                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                                                <span>Refused by Teacher — Re-upload Required</span>
+                                              </div>
+                                              <p className="text-rose-800 italic bg-white/70 p-2 rounded-lg border border-rose-200/50">
+                                                "{quizManualSub.feedback_text || 'Please review your solutions and upload again.'}"
+                                              </p>
                                             </div>
-                                          </div>
-                                          {quizManualSub?.status !== 'reviewed' && (
-                                            <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50 shrink-0">
-                                              {isUploadingQuiz === quiz.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
-                                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
-                                            </label>
                                           )}
+
+                                          <div className={`bg-white border rounded-xl p-3 flex items-center justify-between ${quizManualSub?.status === 'rejected' ? 'border-rose-300 ring-2 ring-rose-100' : 'border-emerald-200'}`}>
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[10px] ${quizManualSub?.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 'bg-purple-100 text-purple-600'}`}>
+                                                PDF
+                                              </div>
+                                              <div className="truncate">
+                                                <a href={submission.answers_data.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
+                                                  View {quizManualSub?.status === 'rejected' ? 'Previous' : 'Uploaded'} {quizTitle} Answers
+                                                </a>
+                                                <span className={`text-[10px] block ${quizManualSub?.status === 'rejected' ? 'text-rose-600 font-bold' : 'text-text/40'}`}>
+                                                  {quizManualSub?.status === 'rejected' ? 'Refused — Needs Re-upload' : 'Submitted for Grading'}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            {quizManualSub?.status !== 'reviewed' && (
+                                              <label className={`cursor-pointer text-xs font-bold px-3 py-1.5 rounded-lg shrink-0 flex items-center gap-1.5 shadow-2xs transition-all ${
+                                                quizManualSub?.status === 'rejected'
+                                                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                                                  : 'text-gray-700 hover:text-gray-900 border border-gray-200 bg-gray-50'
+                                              }`}>
+                                                {isUploadingQuiz === quiz.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (quizManualSub?.status === 'rejected' ? <Upload className="w-3.5 h-3.5" /> : null)}
+                                                <span>{isUploadingQuiz === quiz.id ? 'Uploading...' : (quizManualSub?.status === 'rejected' ? 'Re-upload Answers' : 'Update')}</span>
+                                                <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
+                                              </label>
+                                            )}
+                                          </div>
                                         </div>
                                       ) : (
                                         <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-purple-400/50 transition-colors">
@@ -2876,21 +3054,27 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                               </div>
 
                               {/* Box 2: Teacher Review & Result */}
-                              <div className="bg-purple-50/50 border border-purple-200/80 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                              <div className={`border rounded-2xl p-5 space-y-3 flex flex-col justify-between ${quizManualSub?.status === 'rejected' ? 'bg-rose-50/40 border-rose-200' : 'bg-purple-50/50 border-purple-200/80'}`}>
                                 <div>
                                   <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-extrabold text-purple-800 uppercase tracking-wider">Step 3: Score & Review</span>
+                                    <span className={`text-xs font-extrabold uppercase tracking-wider ${quizManualSub?.status === 'rejected' ? 'text-rose-800' : 'text-purple-800'}`}>
+                                      Step 3: Score & Review
+                                    </span>
                                     {submission ? (
-                                      <span className={`text-xs font-black bg-white px-2.5 py-0.5 rounded-lg border shadow-sm ${
-                                        (hasQuestions || isCanvaQuiz || quizManualSub?.status === 'reviewed')
-                                          ? 'text-purple-700 border-purple-200'
-                                          : 'text-orange-600 border-orange-200'
+                                      <span className={`text-xs font-black px-2.5 py-0.5 rounded-lg border shadow-sm ${
+                                        quizManualSub?.status === 'rejected'
+                                          ? 'bg-rose-100 text-rose-700 border-rose-300'
+                                          : (hasQuestions || isCanvaQuiz || quizManualSub?.status === 'reviewed')
+                                          ? 'bg-white text-purple-700 border-purple-200'
+                                          : 'bg-white text-orange-600 border-orange-200'
                                       }`}>
-                                        {hasQuestions || isCanvaQuiz
-                                          ? `Score: ${submission.score} / ${actualTotalMarks}`
-                                          : quizManualSub?.status === 'reviewed'
-                                            ? `Score: ${quizManualSub.score !== null && quizManualSub.score !== undefined ? quizManualSub.score : submission.score} / ${actualTotalMarks}`
-                                            : 'Pending Review'}
+                                        {quizManualSub?.status === 'rejected'
+                                          ? 'Refused / Re-upload Needed ❌'
+                                          : (hasQuestions || isCanvaQuiz
+                                            ? `Score: ${submission.score} / ${actualTotalMarks}`
+                                            : quizManualSub?.status === 'reviewed'
+                                              ? `Score: ${quizManualSub.score !== null && quizManualSub.score !== undefined ? quizManualSub.score : submission.score} / ${actualTotalMarks}`
+                                              : 'Pending Review')}
                                       </span>
                                     ) : (
                                       <span className="text-xs font-bold text-text/40 bg-white px-2.5 py-0.5 rounded-lg border border-gray-200">
@@ -2901,20 +3085,36 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                                   {submission ? (
                                     <div className="space-y-3">
-                                      <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
-                                        <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
-                                          <CheckCircle2 className="w-4 h-4 text-purple-600" />
-                                          {hasQuestions || isCanvaQuiz 
-                                            ? 'Quiz Completed & Graded' 
-                                            : (quizManualSub?.status === 'reviewed' ? 'Quiz Reviewed & Graded' : 'Quiz Submitted for Grading')}
+                                      {quizManualSub?.status === 'rejected' ? (
+                                        <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-xl space-y-2">
+                                          <div className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
+                                            <XCircle className="w-4 h-4 text-rose-600" />
+                                            Quiz Refused — Changes Requested
+                                          </div>
+                                          <div className="text-xs text-rose-800 bg-white/80 p-2.5 rounded-lg border border-rose-200/60 font-medium">
+                                            <span className="font-bold block text-[11px] text-rose-900 mb-0.5">Teacher's Reason:</span>
+                                            "{quizManualSub.feedback_text || 'Please review your solutions and upload again.'}"
+                                          </div>
+                                          <p className="text-[11px] text-rose-700/80">
+                                            ⚠️ This lesson remains incomplete until you re-upload your answers in Step 2 and your teacher approves them.
+                                          </p>
                                         </div>
-                                        <p className="text-xs text-text/70 italic">
-                                          {quizManualSub?.feedback_text 
-                                            || (!hasQuestions && !isCanvaQuiz && quizManualSub?.status !== 'reviewed'
-                                                ? 'Your quiz answers are being reviewed by Michael Gad. Feedback and scores will appear here.'
-                                                : (submission.score >= actualTotalMarks * 0.7 ? 'Great job! Passing score achieved.' : 'Review your solutions or retake the quiz to improve your score.'))}
-                                        </p>
-                                      </div>
+                                      ) : (
+                                        <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
+                                          <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                                            <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                                            {hasQuestions || isCanvaQuiz 
+                                              ? 'Quiz Completed & Graded' 
+                                              : (quizManualSub?.status === 'reviewed' ? 'Quiz Reviewed & Graded' : 'Quiz Submitted for Grading')}
+                                          </div>
+                                          <p className="text-xs text-text/70 italic">
+                                            {quizManualSub?.feedback_text 
+                                              || (!hasQuestions && !isCanvaQuiz && quizManualSub?.status !== 'reviewed'
+                                                  ? 'Your quiz answers are being reviewed by Michael Gad. Feedback and scores will appear here.'
+                                                  : (submission.score >= actualTotalMarks * 0.7 ? 'Great job! Passing score achieved.' : 'Review your solutions or retake the quiz to improve your score.'))}
+                                          </p>
+                                        </div>
+                                      )}
 
                                       {quizManualSub?.feedback_file_url && (
                                         <a 
