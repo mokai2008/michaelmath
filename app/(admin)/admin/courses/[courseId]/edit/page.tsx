@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { 
   Save, Plus, GripVertical, Settings, ChevronRight, Loader2, ArrowLeft, Upload, Trash2, 
   Sparkles, Code, FileText, Video, HelpCircle, BookOpen, ArrowUp, ArrowDown, Layers, Eye, Server, Percent,
-  FlaskConical, Gamepad2, RotateCcw, ExternalLink, Copy, AlertTriangle
+  FlaskConical, Gamepad2, RotateCcw, ExternalLink, Copy
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -20,7 +20,6 @@ export default function AdminCourseEditor() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
   const [openSectionMenuId, setOpenSectionMenuId] = useState<string | number | null>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
@@ -375,24 +374,6 @@ export default function AdminCourseEditor() {
     const [moved] = updated.splice(idx, 1);
     updated.splice(targetIdx, 0, moved);
     setSections(updated);
-  };
-
-  const handleDeleteCourse = async () => {
-    if (!window.confirm(`⚠️ DANGER: Are you sure you want to permanently delete "${courseTitle}"?\n\nThis will permanently erase all sections, lessons, videos, quizzes, and student progress for this course. This action CANNOT be undone.`)) {
-      return;
-    }
-
-    setIsDeletingCourse(true);
-    try {
-      const { error } = await supabase.from('courses').delete().eq('id', courseId);
-      if (error) throw error;
-      alert("Course successfully deleted.");
-      router.push('/admin/courses');
-    } catch (err: any) {
-      console.error("Error deleting course:", err);
-      alert("Failed to delete course: " + err.message);
-      setIsDeletingCourse(false);
-    }
   };
 
   const updateSectionTitle = (id: string | number, title: string) => {
@@ -947,18 +928,8 @@ export default function AdminCourseEditor() {
         </div>
         <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button 
-            type="button"
-            onClick={handleDeleteCourse}
-            disabled={isSaving || isDeletingCourse}
-            className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-            title="Permanently delete this course"
-          >
-            {isDeletingCourse ? <Loader2 className="w-4 h-4 animate-spin text-red-600" /> : <Trash2 className="w-4 h-4" />}
-            Delete Course
-          </button>
-          <button 
             onClick={() => handleSave(false)}
-            disabled={isSaving || isDeletingCourse}
+            disabled={isSaving}
             className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-text px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors disabled:opacity-50"
           >
             {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -966,7 +937,7 @@ export default function AdminCourseEditor() {
           </button>
           <button 
             onClick={() => handleSave(true)}
-            disabled={isSaving || isDeletingCourse}
+            disabled={isSaving}
             className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
           >
             {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -2200,27 +2171,6 @@ export default function AdminCourseEditor() {
             <Plus className="w-5 h-5" /> Add New Section
           </button>
           
-          {/* Danger Zone: Delete Course */}
-          <div className="bg-red-50/40 border border-red-200 rounded-2xl p-5 mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h4 className="text-sm font-bold text-red-900 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-600" /> Danger Zone: Course Deletion
-              </h4>
-              <p className="text-xs text-red-700/80 mt-1">
-                Permanently delete this entire course, all sections, lessons, videos, and quizzes. This cannot be undone.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleDeleteCourse}
-              disabled={isDeletingCourse || isSaving}
-              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-xs shrink-0 disabled:opacity-50"
-            >
-              {isDeletingCourse ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              Delete This Course
-            </button>
-          </div>
-
           <div className="pt-8 flex justify-between">
             <button 
               onClick={() => setStep(1)}
