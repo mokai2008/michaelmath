@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft, HelpCircle, X, ExternalLink } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft, HelpCircle, X, ExternalLink, RefreshCw } from "lucide-react";
 import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
 import { NotificationDiagnosticModal } from "@/components/NotificationDiagnosticModal";
 
@@ -20,6 +20,7 @@ export default function SubmissionsPage() {
   const [feedbackFileUrl, setFeedbackFileUrl] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isUploadingFeedbackFile, setIsUploadingFeedbackFile] = useState(false);
+  const [isUpdatingType, setIsUpdatingType] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -58,6 +59,61 @@ export default function SubmissionsPage() {
     }
   };
 
+  const getSubmissionDetails = (sub: any) => {
+    if (!sub) return { isWorksheet: true, badgeText: 'Worksheet', badgeClass: 'bg-blue-100 text-blue-700', itemTitle: 'Worksheet', icon: '📄' };
+    const isWorksheet = sub.type === 'worksheet' || (typeof sub.type === 'string' && sub.type.startsWith('worksheet'));
+
+    const contentItems = Array.isArray(sub.topics?.content_items)
+      ? sub.topics.content_items
+      : (typeof sub.topics?.content_items === "string"
+          ? (() => { try { return JSON.parse(sub.topics.content_items); } catch { return []; } })()
+          : []);
+
+    if (isWorksheet) {
+      const topicWorksheets = contentItems.filter((i: any) => i && i.type === "worksheet");
+      let slotIdx = 0;
+      if (sub.type === "worksheet" || sub.type === "worksheet_0") {
+        slotIdx = 0;
+      } else if (typeof sub.type === "string" && sub.type.startsWith("worksheet_")) {
+        const suffix = sub.type.replace("worksheet_", "");
+        const num = parseInt(suffix, 10);
+        if (!isNaN(num)) {
+          slotIdx = num;
+        } else {
+          const matchIdx = topicWorksheets.findIndex((w: any) => w.id === suffix);
+          if (matchIdx >= 0) slotIdx = matchIdx;
+        }
+      }
+      const matchedWs = topicWorksheets[slotIdx];
+      const title = matchedWs?.title || (topicWorksheets.length > 1 ? `Homework ${slotIdx + 1}` : 'Homework Assignment');
+      return {
+        isWorksheet: true,
+        badgeText: 'Worksheet',
+        badgeClass: 'bg-blue-100 text-blue-700',
+        itemTitle: title,
+        icon: '📄'
+      };
+    } else {
+      const topicQuizzes = contentItems.filter((i: any) => i && i.type === "quiz");
+      let matchedQuiz = null;
+      if (typeof sub.type === "string" && sub.type.startsWith("pdf_quiz_")) {
+        const qId = sub.type.replace("pdf_quiz_", "");
+        matchedQuiz = topicQuizzes.find((q: any) => q.id === qId);
+      }
+      if (!matchedQuiz && topicQuizzes.length > 0) {
+        matchedQuiz = topicQuizzes[0];
+      }
+      const title = matchedQuiz?.title || 'PDF Quiz';
+      return {
+        isWorksheet: false,
+        badgeText: 'PDF Quiz',
+        badgeClass: 'bg-purple-100 text-purple-700',
+        itemTitle: title,
+        icon: '📝'
+      };
+    }
+  };
+
   const fetchSubmissions = async () => {
     try {
       const { data, error } = await supabase
@@ -65,7 +121,7 @@ export default function SubmissionsPage() {
         .select(`
           *,
           profiles:student_id (full_name, email),
-          topics:topic_id (title, section_id)
+          topics:topic_id (id, title, section_id, content_items)
         `)
         .order('submitted_at', { ascending: false });
 
@@ -390,6 +446,36 @@ export default function SubmissionsPage() {
     }
   };
 
+  const handleToggleSubmissionType = async () => {
+    if (!selectedSubmission) return;
+    const isCurrentlyWs = selectedSubmission.type === 'worksheet' || (typeof selectedSubmission.type === 'string' && selectedSubmission.type.startsWith('worksheet'));
+    const newType = isCurrentlyWs ? 'pdf_quiz' : 'worksheet_0';
+    const newLabel = isCurrentlyWs ? 'PDF Quiz' : 'Worksheet';
+
+    const confirmChange = confirm(`Do you want to reclassify this submission as a "${newLabel}" instead of "${isCurrentlyWs ? 'Worksheet' : 'PDF Quiz'}"?`);
+    if (!confirmChange) return;
+
+    setIsUpdatingType(true);
+    try {
+      const { error } = await supabase
+        .from('manual_submissions')
+        .update({ type: newType })
+        .eq('id', selectedSubmission.id);
+
+      if (error) throw error;
+
+      const updatedSub = { ...selectedSubmission, type: newType };
+      setSelectedSubmission(updatedSub);
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, type: newType } : s));
+      alert(`✅ Submission successfully reclassified as ${newLabel}!`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Error changing submission type: " + err.message);
+    } finally {
+      setIsUpdatingType(false);
+    }
+  };
+
   const pendingCount = submissions.filter(s => s.status === 'pending').length;
   const reviewedCount = submissions.filter(s => s.status === 'reviewed').length;
   const filteredSubmissions = submissions.filter(s => s.status === activeTab);
@@ -527,32 +613,39 @@ export default function SubmissionsPage() {
               )}
             </div>
           ) : (
-            filteredSubmissions.map(sub => (
-              <div 
-                key={sub.id} 
-                onClick={() => {
-                  setSelectedSubmission(sub);
-                  setScore(sub.score?.toString() || '');
-                  setFeedbackText(sub.feedback_text || '');
-                  setFeedbackFileUrl(sub.feedback_file_url || '');
-                }}
-                className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${selectedSubmission?.id === sub.id ? 'border-primary shadow-sm ring-2 ring-primary/20' : 'border-gray-200 hover:border-gray-300'}`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${(sub.type === 'worksheet' || (typeof sub.type === 'string' && sub.type.startsWith('worksheet'))) ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                    {(sub.type === 'worksheet' || (typeof sub.type === 'string' && sub.type.startsWith('worksheet'))) ? 'Worksheet' : 'PDF Quiz'}
-                  </span>
-                  <span className="text-[10px] text-text/40">{new Date(sub.submitted_at).toLocaleDateString()}</span>
-                </div>
-                <h4 className="font-bold text-sm text-text truncate">{sub.profiles?.full_name || 'Unknown Student'}</h4>
-                <p className="text-xs text-text/60 truncate">{sub.topics?.title || 'Unknown Topic'}</p>
-                {sub.feedback_file_url && (
-                  <div className="mt-2 flex items-center gap-1 text-[10px] text-green-600 font-bold">
-                    <CheckCircle2 className="w-3 h-3" /> Feedback file attached
+            filteredSubmissions.map(sub => {
+              const details = getSubmissionDetails(sub);
+              return (
+                <div 
+                  key={sub.id} 
+                  onClick={() => {
+                    setSelectedSubmission(sub);
+                    setScore(sub.score?.toString() || '');
+                    setFeedbackText(sub.feedback_text || '');
+                    setFeedbackFileUrl(sub.feedback_file_url || '');
+                  }}
+                  className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${selectedSubmission?.id === sub.id ? 'border-primary shadow-sm ring-2 ring-primary/20' : 'border-gray-200 hover:border-gray-300'}`}
+                >
+                  <div className="flex justify-between items-start mb-1.5">
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${details.badgeClass}`}>
+                      {details.badgeText}
+                    </span>
+                    <span className="text-[10px] text-text/40">{new Date(sub.submitted_at).toLocaleDateString()}</span>
                   </div>
-                )}
-              </div>
-            ))
+                  <h4 className="font-bold text-sm text-text truncate">{sub.profiles?.full_name || 'Unknown Student'}</h4>
+                  <p className="text-xs text-text/60 truncate">{sub.topics?.title || 'Unknown Topic'}</p>
+                  <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                    <span>{details.icon}</span>
+                    <span className="truncate">{details.itemTitle}</span>
+                  </div>
+                  {sub.feedback_file_url && (
+                    <div className="mt-2 flex items-center gap-1 text-[10px] text-green-600 font-bold">
+                      <CheckCircle2 className="w-3 h-3" /> Feedback file attached
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
 
@@ -573,10 +666,34 @@ export default function SubmissionsPage() {
                 </button>
 
                 <div className="flex justify-between items-start gap-3">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-base sm:text-lg text-text">{selectedSubmission.profiles?.full_name}</h3>
                     <p className="text-xs sm:text-sm text-text/60">{selectedSubmission.topics?.title}</p>
-                    <p className="text-[11px] sm:text-xs text-text/40 mt-1">Submitted: {new Date(selectedSubmission.submitted_at).toLocaleString()}</p>
+                    {(() => {
+                      const selectedDetails = getSubmissionDetails(selectedSubmission);
+                      return (
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <span className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded ${selectedDetails.badgeClass}`}>
+                            {selectedDetails.badgeText}
+                          </span>
+                          <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                            <span>{selectedDetails.icon}</span>
+                            <span>{selectedDetails.itemTitle}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleToggleSubmissionType}
+                            disabled={isUpdatingType}
+                            className="text-[11px] font-bold text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg border border-primary/20 transition-all flex items-center gap-1 shadow-2xs"
+                            title={`Reclassify this submission as ${selectedDetails.isWorksheet ? 'PDF Quiz' : 'Worksheet'}`}
+                          >
+                            {isUpdatingType ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                            <span>Change to {selectedDetails.isWorksheet ? 'PDF Quiz' : 'Worksheet'}</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    <p className="text-[11px] sm:text-xs text-text/40 mt-1.5">Submitted: {new Date(selectedSubmission.submitted_at).toLocaleString()}</p>
                   </div>
                   <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full shrink-0 ${selectedSubmission.status === 'reviewed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                     {selectedSubmission.status}
