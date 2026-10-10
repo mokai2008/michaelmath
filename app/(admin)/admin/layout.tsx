@@ -63,6 +63,8 @@ export default function AdminLayout({
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
 
   const lastProcessedSubmissionRef = useRef<{ id: string; time: number } | null>(null);
+  const prevSubmissionsCountRef = useRef<number | null>(null);
+  const prevMessagesCountRef = useRef<number | null>(null);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -197,7 +199,8 @@ export default function AdminLayout({
       () => {
         router.push('/admin/submissions');
       },
-      'michaelmath-submission'
+      `michaelmath-sub-${payloadItem.id || Date.now()}`,
+      { requireInteraction: true }
     );
   };
 
@@ -236,6 +239,8 @@ export default function AdminLayout({
           setPendingRequests(bookingCount || 0);
           setUnreadMessages(msgCount || 0);
           setPendingSubmissions(subCount || 0);
+          prevSubmissionsCountRef.current = subCount || 0;
+          prevMessagesCountRef.current = msgCount || 0;
         } catch (err) {
           console.debug("Failed to fetch admin notification counts:", err);
         }
@@ -269,7 +274,8 @@ export default function AdminLayout({
               () => {
                 router.push('/admin/messages');
               },
-              'michaelmath-contact'
+              `michaelmath-contact-${newMsg.id || Date.now()}`,
+              { requireInteraction: true }
             );
           }
         )
@@ -335,18 +341,27 @@ export default function AdminLayout({
 
     // Listen to local client event when message is marked as read
     const handleMessageReadEvent = () => {
-      setUnreadMessages((prev) => Math.max(0, prev - 1));
+      setUnreadMessages((prev) => {
+        const next = Math.max(0, prev - 1);
+        prevMessagesCountRef.current = next;
+        return next;
+      });
     };
 
     // Listen to local client event when submission is marked as reviewed
     const handleSubmissionReviewedEvent = () => {
-      setPendingSubmissions((prev) => Math.max(0, prev - 1));
+      setPendingSubmissions((prev) => {
+        const next = Math.max(0, prev - 1);
+        prevSubmissionsCountRef.current = next;
+        return next;
+      });
     };
 
     // Listen to exact submission count updates from SubmissionsPage
     const handleSubmissionCountUpdated = (e: any) => {
       if (typeof e.detail === 'number') {
         setPendingSubmissions(e.detail);
+        prevSubmissionsCountRef.current = e.detail;
       }
     };
 
@@ -354,7 +369,7 @@ export default function AdminLayout({
     window.addEventListener('submission_reviewed', handleSubmissionReviewedEvent);
     window.addEventListener('submissions_count_updated', handleSubmissionCountUpdated);
 
-    // Regular interval polling fallback
+    // Regular interval polling fallback - guarantees alerts even if Realtime websocket sleeps/drops
     interval = setInterval(async () => {
       try {
         const [{ count: bookingCount }, { count: msgCount }, { count: subCount }] = await Promise.all([
@@ -362,13 +377,72 @@ export default function AdminLayout({
           supabase.from("contact_messages").select("*", { count: "exact", head: true }).eq("status", "unread"),
           supabase.from("manual_submissions").select("*", { count: "exact", head: true }).eq("status", "pending"),
         ]);
+        const currentSubCount = subCount || 0;
+        const currentMsgCount = msgCount || 0;
+
         setPendingRequests(bookingCount || 0);
-        setUnreadMessages(msgCount || 0);
-        setPendingSubmissions(subCount || 0);
+        setUnreadMessages(currentMsgCount);
+        setPendingSubmissions(currentSubCount);
+
+        // Detect new submissions even if Realtime websocket missed it
+        if (prevSubmissionsCountRef.current !== null && currentSubCount > prevSubmissionsCountRef.current) {
+          try {
+            const { data: latestSub } = await supabase
+              .from('manual_submissions')
+              .select('*, profiles:student_id(full_name, email), topics:topic_id(title)')
+              .eq('status', 'pending')
+              .order('submitted_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (latestSub) {
+              await triggerSubmissionNotification(latestSub, currentSubCount);
+            }
+          } catch (e) {
+            console.debug("Error triggering polled submission alert:", e);
+          }
+        }
+        prevSubmissionsCountRef.current = currentSubCount;
+
+        // Detect new contact messages even if Realtime websocket missed it
+        if (prevMessagesCountRef.current !== null && currentMsgCount > prevMessagesCountRef.current) {
+          try {
+            const { data: latestMsg } = await supabase
+              .from('contact_messages')
+              .select('*')
+              .eq('status', 'unread')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (latestMsg) {
+              const senderName = `${latestMsg.first_name || ''} ${latestMsg.last_name || ''}`.trim() || 'Website Visitor';
+              playNotificationSound();
+              setIncomingMessageToast({
+                id: latestMsg.id,
+                name: senderName,
+                email: latestMsg.email || '',
+                message: latestMsg.message || '',
+              });
+              showDesktopNotification(
+                `📩 New contact message from ${senderName}`,
+                latestMsg.message || 'You received a new inquiry on the contact form.',
+                () => {
+                  router.push('/admin/messages');
+                },
+                `michaelmath-contact-${latestMsg.id || Date.now()}`,
+                { requireInteraction: true }
+              );
+            }
+          } catch (e) {
+            console.debug("Error triggering polled message alert:", e);
+          }
+        }
+        prevMessagesCountRef.current = currentMsgCount;
       } catch (err) {
         console.debug("Polling error for admin notifications:", err);
       }
-    }, 20000);
+    }, 15000);
 
     return () => {
       if (interval) clearInterval(interval);

@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft, HelpCircle, X, ExternalLink } from "lucide-react";
 import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
+import { NotificationDiagnosticModal } from "@/components/NotificationDiagnosticModal";
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'reviewed'>('pending');
   const [desktopNotificationGranted, setDesktopNotificationGranted] = useState(false);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [testAlertBanner, setTestAlertBanner] = useState<string | null>(null);
   
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
   const [score, setScore] = useState<string>('');
@@ -25,16 +28,33 @@ export default function SubmissionsPage() {
   }, []);
 
   const handleEnableAlerts = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      alert("Your browser does not support desktop notifications.");
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      setShowDiagnosticModal(true);
+      return;
+    }
+
     const granted = await requestDesktopNotificationPermission();
     setDesktopNotificationGranted(granted);
     playNotificationSound();
+
     if (granted) {
       showDesktopNotification(
-        "Submission Alerts Enabled! 🔔",
-        "You will receive live desktop alerts whenever students submit homework or quizzes.",
-        undefined,
-        'michaelmath-submission-alert'
+        "🔔 Test Alert: Student Submissions",
+        "Live desktop alerts are active! Whenever students submit worksheets or quizzes, you will receive an alert like this.",
+        () => {
+          if (typeof window !== 'undefined') window.focus();
+        },
+        `michaelmath-subtest-${Date.now()}`,
+        { requireInteraction: true }
       );
+      setTestAlertBanner("Test alert dispatched! If you heard the chime but saw NO Mac banner, open the guide to fix macOS settings.");
+    } else {
+      setShowDiagnosticModal(true);
     }
   };
 
@@ -78,8 +98,18 @@ export default function SubmissionsPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'manual_submissions' },
-        () => {
+        (payload: any) => {
           fetchSubmissions();
+          if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
+            playNotificationSound();
+            showDesktopNotification(
+              "📝 New Student Submission!",
+              "A student just submitted work. Refreshing submissions list.",
+              () => { if (typeof window !== 'undefined') window.focus(); },
+              `michaelmath-subpage-${payload.new?.id || Date.now()}`,
+              { requireInteraction: true }
+            );
+          }
         }
       )
       .subscribe();
@@ -206,19 +236,64 @@ export default function SubmissionsPage() {
           <p className="text-text/60 text-sm mt-0.5">Download, review, and upload annotated feedback for student work.</p>
         </div>
 
-        <button
-          onClick={handleEnableAlerts}
-          className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shadow-xs ${
-            desktopNotificationGranted
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-              : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 animate-pulse'
-          }`}
-          title={desktopNotificationGranted ? 'Live desktop alerts are active' : 'Click to enable desktop alerts for new student submissions'}
-        >
-          <Bell className={`w-3.5 h-3.5 ${desktopNotificationGranted ? 'text-emerald-600' : 'text-amber-600 animate-bounce'}`} />
-          {desktopNotificationGranted ? 'Desktop Alerts Active' : 'Enable Live Alerts'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleEnableAlerts}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shadow-xs ${
+              desktopNotificationGranted
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 animate-pulse'
+            }`}
+            title={desktopNotificationGranted ? 'Live desktop alerts are active — Click to send a test alert' : 'Click to enable desktop alerts for new student submissions'}
+          >
+            <Bell className={`w-3.5 h-3.5 ${desktopNotificationGranted ? 'text-emerald-600' : 'text-amber-600 animate-bounce'}`} />
+            {desktopNotificationGranted ? 'Desktop Alerts Active' : 'Enable Live Alerts'}
+            {desktopNotificationGranted && (
+              <span className="text-[10px] bg-emerald-200/80 text-emerald-900 px-1.5 py-0.5 rounded font-black ml-0.5">
+                Test
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowDiagnosticModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-text/70 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors shadow-2xs"
+            title="Desktop alert settings & Mac troubleshooting guide"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-text/60" />
+            <span className="hidden sm:inline">Mac Alert Guide</span>
+          </button>
+        </div>
       </div>
+
+      {/* Test Alert Feedback Banner */}
+      {testAlertBanner && (
+        <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-900 p-4 rounded-2xl shadow-xs flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="p-2 bg-emerald-100 rounded-xl text-emerald-700 shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </span>
+            <div className="text-xs">
+              <p className="font-bold text-sm text-emerald-950">Test alert sent to your Mac screen!</p>
+              <p className="text-emerald-800/80 mt-0.5">{testAlertBanner}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowDiagnosticModal(true)}
+              className="text-xs font-bold bg-white text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-2xs"
+            >
+              Fix Mac Banner
+            </button>
+            <button
+              onClick={() => setTestAlertBanner(null)}
+              className="text-emerald-700/60 hover:text-emerald-900 p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-4 mb-6 border-b border-gray-200">
         <button 
@@ -425,6 +500,13 @@ export default function SubmissionsPage() {
           )}
         </div>
       </div>
+
+      <NotificationDiagnosticModal
+        isOpen={showDiagnosticModal}
+        onClose={() => setShowDiagnosticModal(false)}
+        pageTitle="Student Submissions"
+        onPermissionUpdated={(granted) => setDesktopNotificationGranted(granted)}
+      />
     </div>
   );
 }

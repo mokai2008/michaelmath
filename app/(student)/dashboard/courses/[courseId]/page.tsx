@@ -2101,92 +2101,39 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   <span>PDF Submission</span>
                                 </div>
 
-                                {/* Download or view this specific worksheet inline */}
+                                {/* Download Worksheet PDF */}
                                 {(ws.url || ws.file_url) && (
-                                  <div className="space-y-3 mb-4">
-                                    <div className="flex items-center gap-2">
-                                      <button 
-                                        type="button"
-                                        onClick={() => toggleInlinePdf(`hw_ws_${ws.id || wsIdx}`)}
-                                        className={`flex-1 py-2.5 px-4 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center justify-between group ${
-                                          expandedInlinePdfs[`hw_ws_${ws.id || wsIdx}`]
-                                            ? 'bg-orange-500 text-white shadow-md'
-                                            : 'bg-white border border-gray-200 text-text hover:border-orange-400'
-                                        }`}
-                                      >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                          <FileText className={`w-4 h-4 shrink-0 ${expandedInlinePdfs[`hw_ws_${ws.id || wsIdx}`] ? 'text-white' : 'text-orange-500'}`} />
-                                          <span className="truncate">{expandedInlinePdfs[`hw_ws_${ws.id || wsIdx}`] ? `Hide ${wsTitle} PDF` : `View ${wsTitle} PDF Inline`}</span>
-                                        </div>
-                                        <span className="text-[10px] shrink-0 font-medium">
-                                          {expandedInlinePdfs[`hw_ws_${ws.id || wsIdx}`] ? 'Close ▲' : 'Read Inline ▼'}
-                                        </span>
-                                      </button>
-                                      <a 
-                                        href={ws.url || ws.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="py-2.5 px-3 bg-white border border-gray-200 hover:border-orange-400 text-text/70 hover:text-orange-600 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1 shrink-0"
-                                        title="Open in new window / Download"
-                                      >
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                      </a>
+                                  <a 
+                                    href={ws.url || ws.file_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-orange-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group mb-4"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <FileText className="w-4 h-4 text-orange-500 shrink-0" />
+                                      <span className="truncate">Download {wsTitle} PDF</span>
                                     </div>
-
-                                    {expandedInlinePdfs[`hw_ws_${ws.id || wsIdx}`] && (
-                                      <InlinePdfViewer
-                                        url={ws.url || ws.file_url}
-                                        title={`${wsTitle} (Worksheet Questions)`}
-                                        onClose={() => toggleInlinePdf(`hw_ws_${ws.id || wsIdx}`)}
-                                      />
-                                    )}
-                                  </div>
+                                    <span className="text-[10px] text-text/40 group-hover:text-orange-500 font-medium shrink-0">Download →</span>
+                                  </a>
                                 )}
 
                                 {/* Upload Status Card for this worksheet */}
                                 {sub ? (
-                                  <div className="bg-white border border-emerald-200 rounded-xl p-3 space-y-2 mb-4">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0">PDF</div>
-                                        <div className="truncate">
-                                          <div className="text-xs font-bold text-text truncate">
-                                            Uploaded {wsTitle} Answers
-                                          </div>
-                                          <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        <button
-                                          type="button"
-                                          onClick={() => toggleInlinePdf(`hw_sub_${ws.id || wsIdx}`)}
-                                          className="text-xs font-bold text-emerald-700 hover:text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-lg bg-emerald-50 shrink-0"
-                                        >
-                                          {expandedInlinePdfs[`hw_sub_${ws.id || wsIdx}`] ? 'Hide' : 'Preview'}
-                                        </button>
-                                        <a
-                                          href={sub.file_url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="text-gray-400 hover:text-gray-700 p-1 rounded-lg border border-gray-200"
-                                          title="Open in new window"
-                                        >
-                                          <ExternalLink className="w-3.5 h-3.5" />
+                                  <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
+                                      <div className="truncate">
+                                        <a href={sub.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
+                                          View Uploaded {wsTitle} PDF
                                         </a>
-                                        {sub.status !== 'reviewed' && (
-                                          <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2 py-1 rounded-lg bg-gray-50 shrink-0">
-                                            {isUploadingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
-                                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
-                                          </label>
-                                        )}
+                                        <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
                                       </div>
                                     </div>
-                                    {expandedInlinePdfs[`hw_sub_${ws.id || wsIdx}`] && (
-                                      <InlinePdfViewer
-                                        url={sub.file_url}
-                                        title={`Your Submitted Answers: ${wsTitle}`}
-                                        onClose={() => toggleInlinePdf(`hw_sub_${ws.id || wsIdx}`)}
-                                      />
+                                    {sub.status !== 'reviewed' && (
+                                      <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50 shrink-0">
+                                        {isUploadingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+                                        <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
+                                      </label>
                                     )}
                                   </div>
                                 ) : (
@@ -2235,38 +2182,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     </div>
 
                                     {sub.feedback_file_url && (
-                                      <div className="space-y-2">
-                                        <div className="flex items-center gap-2">
-                                          <button 
-                                            type="button"
-                                            onClick={() => toggleInlinePdf(`hw_fb_${ws.id || wsIdx}`)}
-                                            className={`flex-1 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 ${
-                                              expandedInlinePdfs[`hw_fb_${ws.id || wsIdx}`]
-                                                ? 'bg-emerald-800 text-white ring-2 ring-emerald-400/50'
-                                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                            }`}
-                                          >
-                                            <FileText className="w-4 h-4" />
-                                            <span>{expandedInlinePdfs[`hw_fb_${ws.id || wsIdx}`] ? 'Hide Corrected PDF' : 'View Corrected PDF Inline'}</span>
-                                          </button>
-                                          <a 
-                                            href={sub.feedback_file_url} 
-                                            target="_blank" 
-                                            rel="noreferrer"
-                                            className="py-2.5 px-3 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1 shrink-0"
-                                            title="Open in new window / Download"
-                                          >
-                                            <ExternalLink className="w-3.5 h-3.5" />
-                                          </a>
-                                        </div>
-                                        {expandedInlinePdfs[`hw_fb_${ws.id || wsIdx}`] && (
-                                          <InlinePdfViewer
-                                            url={sub.feedback_file_url}
-                                            title={`Teacher Corrected & Graded PDF: ${wsTitle}`}
-                                            onClose={() => toggleInlinePdf(`hw_fb_${ws.id || wsIdx}`)}
-                                          />
-                                        )}
-                                      </div>
+                                      <a 
+                                        href={sub.feedback_file_url} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                                      >
+                                        <FileText className="w-4 h-4" /> Download Corrected PDF File
+                                      </a>
                                     )}
                                   </div>
                                 ) : (
@@ -2291,29 +2214,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                 </div>
                                 <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                                   {ws.answerPdfUrl && (
-                                    <div className="flex items-center gap-1.5">
-                                      <button 
-                                        type="button"
-                                        onClick={() => toggleInlinePdf(`hw_ans_pdf_${ws.id || wsIdx}`)}
-                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all ${
-                                          expandedInlinePdfs[`hw_ans_pdf_${ws.id || wsIdx}`]
-                                            ? 'bg-teal-800 text-white shadow-md ring-2 ring-teal-400/50'
-                                            : 'bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50'
-                                        }`}
-                                      >
-                                        <FileText className="w-3.5 h-3.5" />
-                                        <span>{expandedInlinePdfs[`hw_ans_pdf_${ws.id || wsIdx}`] ? 'Hide Answer Sheet' : 'Answer Sheet PDF'}</span>
-                                      </button>
-                                      <a 
-                                        href={ws.answerPdfUrl} 
-                                        target="_blank" 
-                                        rel="noreferrer"
-                                        className="p-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs transition-all flex items-center"
-                                        title="Open in new window / Download"
-                                      >
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                      </a>
-                                    </div>
+                                    <a 
+                                      href={ws.answerPdfUrl} 
+                                      target="_blank" 
+                                      rel="noreferrer"
+                                      className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" /> Answer Sheet PDF
+                                    </a>
                                   )}
                                   {ws.answerVideoUrl && (
                                     <button 
@@ -2331,30 +2239,6 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   )}
                                 </div>
                               </div>
-
-                              {/* INLINE PDF VIEWER for Homework Model Answer */}
-                              {ws.answerPdfUrl && expandedInlinePdfs[`hw_ans_pdf_${ws.id || wsIdx}`] && (
-                                <div className="w-full pt-3 border-t border-teal-200 space-y-2">
-                                  <div className="flex items-center justify-between text-xs font-bold text-teal-950">
-                                    <span className="flex items-center gap-1.5">
-                                      <FileText className="w-3.5 h-3.5 text-teal-600" />
-                                      Official Model Answer Sheet: {wsTitle}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleInlinePdf(`hw_ans_pdf_${ws.id || wsIdx}`)}
-                                      className="text-[11px] text-teal-700 hover:text-teal-950 font-semibold underline"
-                                    >
-                                      Close Viewer
-                                    </button>
-                                  </div>
-                                  <InlinePdfViewer
-                                    url={ws.answerPdfUrl}
-                                    title={`Official Model Answers: ${wsTitle}`}
-                                    onClose={() => toggleInlinePdf(`hw_ans_pdf_${ws.id || wsIdx}`)}
-                                  />
-                                </div>
-                              )}
 
                               {/* INLINE VIDEO PLAYER for Homework Solution */}
                               {ws.answerVideoUrl && expandedSolutionVideos[`ws_vid_${ws.id}`] && (
@@ -2671,46 +2555,20 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     )}
                                   </div>
 
-                                  {/* Download or view Quiz PDF inline */}
+                                  {/* Download Quiz PDF button */}
                                   {quiz.quiz_pdf_url && (
-                                    <div className="space-y-3 mb-4">
-                                      <div className="flex items-center gap-2">
-                                        <button 
-                                          type="button"
-                                          onClick={() => toggleInlinePdf(`quiz_doc_${quiz.id || qIdx}`)}
-                                          className={`flex-1 py-2.5 px-4 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center justify-between group ${
-                                            expandedInlinePdfs[`quiz_doc_${quiz.id || qIdx}`]
-                                              ? 'bg-purple-600 text-white shadow-md'
-                                              : 'bg-white border border-gray-200 text-text hover:border-purple-400'
-                                          }`}
-                                        >
-                                          <div className="flex items-center gap-2 min-w-0">
-                                            <FileText className={`w-4 h-4 shrink-0 ${expandedInlinePdfs[`quiz_doc_${quiz.id || qIdx}`] ? 'text-white' : 'text-purple-600'}`} />
-                                            <span className="truncate">{expandedInlinePdfs[`quiz_doc_${quiz.id || qIdx}`] ? `Hide ${quizTitle} PDF` : `View ${quizTitle} PDF Inline`}</span>
-                                          </div>
-                                          <span className="text-[10px] shrink-0 font-medium">
-                                            {expandedInlinePdfs[`quiz_doc_${quiz.id || qIdx}`] ? 'Close ▲' : 'Read Inline ▼'}
-                                          </span>
-                                        </button>
-                                        <a 
-                                          href={quiz.quiz_pdf_url} 
-                                          target="_blank" 
-                                          rel="noreferrer" 
-                                          className="py-2.5 px-3 bg-white border border-gray-200 hover:border-purple-400 text-text/70 hover:text-purple-600 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1 shrink-0"
-                                          title="Open in new window / Download"
-                                        >
-                                          <ExternalLink className="w-3.5 h-3.5" />
-                                        </a>
+                                    <a 
+                                      href={quiz.quiz_pdf_url} 
+                                      target="_blank" 
+                                      rel="noreferrer" 
+                                      className="w-full py-3 px-4 bg-white border border-gray-200 hover:border-purple-400 rounded-xl font-bold text-xs text-text shadow-sm transition-all flex items-center justify-between group mb-4"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <FileText className="w-4 h-4 text-purple-600 shrink-0" />
+                                        <span className="truncate">Download {quizTitle} PDF</span>
                                       </div>
-
-                                      {expandedInlinePdfs[`quiz_doc_${quiz.id || qIdx}`] && (
-                                        <InlinePdfViewer
-                                          url={quiz.quiz_pdf_url}
-                                          title={`${quizTitle} (Past Paper Quiz)`}
-                                          onClose={() => toggleInlinePdf(`quiz_doc_${quiz.id || qIdx}`)}
-                                        />
-                                      )}
-                                    </div>
+                                      <span className="text-[10px] text-text/40 group-hover:text-purple-600 font-medium shrink-0">Download →</span>
+                                    </a>
                                   )}
 
                                   {/* Interactive / Canva Quiz Start Buttons */}
@@ -2734,48 +2592,21 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     /* Past Paper PDF Quiz Answer Upload */
                                     <div>
                                       {submission && submission.answers_data?.file_url ? (
-                                        <div className="bg-white border border-emerald-200 rounded-xl p-3 space-y-2 mb-4">
-                                          <div className="flex items-center justify-between gap-2">
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                              <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0">PDF</div>
-                                              <div className="truncate">
-                                                <div className="text-xs font-bold text-text truncate">
-                                                  Uploaded {quizTitle} Answers
-                                                </div>
-                                                <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
-                                              </div>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                              <button
-                                                type="button"
-                                                onClick={() => toggleInlinePdf(`quiz_sub_${quiz.id || qIdx}`)}
-                                                className="text-xs font-bold text-purple-700 hover:text-purple-900 border border-purple-200 px-2.5 py-1 rounded-lg bg-purple-50 shrink-0"
-                                              >
-                                                {expandedInlinePdfs[`quiz_sub_${quiz.id || qIdx}`] ? 'Hide' : 'Preview'}
-                                              </button>
-                                              <a
-                                                href={submission.answers_data.file_url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-gray-400 hover:text-gray-700 p-1 rounded-lg border border-gray-200"
-                                                title="Open in new window"
-                                              >
-                                                <ExternalLink className="w-3.5 h-3.5" />
+                                        <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center font-bold text-[10px]">PDF</div>
+                                            <div className="truncate">
+                                              <a href={submission.answers_data.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-text hover:underline truncate block">
+                                                View Uploaded {quizTitle} Answers
                                               </a>
-                                              {quizManualSub?.status !== 'reviewed' && (
-                                                <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50 shrink-0">
-                                                  {isUploadingQuiz === quiz.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
-                                                  <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
-                                                </label>
-                                              )}
+                                              <span className="text-[10px] text-text/40 block">Submitted for Grading</span>
                                             </div>
                                           </div>
-                                          {expandedInlinePdfs[`quiz_sub_${quiz.id || qIdx}`] && (
-                                            <InlinePdfViewer
-                                              url={submission.answers_data.file_url}
-                                              title={`Your Submitted Answers: ${quizTitle}`}
-                                              onClose={() => toggleInlinePdf(`quiz_sub_${quiz.id || qIdx}`)}
-                                            />
+                                          {quizManualSub?.status !== 'reviewed' && (
+                                            <label className="cursor-pointer text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 px-2.5 py-1 rounded-lg bg-gray-50 shrink-0">
+                                              {isUploadingQuiz === quiz.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+                                              <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
+                                            </label>
                                           )}
                                         </div>
                                       ) : (
@@ -2825,38 +2656,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                       </div>
 
                                       {quizManualSub?.feedback_file_url && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-2">
-                                            <button 
-                                              type="button"
-                                              onClick={() => toggleInlinePdf(`quiz_fb_${quiz.id || qIdx}`)}
-                                              className={`flex-1 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 ${
-                                                expandedInlinePdfs[`quiz_fb_${quiz.id || qIdx}`]
-                                                  ? 'bg-purple-800 text-white ring-2 ring-purple-400/50'
-                                                  : 'bg-purple-600 hover:bg-purple-700 text-white'
-                                              }`}
-                                            >
-                                              <FileText className="w-4 h-4" />
-                                              <span>{expandedInlinePdfs[`quiz_fb_${quiz.id || qIdx}`] ? 'Hide Corrected PDF' : 'View Corrected PDF Inline'}</span>
-                                            </button>
-                                            <a 
-                                              href={quizManualSub.feedback_file_url} 
-                                              target="_blank" 
-                                              rel="noreferrer"
-                                              className="py-2.5 px-3 bg-white border border-purple-300 text-purple-700 hover:bg-purple-50 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1 shrink-0"
-                                              title="Open in new window / Download"
-                                            >
-                                              <ExternalLink className="w-3.5 h-3.5" />
-                                            </a>
-                                          </div>
-                                          {expandedInlinePdfs[`quiz_fb_${quiz.id || qIdx}`] && (
-                                            <InlinePdfViewer
-                                              url={quizManualSub.feedback_file_url}
-                                              title={`Teacher Corrected & Graded PDF: ${quizTitle}`}
-                                              onClose={() => toggleInlinePdf(`quiz_fb_${quiz.id || qIdx}`)}
-                                            />
-                                          )}
-                                        </div>
+                                        <a 
+                                          href={quizManualSub.feedback_file_url} 
+                                          target="_blank" 
+                                          rel="noreferrer"
+                                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                                        >
+                                          <FileText className="w-4 h-4" /> Download Corrected Quiz PDF
+                                        </a>
                                       )}
                                     </div>
                                   ) : (
@@ -2881,29 +2688,14 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   </div>
                                   <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                                     {quiz.answerPdfUrl && (
-                                      <div className="flex items-center gap-1.5">
-                                        <button 
-                                          type="button"
-                                          onClick={() => toggleInlinePdf(`quiz_ms_${quiz.id || qIdx}`)}
-                                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all ${
-                                            expandedInlinePdfs[`quiz_ms_${quiz.id || qIdx}`]
-                                              ? 'bg-teal-800 text-white shadow-md ring-2 ring-teal-400/50'
-                                              : 'bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50'
-                                          }`}
-                                        >
-                                          <FileText className="w-3.5 h-3.5" />
-                                          <span>{expandedInlinePdfs[`quiz_ms_${quiz.id || qIdx}`] ? 'Hide Mark Scheme' : 'Mark Scheme PDF'}</span>
-                                        </button>
-                                        <a 
-                                          href={quiz.answerPdfUrl} 
-                                          target="_blank" 
-                                          rel="noreferrer"
-                                          className="p-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs transition-all flex items-center"
-                                          title="Open in new window / Download"
-                                        >
-                                          <ExternalLink className="w-3.5 h-3.5" />
-                                        </a>
-                                      </div>
+                                      <a 
+                                        href={quiz.answerPdfUrl} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="px-3.5 py-1.5 bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                                      >
+                                        <FileText className="w-3.5 h-3.5" /> Mark Scheme PDF
+                                      </a>
                                     )}
                                     {quiz.answerVideoUrl && (
                                       <button 
@@ -2922,29 +2714,6 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   </div>
                                 </div>
 
-                                {/* INLINE PDF VIEWER for Quiz Mark Scheme */}
-                                {quiz.answerPdfUrl && expandedInlinePdfs[`quiz_ms_${quiz.id || qIdx}`] && (
-                                  <div className="w-full pt-3 border-t border-teal-200 space-y-2">
-                                    <div className="flex items-center justify-between text-xs font-bold text-teal-950">
-                                      <span className="flex items-center gap-1.5">
-                                        <FileText className="w-3.5 h-3.5 text-teal-600" />
-                                        Official Mark Scheme: {quizTitle}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleInlinePdf(`quiz_ms_${quiz.id || qIdx}`)}
-                                        className="text-[11px] text-teal-700 hover:text-teal-950 font-semibold underline"
-                                      >
-                                        Close Viewer
-                                      </button>
-                                    </div>
-                                    <InlinePdfViewer
-                                      url={quiz.answerPdfUrl}
-                                      title={`Official Mark Scheme: ${quizTitle}`}
-                                      onClose={() => toggleInlinePdf(`quiz_ms_${quiz.id || qIdx}`)}
-                                    />
-                                  </div>
-                                )}
 
                                 {/* INLINE VIDEO PLAYER for Quiz Solution */}
                                 {quiz.answerVideoUrl && expandedSolutionVideos[`quiz_vid_${quiz.id}`] && (
