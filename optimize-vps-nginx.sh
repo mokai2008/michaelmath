@@ -117,3 +117,9 @@ else
   echo "⚠️ Backup restored. Nginx was NOT changed."
   exit 1
 fi
+
+# 7. Check and fix Supabase Studio basic-auth hang if present
+if [ -f "/home/gadmaths/htdocs/fix-supabase-studio.sh" ]; then
+  echo "🛡️ Checking Supabase Studio configuration..."
+  bash /home/gadmaths/htdocs/fix-supabase-studio.sh || true
+fi

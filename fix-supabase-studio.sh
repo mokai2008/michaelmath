@@ -83,6 +83,8 @@ static_service_snippet = '''  ## Studio Static Assets (Bypass Basic Auth to fix 
         paths:
           - /_next
           - /favicon
+          - /img
+          - /assets
     plugins:
       - name: cors
 
@@ -99,17 +101,17 @@ else:
 "
 fi
 
-# 6. Restart Kong container to apply configuration
-echo "🔄 Reloading Kong container..."
+# 6. Restart/Reload Kong container to apply configuration
+echo "🔄 Reloading Kong configuration..."
 if [ -n "$KONG_CONTAINER" ]; then
-    docker restart "$KONG_CONTAINER"
-    echo "✅ Restarted container: $KONG_CONTAINER"
+    docker exec "$KONG_CONTAINER" kong reload 2>/dev/null || docker restart "$KONG_CONTAINER"
+    echo "✅ Applied configuration to Kong container: $KONG_CONTAINER"
 else
     if command -v docker &> /dev/null; then
         KONG_ID=$(docker ps -q -f name=kong | head -n 1 || true)
         if [ -n "$KONG_ID" ]; then
-            docker restart "$KONG_ID"
-            echo "✅ Restarted Kong container ($KONG_ID)"
+            docker exec "$KONG_ID" kong reload 2>/dev/null || docker restart "$KONG_ID"
+            echo "✅ Applied configuration to Kong container ($KONG_ID)"
         else
             echo "ℹ️ Kong container not identified automatically. Restarting all Supabase services or please run: docker compose restart kong"
         fi
