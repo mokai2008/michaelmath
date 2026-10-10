@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Leaf, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
+import { MathLogoBadge } from "@/components/PiLogo";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -48,10 +49,8 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 md:h-20">
           <div className="flex items-center">
-            <Link href="/" className="flex items-center gap-2 group">
-              <div className="bg-primary/10 p-2 rounded-lg group-hover:bg-primary/20 transition-colors">
-                <Leaf className="w-5 h-5 md:w-6 md:h-6 text-primary" />
-              </div>
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <MathLogoBadge size="md" />
               <span className="font-bold text-base md:text-xl text-text tracking-tight whitespace-nowrap shrink-0">
                 <span className="hidden sm:inline">Michael Gad </span>
                 <span className="sm:hidden">MG </span>

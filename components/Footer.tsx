@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Leaf, MessageCircle, Send, Camera, Video } from "lucide-react";
+import { MessageCircle, Send, Camera, Video } from "lucide-react";
+import { MathLogoBadge } from "@/components/PiLogo";
 
 export function Footer() {
   return (
@@ -9,8 +10,8 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Leaf className="w-6 h-6 text-primary" />
+            <div className="flex items-center gap-2.5">
+              <MathLogoBadge size="sm" />
               <span className="font-bold text-xl tracking-tight">
                 Michael Gad Math
               </span>

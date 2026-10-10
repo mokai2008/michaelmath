@@ -10,12 +10,12 @@ import {
   Clock, 
   User, 
   LogOut,
-  Leaf,
   Home,
   Menu,
   X
 } from "lucide-react";
 
+import { MathLogoBadge } from "@/components/PiLogo";
 import { ChatBot } from "@/components/ChatBot";
 
 import { useState, useEffect } from "react";
@@ -107,10 +107,8 @@ export default function StudentLayout({
         >
           <Menu className="w-6 h-6" />
         </button>
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="bg-primary/10 p-1.5 rounded-lg">
-            <Leaf className="w-4 h-4 text-primary" />
-          </div>
+        <Link href="/dashboard" className="flex items-center gap-2 group">
+          <MathLogoBadge size="sm" />
           <span className="font-bold text-text tracking-tight">Student Portal</span>
         </Link>
         <Link href="/dashboard/notifications" className="relative p-2 -mr-2 rounded-lg text-text/70 hover:bg-gray-100 transition-colors">
@@ -137,10 +135,8 @@ export default function StudentLayout({
         md:relative md:translate-x-0 md:w-64 md:z-auto
       `}>
         <div className="h-16 md:h-20 flex items-center justify-between px-5 md:px-6 border-b border-gray-200 flex-shrink-0">
-          <Link href="/dashboard" className="flex items-center gap-2 group">
-            <div className="bg-primary/10 p-1.5 rounded-lg">
-              <Leaf className="w-5 h-5 text-primary" />
-            </div>
+          <Link href="/dashboard" className="flex items-center gap-2.5 group">
+            <MathLogoBadge size="sm" />
             <span className="font-bold text-lg text-text tracking-tight">Student Portal</span>
           </Link>
           <button

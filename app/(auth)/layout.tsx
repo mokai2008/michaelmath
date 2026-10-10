@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Leaf } from "lucide-react";
+import { MathLogoBadge } from "@/components/PiLogo";
 
 export default function AuthLayout({
   children,
@@ -11,9 +11,7 @@ export default function AuthLayout({
       <div className="max-w-md w-full space-y-6 bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-gray-100">
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-2 group mb-4">
-            <div className="bg-primary/10 p-2 rounded-lg">
-              <Leaf className="w-8 h-8 text-primary" />
-            </div>
+            <MathLogoBadge size="lg" />
           </Link>
           <p className="mt-1 text-sm text-text/70">
             Michael Gad Math Academy

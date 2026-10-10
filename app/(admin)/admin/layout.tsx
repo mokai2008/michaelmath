@@ -15,7 +15,6 @@ import {
   Settings,
   Mail,
   LogOut,
-  Leaf,
   Video,
   TrendingUp,
   Wallet,
@@ -30,6 +29,7 @@ import {
   CheckCircle2,
   ExternalLink
 } from "lucide-react";
+import { MathLogoBadge } from "@/components/PiLogo";
 
 export default function AdminLayout({
   children,
@@ -599,10 +599,8 @@ export default function AdminLayout({
               <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
             )}
           </button>
-          <Link href="/admin/stats" className="flex items-center gap-1.5">
-            <div className="bg-primary/10 p-1.5 rounded-lg">
-              <Leaf className="w-4 h-4 text-primary" />
-            </div>
+          <Link href="/admin/stats" className="flex items-center gap-2 group">
+            <MathLogoBadge size="sm" />
             <span className="font-bold text-sm sm:text-base text-text tracking-tight">Admin Area</span>
           </Link>
         </div>
@@ -642,10 +640,8 @@ export default function AdminLayout({
         md:relative md:translate-x-0 md:w-64 md:z-auto
       `}>
         <div className="h-16 md:h-20 flex items-center justify-between px-5 md:px-6 border-b border-gray-200 flex-shrink-0">
-          <Link href="/admin/stats" className="flex items-center gap-2 group">
-            <div className="bg-primary/10 p-1.5 rounded-lg">
-              <Leaf className="w-5 h-5 text-primary" />
-            </div>
+          <Link href="/admin/stats" className="flex items-center gap-2.5 group">
+            <MathLogoBadge size="sm" />
             <span className="font-bold text-lg text-text tracking-tight">Admin Area</span>
           </Link>
           <button
