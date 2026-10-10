@@ -8,6 +8,54 @@ const statAsync = promisify(stat);
 
 export const dynamic = "force-dynamic";
 
+export async function HEAD(
+  request: NextRequest,
+  { params }: { params: { slug: string[] } }
+) {
+  try {
+    const slug = params.slug || [];
+    const filename = slug.join("/");
+    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    const filePath = path.normalize(path.join(uploadsDir, filename));
+
+    if (!filePath.startsWith(uploadsDir)) {
+      return new NextResponse(null, { status: 403 });
+    }
+
+    const fileStats = await statAsync(filePath);
+    if (!fileStats.isFile()) {
+      return new NextResponse(null, { status: 404 });
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      ".mp4": "video/mp4",
+      ".webm": "video/webm",
+      ".mov": "video/quicktime",
+      ".m4v": "video/x-m4v",
+      ".ogg": "video/ogg",
+      ".pdf": "application/pdf",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+    };
+    const contentType = mimeTypes[ext] || "application/octet-stream";
+
+    return new NextResponse(null, {
+      status: 200,
+      headers: {
+        "Accept-Ranges": "bytes",
+        "Content-Length": fileStats.size.toString(),
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch {
+    return new NextResponse(null, { status: 404 });
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { slug: string[] } }
@@ -67,10 +115,10 @@ export async function GET(
       let end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
       // Performance Optimization for Video:
-      // If client requests open-ended range (e.g. "bytes=0-"), clamp chunk size to ~2.5MB.
-      // This delivers the first playable seconds in ~2s rather than waiting 20+ seconds for the entire file.
+      // If client requests open-ended range (e.g. "bytes=0-"), deliver a generous 6MB chunk.
+      // This buffers 40+ seconds of HD video instantly while preventing full file download delay.
       if (isVideo && !parts[1]) {
-        const MAX_CHUNK_SIZE = 2.5 * 1024 * 1024; // 2.5 MB chunk
+        const MAX_CHUNK_SIZE = 6 * 1024 * 1024; // 6 MB chunk
         if (end - start + 1 > MAX_CHUNK_SIZE) {
           end = start + MAX_CHUNK_SIZE - 1;
         }

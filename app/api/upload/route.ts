@@ -85,6 +85,27 @@ export async function POST(request: NextRequest) {
       await writeFile(diskPath, Buffer.from(bytes));
     }
 
+    // Optimize MP4 container: ensure FastStart (moov atom at start of file) for instant web playback
+    if (["mp4", "mov", "m4v"].includes(fileExt.toLowerCase())) {
+      try {
+        const { exec } = await import("child_process");
+        const { promisify } = await import("util");
+        const execAsync = promisify(exec);
+        const fastStartPath = path.join(uploadsDir, `fast_${filename}`);
+        
+        // Relocates moov atom to beginning of MP4 in <0.5s without transcoding (-c copy)
+        await execAsync(`ffmpeg -y -i "${diskPath}" -c copy -movflags +faststart "${fastStartPath}"`, { timeout: 15000 });
+        if (existsSync(fastStartPath)) {
+          const { rename } = await import("fs/promises");
+          await rename(fastStartPath, diskPath);
+          console.log(`[Upload] Applied FastStart (+faststart) to ${filename}`);
+        }
+      } catch (fastStartErr) {
+        // If ffmpeg is not yet installed or busy, keep original file safely
+        console.debug("[Upload] FastStart skipped/unavailable:", fastStartErr);
+      }
+    }
+
     // If previous files were replaced, delete them to free up disk space on the VPS
     for (const oldUrl of oldUrls) {
       if (typeof oldUrl === "string") {

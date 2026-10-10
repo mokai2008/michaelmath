@@ -12,7 +12,8 @@ import {
   VolumeX, 
   PlayCircle,
   Sliders,
-  Check
+  Check,
+  Loader2
 } from "lucide-react";
 
 interface VideoPlayerProps {
@@ -49,6 +50,7 @@ function HTML5DirectVideo({
   const timelineRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [bufferedPercent, setBufferedPercent] = useState(0);
@@ -103,13 +105,41 @@ function HTML5DirectVideo({
     }
   };
 
+  const handleWaiting = () => {
+    setIsBuffering(true);
+  };
+
+  const handlePlaying = () => {
+    setIsPlaying(true);
+    setIsBuffering(false);
+  };
+
+  const handleCanPlay = () => {
+    setIsBuffering(false);
+  };
+
+  const handleSeeking = () => {
+    setIsBuffering(true);
+  };
+
+  const handleSeeked = () => {
+    setIsBuffering(false);
+  };
+
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
-      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      setIsBuffering(true);
+      videoRef.current.play().then(() => {
+        setIsPlaying(true);
+        setIsBuffering(false);
+      }).catch(() => {
+        setIsBuffering(false);
+      });
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
+      setIsBuffering(false);
     }
     resetHideTimer();
   };
@@ -291,10 +321,15 @@ function HTML5DirectVideo({
         playsInline
         webkit-playsinline="true"
         x5-playsinline="true"
-        preload="metadata"
+        preload="auto"
         autoPlay={autoPlay}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onWaiting={handleWaiting}
+        onPlaying={handlePlaying}
+        onCanPlay={handleCanPlay}
+        onSeeking={handleSeeking}
+        onSeeked={handleSeeked}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
@@ -315,8 +350,21 @@ function HTML5DirectVideo({
         </div>
       )}
 
-      {/* Center Big Play Button (shown when paused or controls active) */}
-      {(!isPlaying || showControls) && (
+      {/* Center Buffering Spinner with pulse ring */}
+      {isBuffering && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative flex items-center justify-center">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+            <Play className="w-6 h-6 md:w-8 md:h-8 text-primary absolute fill-primary" />
+          </div>
+          <span className="text-white text-xs md:text-sm font-bold mt-3.5 tracking-wide drop-shadow-md">
+            Buffering video...
+          </span>
+        </div>
+      )}
+
+      {/* Center Big Play Button (shown when paused or controls active, but NOT while buffering) */}
+      {!isBuffering && (!isPlaying || showControls) && (
         <div 
           className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
         >

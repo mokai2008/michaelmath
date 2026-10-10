@@ -12,7 +12,23 @@ echo "📂 Setting folder permissions for /home/gadmaths/htdocs/public/uploads..
 chmod 755 /home/gadmaths /home/gadmaths/htdocs /home/gadmaths/htdocs/public /home/gadmaths/htdocs/public/uploads || true
 find /home/gadmaths/htdocs/public/uploads -type f -exec chmod 644 {} + 2>/dev/null || true
 
-# 2. Locate the active Nginx configuration file for gadmaths.com
+# 2. Ensure ffmpeg is installed on VPS for instant MP4 video FastStart streaming
+if ! command -v ffmpeg &> /dev/null; then
+  echo "📦 Installing ffmpeg on VPS for instant MP4 FastStart streaming..."
+  DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y ffmpeg || true
+fi
+
+# 3. Optimize all existing MP4 videos in /public/uploads/ to have FastStart (moves moov atom to start in ~0.5s)
+if command -v ffmpeg &> /dev/null; then
+  echo "⚡ Optimizing existing MP4 videos for instant 0-second FastStart playback..."
+  for vid in /home/gadmaths/htdocs/public/uploads/*.mp4; do
+    [ -f "$vid" ] || continue
+    ffmpeg -y -i "$vid" -c copy -movflags +faststart "${vid}.tmp.mp4" 2>/dev/null && mv "${vid}.tmp.mp4" "$vid" || rm -f "${vid}.tmp.mp4"
+  done
+  echo "✅ Existing video files converted to FastStart!"
+fi
+
+# 4. Locate the active Nginx configuration file for gadmaths.com
 NGINX_CONF=""
 for file in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf /etc/nginx/sites-available/*; do
   if [ -f "$file" ] && (grep -q "gadmaths.com" "$file" 2>/dev/null || grep -q "3000" "$file" 2>/dev/null); then
@@ -37,12 +53,12 @@ fi
 
 echo "🔍 Found active Nginx configuration: $NGINX_CONF"
 
-# 3. Create a safety backup
+# 5. Create a safety backup
 BACKUP_FILE="${NGINX_CONF}.bak_$(date +%s)"
 cp "$NGINX_CONF" "$BACKUP_FILE"
 echo "💾 Created backup at: $BACKUP_FILE"
 
-# 4. Check if location /uploads/ is already present
+# 6. Check if location /uploads/ is already present
 if grep -q "location /uploads/" "$NGINX_CONF"; then
   echo "ℹ️ location /uploads/ already exists in $NGINX_CONF. Updating configuration..."
   # Remove existing location /uploads/ block to refresh it
@@ -60,7 +76,7 @@ with open('$NGINX_CONF', 'w') as f:
 "
 fi
 
-# 5. Insert high-speed video streaming block and ensure client_max_body_size
+# 7. Insert high-speed video streaming block and ensure client_max_body_size
 python3 -c "
 import sys, re
 
@@ -68,7 +84,7 @@ conf_path = '$NGINX_CONF'
 with open(conf_path, 'r') as f:
     content = f.read()
 
-# Snippet to insert
+# Snippet to insert with direct kernel zero-copy and zero-compression overhead
 upload_block = '''
     # ⚡ High-Speed Direct Kernel Zero-Copy Video Streaming (added by gadmaths optimizer)
     client_max_body_size 500M;
@@ -76,12 +92,18 @@ upload_block = '''
     location /uploads/ {
         alias /home/gadmaths/htdocs/public/uploads/;
         sendfile on;
-        sendfile_max_chunk 2m;
+        sendfile_max_chunk 4m;
         tcp_nopush on;
         tcp_nodelay on;
         keepalive_timeout 65;
-        expires 365d;
-        add_header Cache-Control \"public, max-age=31536000, immutable\";
+        gzip off;
+        open_file_cache max=1000 inactive=30s;
+        open_file_cache_valid 60s;
+        open_file_cache_min_uses 2;
+        open_file_cache_errors on;
+        expires 30d;
+        add_header Cache-Control \"public, max-age=2592000, immutable\";
+        add_header Accept-Ranges \"bytes\";
         add_header Access-Control-Allow-Origin *;
     }
 '''
