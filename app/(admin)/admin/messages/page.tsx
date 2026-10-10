@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
-import { Mail, Clock, CheckCircle, Trash2, RefreshCw, Loader2, User, MessageSquare, Bell, X } from "lucide-react";
+import { Mail, Clock, CheckCircle, Trash2, RefreshCw, Loader2, User, MessageSquare, Bell, X, HelpCircle } from "lucide-react";
+import { NotificationDiagnosticModal } from "@/components/NotificationDiagnosticModal";
 
 interface ContactMessage {
   id: string;
@@ -21,6 +22,7 @@ export default function ContactMessagesAdminPage() {
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [desktopNotificationGranted, setDesktopNotificationGranted] = useState(false);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [liveBannerAlert, setLiveBannerAlert] = useState<{
     name: string;
     message: string;
@@ -103,14 +105,32 @@ export default function ContactMessagesAdminPage() {
   }, []);
 
   const handleEnableAlerts = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      alert("Your browser does not support desktop notifications.");
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      setShowDiagnosticModal(true);
+      return;
+    }
+
     const granted = await requestDesktopNotificationPermission();
     setDesktopNotificationGranted(granted);
     playNotificationSound();
+
     if (granted) {
       showDesktopNotification(
-        "Notifications Enabled! 🔔",
-        "You will receive live desktop alerts when students and visitors send contact inquiries."
+        "🔔 Test Alert: Contact Messages",
+        "Live desktop alerts are active! Whenever a website visitor sends a contact inquiry, you will receive an alert like this.",
+        () => {
+          if (typeof window !== 'undefined') window.focus();
+        },
+        `michaelmath-msgtest-${Date.now()}`,
+        { requireInteraction: true }
       );
+    } else {
+      setShowDiagnosticModal(true);
     }
   };
 
@@ -239,10 +259,24 @@ export default function ContactMessagesAdminPage() {
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                 : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
             }`}
-            title={desktopNotificationGranted ? "Desktop notifications are active" : "Enable desktop browser alerts"}
+            title={desktopNotificationGranted ? "Desktop notifications are active — Click to test" : "Enable desktop browser alerts"}
           >
             <Bell className={`w-3.5 h-3.5 ${desktopNotificationGranted ? 'text-emerald-600' : 'text-amber-600 animate-bounce'}`} />
             {desktopNotificationGranted ? 'Alerts Active' : 'Enable Alerts'}
+            {desktopNotificationGranted && (
+              <span className="text-[10px] bg-emerald-200/80 text-emerald-900 px-1.5 py-0.5 rounded font-black ml-0.5">
+                Test
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowDiagnosticModal(true)}
+            className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 text-text/70 text-xs font-bold px-3 py-2.5 rounded-xl border border-gray-200 transition-all shadow-2xs"
+            title="Desktop alert settings & Mac troubleshooting guide"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-text/60" />
+            <span className="hidden sm:inline">Mac Alert Guide</span>
           </button>
 
           {unreadCount > 0 && (
@@ -382,6 +416,13 @@ export default function ContactMessagesAdminPage() {
           )}
         </div>
       </div>
+
+      <NotificationDiagnosticModal
+        isOpen={showDiagnosticModal}
+        onClose={() => setShowDiagnosticModal(false)}
+        pageTitle="Contact Messages"
+        onPermissionUpdated={(granted) => setDesktopNotificationGranted(granted)}
+      />
     </div>
   );
 }

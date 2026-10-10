@@ -160,6 +160,169 @@ export default function SubmissionsPage() {
     window.open(selectedSubmission.file_url, '_blank');
   };
 
+  // Check if all homework & quizzes for a topic are now approved and mark lesson complete
+  const checkAndCompleteTopicForStudent = async (
+    topicId: string,
+    studentId: string,
+    reviewedSubmissionId: string
+  ) => {
+    try {
+      const { data: topic } = await supabase
+        .from('topics')
+        .select('id, title, content_items, section_id')
+        .eq('id', topicId)
+        .single();
+
+      if (!topic) return { isComplete: false, topicTitle: 'Lesson', courseId: '' };
+
+      let courseId = '';
+      if (topic.section_id) {
+        const { data: sec } = await supabase
+          .from('sections')
+          .select('course_id')
+          .eq('id', topic.section_id)
+          .single();
+        if (sec?.course_id) courseId = sec.course_id;
+      }
+
+      const contentItems = Array.isArray(topic.content_items)
+        ? topic.content_items
+        : (typeof topic.content_items === 'string'
+            ? (() => { try { return JSON.parse(topic.content_items); } catch { return []; } })()
+            : []);
+
+      // 1. Extract Worksheets
+      const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
+      const { data: legacyPdfs } = await supabase
+        .from('topic_pdfs')
+        .select('*')
+        .eq('topic_id', topicId)
+        .eq('type', 'worksheet');
+      const legacyWorksheets = legacyPdfs || [];
+
+      const allWorksheets: any[] = contentWorksheets.length > 0
+        ? contentWorksheets.map((cw: any, idx: number) => ({
+            id: cw.id || `ws_${idx}`,
+            title: cw.title || (contentWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework')
+          }))
+        : legacyWorksheets.map((p: any, idx: number) => ({
+            id: p.id || `legacy_ws_${idx}`,
+            title: p.title || (legacyWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework')
+          }));
+
+      // 2. Extract Quizzes
+      const contentQuizzes = contentItems.filter((i: any) => i && i.type === 'quiz');
+      const { data: dbQuizzes } = await supabase
+        .from('quizzes')
+        .select('*')
+        .eq('topic_id', topicId);
+      const rawDbQuizzes = dbQuizzes || [];
+
+      let allQuizzes: any[] = [];
+      if (rawDbQuizzes.length > 0) {
+        allQuizzes = rawDbQuizzes.map((dbQ: any, qIdx: number) => {
+          const matchedCq = contentQuizzes.find((cq: any) => 
+            (cq.id && dbQ.id && cq.id === dbQ.id) ||
+            (cq.quizPdfUrl && dbQ.quiz_pdf_url && cq.quizPdfUrl === dbQ.quiz_pdf_url) ||
+            (cq.title && dbQ.settings?.title && cq.title === dbQ.settings?.title)
+          ) || contentQuizzes[qIdx];
+          return {
+            id: dbQ.id,
+            matchedCqId: matchedCq?.id,
+            isPdfQuiz: !!(dbQ.quiz_pdf_url || matchedCq?.quizPdfUrl)
+          };
+        });
+      } else if (contentQuizzes.length > 0) {
+        allQuizzes = contentQuizzes.map((cq: any, qIdx: number) => ({
+          id: cq.id || `quiz_${topicId}_${qIdx}`,
+          matchedCqId: cq.id,
+          isPdfQuiz: !!cq.quizPdfUrl
+        }));
+      }
+
+      // 3. Fetch manual_submissions for this topic & student
+      const { data: manualSubs } = await supabase
+        .from('manual_submissions')
+        .select('*')
+        .eq('topic_id', topicId)
+        .eq('student_id', studentId);
+
+      const safeManualSubs = (manualSubs || []).map((s: any) => {
+        if (s.id === reviewedSubmissionId) {
+          return { ...s, status: 'reviewed' };
+        }
+        return s;
+      });
+
+      // 4. Fetch quiz_submissions
+      let quizSubs: any[] = [];
+      if (allQuizzes.length > 0) {
+        const qIds = allQuizzes.map((q: any) => q.id).concat(allQuizzes.map((q: any) => q.matchedCqId).filter(Boolean));
+        const { data: qsData } = await supabase
+          .from('quiz_submissions')
+          .select('*')
+          .in('quiz_id', qIds)
+          .eq('student_id', studentId);
+        quizSubs = qsData || [];
+      }
+
+      // 5. Check Worksheets: every worksheet MUST be reviewed
+      if (allWorksheets.length > 0) {
+        const allWsApproved = allWorksheets.every((ws: any, idx: number) => {
+          const subType = allWorksheets.length === 1 
+            ? 'worksheet' 
+            : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
+          
+          const sub = safeManualSubs.find((s: any) => 
+            s.type === subType || 
+            (idx === 0 && s.type === 'worksheet') || 
+            s.type === `worksheet_${idx}` ||
+            (ws.id && s.type === `worksheet_${ws.id}`)
+          );
+          return sub && sub.status === 'reviewed';
+        });
+        if (!allWsApproved) return { isComplete: false, topicTitle: topic.title, courseId };
+      }
+
+      // 6. Check Quizzes: every quiz MUST be completed and PDF quizzes reviewed
+      if (allQuizzes.length > 0) {
+        const allQzApproved = allQuizzes.every((quiz: any) => {
+          // If PDF quiz, must have reviewed manual_submissions record
+          const pdfSub = safeManualSubs.find((s: any) => 
+            s.type === `pdf_quiz_${quiz.id}` || 
+            (quiz.matchedCqId && s.type === `pdf_quiz_${quiz.matchedCqId}`) || 
+            s.type === 'pdf_quiz'
+          );
+          if (pdfSub) {
+            return pdfSub.status === 'reviewed';
+          }
+          // If online quiz, must have submission in quiz_submissions
+          const qSub = quizSubs.find((s: any) => s.quiz_id === quiz.id || (quiz.matchedCqId && s.quiz_id === quiz.matchedCqId));
+          if (qSub) return true;
+
+          return false;
+        });
+        if (!allQzApproved) return { isComplete: false, topicTitle: topic.title, courseId };
+      }
+
+      const hasRequirements = allWorksheets.length > 0 || allQuizzes.length > 0;
+      if (!hasRequirements) return { isComplete: false, topicTitle: topic.title, courseId };
+
+      // Mark topic complete in topic_progress
+      await supabase.from('topic_progress').upsert({
+        student_id: studentId,
+        topic_id: topicId,
+        is_completed: true,
+        last_accessed_at: new Date().toISOString()
+      }, { onConflict: 'student_id,topic_id' });
+
+      return { isComplete: true, topicTitle: topic.title, courseId };
+    } catch (err) {
+      console.error("Error in checkAndCompleteTopicForStudent:", err);
+      return { isComplete: false, topicTitle: 'Lesson', courseId: '' };
+    }
+  };
+
   const handleReviewSubmit = async () => {
     if (!selectedSubmission) return;
     setIsSubmittingReview(true);
@@ -180,18 +343,39 @@ export default function SubmissionsPage() {
       // Immediately notify layout to decrement sidebar pending badge
       window.dispatchEvent(new CustomEvent('submission_reviewed'));
 
-      // Send notification to student
-      const { error: notifyError } = await supabase.from('notifications').insert({
-        student_id: selectedSubmission.student_id,
-        title: `Your ${selectedSubmission.type === 'worksheet' ? 'Worksheet' : 'Quiz'} was Reviewed!`,
-        message: `Your submission for "${selectedSubmission.topics?.title || 'a topic'}" has been reviewed.${score ? ` Score: ${score}` : ''} Check your course for details.`,
-        type: 'system',
-        link_url: '#'
-      });
+      // Check if all topic requirements for this student are now reviewed & approved
+      const { isComplete, topicTitle, courseId } = await checkAndCompleteTopicForStudent(
+        selectedSubmission.topic_id,
+        selectedSubmission.student_id,
+        selectedSubmission.id
+      );
 
-      if (notifyError) throw notifyError;
+      const linkUrl = courseId ? `/dashboard/courses/${courseId}` : '/dashboard/courses';
 
-      alert("Review submitted and student notified!");
+      if (isComplete) {
+        // Send Lesson Completed notification
+        await supabase.from('notifications').insert({
+          student_id: selectedSubmission.student_id,
+          title: `🎉 Lesson Completed: ${topicTitle}!`,
+          message: `Congratulations! Your teacher Michael Gad has reviewed and approved your submission for "${topicTitle}". This lesson is now marked 100% complete!`,
+          type: 'success',
+          link_url: linkUrl
+        });
+
+        alert(`🎉 Review submitted! All requirements for "${topicTitle}" have been approved — lesson marked COMPLETE for the student and they have been notified!`);
+      } else {
+        // Send standard individual item review notification
+        await supabase.from('notifications').insert({
+          student_id: selectedSubmission.student_id,
+          title: `Your ${selectedSubmission.type === 'worksheet' ? 'Worksheet' : 'Quiz'} was Reviewed!`,
+          message: `Your submission for "${topicTitle}" has been reviewed.${score ? ` Score: ${score}` : ''} Check your course for details.`,
+          type: 'system',
+          link_url: linkUrl
+        });
+
+        alert("Review submitted and student notified!");
+      }
+
       setSelectedSubmission(null);
       setScore('');
       setFeedbackText('');

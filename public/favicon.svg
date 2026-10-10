@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="emeraldBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#42D894" />
+      <stop offset="50%" stop-color="#34C585" />
+      <stop offset="100%" stop-color="#1E9E64" />
+    </linearGradient>
+    <linearGradient id="innerGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.0" />
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0C5030" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#emeraldBg)" />
+  <rect x="33" y="33" width="446" height="446" rx="111" fill="none" stroke="url(#innerGlow)" stroke-width="4" />
+
+  <!-- Academy Leaf Emblem -->
+  <g transform="translate(84, 84) scale(14.333)" filter="url(#dropShadow)">
+    <!-- Outer Leaf Body -->
+    <path 
+      d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" 
+      fill="#FFFFFF" 
+      stroke="#FFFFFF" 
+      stroke-width="1" 
+      stroke-linejoin="round" 
+    />
+    
+    <!-- Base Stem (white extension outside leaf) -->
+    <path 
+      d="M2 21c0-2.8 1.5-4.8 4.2-5.7" 
+      fill="none" 
+      stroke="#FFFFFF" 
+      stroke-width="2.4" 
+      stroke-linecap="round" 
+    />
+
+    <!-- Inner Vein / Growth Curve (cut into the white leaf with brand emerald) -->
+    <path 
+      d="M6.2 15.3C8.8 14.5 11.8 13.2 13.5 11.2C15.2 9.2 16.5 6.8 17.5 4.5" 
+      fill="none" 
+      stroke="#25A46A" 
+      stroke-width="2" 
+      stroke-linecap="round" 
+      stroke-linejoin="round" 
+    />
+  </g>
+</svg>

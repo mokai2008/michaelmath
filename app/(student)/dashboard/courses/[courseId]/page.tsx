@@ -24,7 +24,8 @@ import {
   BookOpen,
   FlaskConical,
   Gamepad2,
-  RotateCcw
+  RotateCcw,
+  Clock
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -115,7 +116,7 @@ function getCanvaQuizTotalMarks(rawCode?: string): number {
   return 0;
 }
 
-function checkTopicRequirementsMet(
+function checkTopicRequirementsSubmitted(
   topic: any, 
   subMap: Record<string, any> = {}, 
   quizSubsList: any[] = []
@@ -128,19 +129,17 @@ function checkTopicRequirementsMet(
         ? (() => { try { return JSON.parse(topic.content_items); } catch { return []; } })()
         : []);
   
-  // 1. Extract and check Worksheets
+  // 1. Extract and check Worksheets submission
   const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
   const legacyWorksheets = (Array.isArray(topic.topic_pdfs) ? topic.topic_pdfs : []).filter((p: any) => p && p.type === 'worksheet');
   const allWorksheets: any[] = contentWorksheets.length > 0 
     ? contentWorksheets.map((cw: any, idx: number) => ({
         id: cw.id || `ws_${idx}`,
-        type: 'worksheet',
-        title: cw.title || (contentWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework')
+        type: 'worksheet'
       }))
     : legacyWorksheets.map((p: any, idx: number) => ({
         id: p.id || `legacy_ws_${idx}`,
-        type: 'worksheet',
-        title: p.title || (legacyWorksheets.length > 1 ? `Homework ${idx + 1}` : 'Topic Homework')
+        type: 'worksheet'
       }));
 
   const safeSubMap = subMap || {};
@@ -157,7 +156,7 @@ function checkTopicRequirementsMet(
     if (!allWsSubmitted) return false;
   }
 
-  // 2. Extract and check Quizzes
+  // 2. Extract and check Quizzes submission
   const contentQuizzes = contentItems.filter((i: any) => i && i.type === 'quiz');
   const rawDbQuizzes = Array.isArray(topic.quizzes) ? topic.quizzes : [];
 
@@ -187,7 +186,7 @@ function checkTopicRequirementsMet(
 
   const safeQuizSubs = Array.isArray(quizSubsList) ? quizSubsList : [];
   if (allQuizzes.length > 0) {
-    const allQzCompleted = allQuizzes.every((quiz: any) => {
+    const allQzSubmitted = allQuizzes.every((quiz: any) => {
       if (Array.isArray(quiz.quiz_submissions) && quiz.quiz_submissions.length > 0) return true;
       if (safeQuizSubs.some((s: any) => s && (s.quiz_id === quiz.id || (quiz.matchedCqId && s.quiz_id === quiz.matchedCqId)))) {
         return true;
@@ -199,10 +198,104 @@ function checkTopicRequirementsMet(
       }
       return false;
     });
-    if (!allQzCompleted) return false;
+    if (!allQzSubmitted) return false;
   }
 
-  // Topic must have at least one worksheet or quiz to auto-complete!
+  const hasRequirements = allWorksheets.length > 0 || allQuizzes.length > 0;
+  return hasRequirements;
+}
+
+function checkTopicRequirementsApproved(
+  topic: any, 
+  subMap: Record<string, any> = {}, 
+  quizSubsList: any[] = []
+): boolean {
+  if (!topic) return false;
+  
+  const contentItems = Array.isArray(topic.content_items)
+    ? topic.content_items
+    : (typeof topic.content_items === 'string'
+        ? (() => { try { return JSON.parse(topic.content_items); } catch { return []; } })()
+        : []);
+  
+  // 1. Worksheets: EVERY worksheet MUST be reviewed and approved by teacher
+  const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
+  const legacyWorksheets = (Array.isArray(topic.topic_pdfs) ? topic.topic_pdfs : []).filter((p: any) => p && p.type === 'worksheet');
+  const allWorksheets: any[] = contentWorksheets.length > 0 
+    ? contentWorksheets.map((cw: any, idx: number) => ({
+        id: cw.id || `ws_${idx}`,
+        type: 'worksheet'
+      }))
+    : legacyWorksheets.map((p: any, idx: number) => ({
+        id: p.id || `legacy_ws_${idx}`,
+        type: 'worksheet'
+      }));
+
+  const safeSubMap = subMap || {};
+  if (allWorksheets.length > 0) {
+    const allWsApproved = allWorksheets.every((ws: any, idx: number) => {
+      const subType = allWorksheets.length === 1 
+        ? 'worksheet' 
+        : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
+      const sub = safeSubMap[`${topic.id}_${subType}`]
+        || (idx === 0 ? safeSubMap[`${topic.id}_worksheet`] : null)
+        || safeSubMap[`${topic.id}_worksheet_${idx}`];
+      return sub && sub.status === 'reviewed';
+    });
+    if (!allWsApproved) return false;
+  }
+
+  // 2. Quizzes: PDF quiz MUST be 'reviewed', online quiz must have completed submission
+  const contentQuizzes = contentItems.filter((i: any) => i && i.type === 'quiz');
+  const rawDbQuizzes = Array.isArray(topic.quizzes) ? topic.quizzes : [];
+
+  let allQuizzes: any[] = [];
+  if (rawDbQuizzes.length > 0) {
+    allQuizzes = rawDbQuizzes.map((dbQ: any, qIdx: number) => {
+      const matchedCq = contentQuizzes.find((cq: any) => 
+        (cq.id && dbQ.id && cq.id === dbQ.id) ||
+        (cq.quizPdfUrl && dbQ.quiz_pdf_url && cq.quizPdfUrl === dbQ.quiz_pdf_url) ||
+        (cq.quizEmbedCode && dbQ.embed_code && cq.quizEmbedCode === dbQ.embed_code) ||
+        (cq.title && dbQ.settings?.title && cq.title === dbQ.settings?.title)
+      ) || contentQuizzes[qIdx];
+
+      return {
+        id: dbQ.id,
+        matchedCqId: matchedCq?.id,
+        isPdfQuiz: !!(dbQ.quiz_pdf_url || matchedCq?.quizPdfUrl),
+        quiz_submissions: Array.isArray(dbQ.quiz_submissions) ? dbQ.quiz_submissions : (dbQ.quiz_submissions ? [dbQ.quiz_submissions] : [])
+      };
+    });
+  } else if (contentQuizzes.length > 0) {
+    allQuizzes = contentQuizzes.map((cq: any, qIdx: number) => ({
+      id: cq.id || `quiz_${topic.id}_${qIdx}`,
+      matchedCqId: cq.id,
+      isPdfQuiz: !!cq.quizPdfUrl,
+      quiz_submissions: []
+    }));
+  }
+
+  const safeQuizSubs = Array.isArray(quizSubsList) ? quizSubsList : [];
+  if (allQuizzes.length > 0) {
+    const allQzApproved = allQuizzes.every((quiz: any) => {
+      const pdfSub = safeSubMap[`${topic.id}_pdf_quiz_${quiz.id}`] || 
+                     (quiz.matchedCqId && safeSubMap[`${topic.id}_pdf_quiz_${quiz.matchedCqId}`]) || 
+                     safeSubMap[`${topic.id}_pdf_quiz`];
+      if (pdfSub) {
+        return pdfSub.status === 'reviewed';
+      }
+      if (quiz.isPdfQuiz) {
+        return false;
+      }
+      if (Array.isArray(quiz.quiz_submissions) && quiz.quiz_submissions.length > 0) return true;
+      if (safeQuizSubs.some((s: any) => s && (s.quiz_id === quiz.id || (quiz.matchedCqId && s.quiz_id === quiz.matchedCqId)))) {
+        return true;
+      }
+      return false;
+    });
+    if (!allQzApproved) return false;
+  }
+
   const hasRequirements = allWorksheets.length > 0 || allQuizzes.length > 0;
   return hasRequirements;
 }
@@ -462,8 +555,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           if (prog) {
             progMap[t.id] = prog.is_completed;
           } else {
-            // Check if topic was already completed via homework + quizzes
-            if (checkTopicRequirementsMet(t, subMap, quizSubs)) {
+            // Check if topic was already approved via homework + quizzes
+            if (checkTopicRequirementsApproved(t, subMap, quizSubs)) {
               progMap[t.id] = true;
               supabase.from('topic_progress').upsert({
                 student_id: session.user.id,
@@ -606,6 +699,33 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     const isComp = forceStatus !== undefined ? forceStatus : !progress[topicId];
     if (forceStatus !== undefined && progress[topicId] === forceStatus) return;
 
+    // If student is trying to mark complete, ensure all homework & quiz requirements are approved
+    if (isComp) {
+      const topicObj = (course?.sections || []).flatMap((s: any) => s.topics || []).find((t: any) => String(t.id) === String(topicId)) || (activeTopic?.id === topicId ? activeTopic : null);
+      if (topicObj) {
+        const contentItems = Array.isArray(topicObj.content_items)
+          ? topicObj.content_items
+          : (typeof topicObj.content_items === 'string'
+              ? (() => { try { return JSON.parse(topicObj.content_items); } catch { return []; } })()
+              : []);
+        const hasWorksheets = contentItems.some((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title)) || (Array.isArray(topicObj.topic_pdfs) && topicObj.topic_pdfs.some((p: any) => p && p.type === 'worksheet'));
+        const hasQuizzes = contentItems.some((i: any) => i && i.type === 'quiz') || (Array.isArray(topicObj.quizzes) && topicObj.quizzes.length > 0);
+
+        if (hasWorksheets || hasQuizzes) {
+          const isApproved = checkTopicRequirementsApproved(topicObj, manualSubmissions, allQuizSubmissions);
+          if (!isApproved) {
+            const isSubmitted = checkTopicRequirementsSubmitted(topicObj, manualSubmissions, allQuizSubmissions);
+            if (isSubmitted) {
+              alert("⏳ This lesson requires teacher approval! Your submission has been received and is waiting for Michael Gad to review and approve it. You will be notified as soon as it is marked complete.");
+            } else {
+              alert("🔒 Please submit your homework and quiz for this lesson. Once reviewed and approved by your teacher, this lesson will automatically be marked complete!");
+            }
+            return;
+          }
+        }
+      }
+    }
+
     setProgress(p => ({ ...p, [topicId]: isComp }));
     const { error } = await supabase.from('topic_progress').upsert({
       student_id: sessionUser.id,
@@ -619,15 +739,64 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     }
   };
 
-  // Auto-mark active topic as complete if requirements are met while on the topic
+  // Auto-mark active topic as complete if all requirements are approved by teacher
   useEffect(() => {
     if (!activeTopic || !sessionUser || isLoading) return;
     if (progress[activeTopic.id]) return;
 
-    if (checkTopicRequirementsMet(activeTopic, manualSubmissions, allQuizSubmissions)) {
+    if (checkTopicRequirementsApproved(activeTopic, manualSubmissions, allQuizSubmissions)) {
       handleMarkComplete(activeTopic.id, true);
     }
   }, [activeTopic?.id, manualSubmissions, allQuizSubmissions, progress, sessionUser?.id, isLoading]);
+
+  // Realtime subscription for student's submission approvals & lesson completions
+  useEffect(() => {
+    if (!sessionUser?.id || !params.courseId) return;
+
+    const channel = supabase
+      .channel(`student_course_player_${sessionUser.id}_${params.courseId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'topic_progress',
+          filter: `student_id=eq.${sessionUser.id}`
+        },
+        (payload: any) => {
+          if (payload.new && payload.new.topic_id) {
+            setProgress(prev => ({
+              ...prev,
+              [payload.new.topic_id]: !!payload.new.is_completed
+            }));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'manual_submissions',
+          filter: `student_id=eq.${sessionUser.id}`
+        },
+        (payload: any) => {
+          if (payload.new && payload.new.topic_id && payload.new.type) {
+            const key = `${payload.new.topic_id}_${payload.new.type}`;
+            setManualSubmissions(prev => ({
+              ...prev,
+              [key]: payload.new,
+              ...(payload.new.type === 'worksheet' ? { [`${payload.new.topic_id}_worksheet`]: payload.new } : {})
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionUser?.id, params.courseId]);
 
   if (isLoading) {
     return (
@@ -678,8 +847,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const updatedQuizSubs = [...allQuizSubmissions, newSub];
       setAllQuizSubmissions(updatedQuizSubs);
 
-      // Auto-mark topic as complete if all requirements are now satisfied
-      if (activeTopic && checkTopicRequirementsMet(activeTopic, manualSubmissions, updatedQuizSubs)) {
+      // Auto-mark topic as complete if all requirements are approved by teacher
+      if (activeTopic && checkTopicRequirementsApproved(activeTopic, manualSubmissions, updatedQuizSubs)) {
         if (!progress[activeTopic.id]) {
           await handleMarkComplete(activeTopic.id, true);
         }
@@ -789,17 +958,13 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         } catch (e) {}
       }
 
-      // Auto-mark topic as complete if all requirements are now satisfied
+      // Check submission status (completes only after teacher review & approval)
       const topicObj = (course?.sections || []).flatMap((s: any) => s.topics || []).find((t: any) => String(t.id) === String(topicId)) || activeTopic;
-      if (topicObj && checkTopicRequirementsMet(topicObj, updatedManualSubs, allQuizSubmissions)) {
-        if (!progress[topicId]) {
-          await handleMarkComplete(topicId, true);
-          alert("🎉 Homework uploaded! All topic requirements completed — this topic has been marked complete!");
-        } else {
-          alert("Worksheet answers uploaded successfully!");
-        }
+      const allSubmitted = topicObj && checkTopicRequirementsSubmitted(topicObj, updatedManualSubs, allQuizSubmissions);
+      if (allSubmitted) {
+        alert("✅ Homework uploaded successfully! Your submission is now awaiting teacher approval. Once Michael Gad reviews and approves it, this lesson will automatically be marked complete and you will receive a notification!");
       } else {
-        alert("Worksheet answers uploaded successfully!");
+        alert("Worksheet answers uploaded successfully! Please ensure all remaining homework and quiz requirements are submitted.");
       }
     } catch (err: any) {
       console.error(err);
@@ -944,17 +1109,12 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
         };
       });
 
-      // Auto-mark topic as complete if all requirements are now satisfied
-      if (checkTopicRequirementsMet(activeTopic, updatedManualSubs, updatedQuizSubs)) {
-        await supabase.from('topic_progress').upsert({
-          student_id: sessionUser.id,
-          topic_id: activeTopic.id,
-          is_completed: true,
-          last_accessed_at: new Date().toISOString()
-        }, { onConflict: 'student_id,topic_id' });
-        alert("🎉 Quiz uploaded! All topic requirements completed — this topic has been marked complete!");
+      // Check submission status (completes only after teacher review & approval)
+      const allSubmitted = checkTopicRequirementsSubmitted(activeTopic, updatedManualSubs, updatedQuizSubs);
+      if (allSubmitted) {
+        alert("✅ Quiz uploaded successfully! Your submission is now awaiting teacher approval. Once Michael Gad reviews and approves it, this lesson will automatically be marked complete and you will receive a notification!");
       } else {
-        alert("Quiz answers uploaded successfully!");
+        alert("Quiz answers uploaded successfully! Please ensure all remaining homework and quiz requirements are submitted.");
       }
 
       // Persist active topic in both localStorage and sessionStorage
@@ -1272,6 +1432,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           >
                             {!isTopicRowUnlocked ? (
                               <Lock className={`w-4 h-4 mt-0.5 flex-shrink-0 text-orange-400`} />
+                            ) : progress[topic.id] ? (
+                              <CheckCircle2 className={`w-5 h-5 mt-0.5 flex-shrink-0 text-emerald-500`} />
+                            ) : checkTopicRequirementsSubmitted(topic, manualSubmissions, allQuizSubmissions) ? (
+                              <Clock className={`w-5 h-5 mt-0.5 flex-shrink-0 text-amber-500`} />
                             ) : (
                               <PlayCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${isActive ? 'text-primary' : 'text-gray-400'}`} />
                             )}
@@ -1300,7 +1464,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   )}
                                 </div>
                               </div>
-                              {progress[topic.id] && <div className="text-xs text-green-600 mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Completed</div>}
+                              {progress[topic.id] ? (
+                                <div className="text-xs text-green-600 mt-1 flex items-center gap-1 font-semibold">
+                                  <CheckCircle2 className="w-3 h-3" /> Completed
+                                </div>
+                              ) : checkTopicRequirementsSubmitted(topic, manualSubmissions, allQuizSubmissions) ? (
+                                <div className="text-[11px] text-amber-600 mt-1 flex items-center gap-1 font-semibold">
+                                  <Clock className="w-3 h-3 animate-pulse" /> Awaiting Approval
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         );
@@ -1599,43 +1771,9 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                 </div>
                 <div>
                   {(() => {
-                    let canComplete = true;
-                    let lockReason = "";
-                    
-                    if (allWorksheets.length > 0) {
-                      const safeManualSubs = manualSubmissions || {};
-                      const allSubmitted = allWorksheets.every((ws: any, idx: number) => {
-                        const subType = allWorksheets.length === 1 
-                          ? 'worksheet' 
-                          : (ws.id ? `worksheet_${ws.id}` : `worksheet_${idx}`);
-                        const sub = safeManualSubs[`${activeTopic.id}_${subType}`]
-                          || (idx === 0 ? safeManualSubs[`${activeTopic.id}_worksheet`] : null)
-                          || safeManualSubs[`${activeTopic.id}_worksheet_${idx}`];
-                        return !!sub;
-                      });
-                      if (!allSubmitted) {
-                        canComplete = false;
-                        lockReason = "upload all worksheet answers";
-                      }
-                    }
-
+                    const hasWorksheets = allWorksheets.length > 0;
                     const hasQuiz = allQuizzes.length > 0;
-                    if (hasQuiz && canComplete) {
-                      const safeQuizSubs = Array.isArray(allQuizSubmissions) ? allQuizSubmissions : [];
-                      const safeManualSubs = manualSubmissions || {};
-                      const incompleteQuiz = allQuizzes.find((q: any) => {
-                        const directSubs = Array.isArray(q.quiz_submissions) ? q.quiz_submissions : (q.quiz_submissions ? [q.quiz_submissions] : []);
-                        const hasDirectSubs = directSubs.length > 0;
-                        const hasStateSubs = safeQuizSubs.some((s: any) => s && (s.quiz_id === q.id || (q.matchedCqId && s.quiz_id === q.matchedCqId)));
-                        const hasPdfSub = !!(safeManualSubs[`${activeTopic.id}_pdf_quiz_${q.id}`] || (q.matchedCqId && safeManualSubs[`${activeTopic.id}_pdf_quiz_${q.matchedCqId}`]) || safeManualSubs[`${activeTopic.id}_pdf_quiz`]);
-                        return !hasDirectSubs && !hasStateSubs && !hasPdfSub;
-                      });
-                      if (incompleteQuiz) {
-                        canComplete = false;
-                        lockReason = allWorksheets.length > 0 ? "upload homework and complete quiz" : "complete all quizzes";
-                      }
-                    }
-
+                    const hasRequirements = hasWorksheets || hasQuiz;
                     const isTopicCompleted = !!progress[activeTopic.id];
 
                     if (isTopicCompleted) {
@@ -1651,14 +1789,27 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       );
                     }
 
-                    if (!canComplete) {
+                    if (hasRequirements) {
+                      const allSubmitted = checkTopicRequirementsSubmitted(activeTopic, manualSubmissions, allQuizSubmissions);
+                      if (allSubmitted) {
+                        return (
+                          <div 
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 select-none shadow-sm"
+                            title="Your submissions have been received and are waiting for Michael Gad to review and approve."
+                          >
+                            <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                            <span>⏳ Awaiting Teacher Approval</span>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div 
                           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200 select-none shadow-sm"
-                          title="Upload your homework and complete the quiz to automatically finish this topic"
+                          title="Submit your homework and quiz for teacher review and approval"
                         >
                           <Lock className="w-4 h-4 text-gray-400" />
-                          <span>Auto-completes after {allWorksheets.length > 0 && hasQuiz ? 'homework & quiz' : (allWorksheets.length > 0 ? 'homework' : 'quiz')}</span>
+                          <span>Completes after teacher approves {hasWorksheets && hasQuiz ? 'homework & quiz' : (hasWorksheets ? 'homework' : 'quiz')}</span>
                         </div>
                       );
                     }
@@ -2632,8 +2783,16 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                   <div className="flex items-center justify-between mb-2">
                                     <span className="text-xs font-extrabold text-purple-800 uppercase tracking-wider">Step 3: Score & Review</span>
                                     {submission ? (
-                                      <span className="text-xs font-black text-purple-700 bg-white px-2.5 py-0.5 rounded-lg border border-purple-200 shadow-sm">
-                                        Score: {submission.score} / {actualTotalMarks}
+                                      <span className={`text-xs font-black bg-white px-2.5 py-0.5 rounded-lg border shadow-sm ${
+                                        (hasQuestions || isCanvaQuiz || quizManualSub?.status === 'reviewed')
+                                          ? 'text-purple-700 border-purple-200'
+                                          : 'text-orange-600 border-orange-200'
+                                      }`}>
+                                        {hasQuestions || isCanvaQuiz
+                                          ? `Score: ${submission.score} / ${actualTotalMarks}`
+                                          : quizManualSub?.status === 'reviewed'
+                                            ? `Score: ${quizManualSub.score !== null && quizManualSub.score !== undefined ? quizManualSub.score : submission.score} / ${actualTotalMarks}`
+                                            : 'Pending Review'}
                                       </span>
                                     ) : (
                                       <span className="text-xs font-bold text-text/40 bg-white px-2.5 py-0.5 rounded-lg border border-gray-200">
@@ -2647,11 +2806,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                       <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
                                         <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
                                           <CheckCircle2 className="w-4 h-4 text-purple-600" />
-                                          {hasQuestions || isCanvaQuiz ? 'Quiz Completed & Graded' : 'Answers Submitted'}
+                                          {hasQuestions || isCanvaQuiz 
+                                            ? 'Quiz Completed & Graded' 
+                                            : (quizManualSub?.status === 'reviewed' ? 'Quiz Reviewed & Graded' : 'Quiz Submitted for Grading')}
                                         </div>
                                         <p className="text-xs text-text/70 italic">
                                           {quizManualSub?.feedback_text 
-                                            || (submission.score >= actualTotalMarks * 0.7 ? 'Great job! Passing score achieved.' : 'Review your solutions or retake the quiz to improve your score.')}
+                                            || (!hasQuestions && !isCanvaQuiz && quizManualSub?.status !== 'reviewed'
+                                                ? 'Your quiz answers are being reviewed by Michael Gad. Feedback and scores will appear here.'
+                                                : (submission.score >= actualTotalMarks * 0.7 ? 'Great job! Passing score achieved.' : 'Review your solutions or retake the quiz to improve your score.'))}
                                         </p>
                                       </div>
 
@@ -3120,7 +3283,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                         { student_id: sessionUser.id, quiz_id: canvaQuizModal.id, score: scoreToSubmit, submitted_at: new Date().toISOString() }
                       ];
                       setAllQuizSubmissions(updatedQuizSubs);
-                      if (activeTopic && checkTopicRequirementsMet(activeTopic, manualSubmissions, updatedQuizSubs)) {
+                      if (activeTopic && checkTopicRequirementsApproved(activeTopic, manualSubmissions, updatedQuizSubs)) {
                         if (!progress[activeTopic.id]) {
                           handleMarkComplete(activeTopic.id, true);
                         }
