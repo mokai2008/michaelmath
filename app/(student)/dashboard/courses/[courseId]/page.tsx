@@ -25,7 +25,9 @@ import {
   FlaskConical,
   Gamepad2,
   RotateCcw,
-  Clock
+  Clock,
+  ClipboardCheck,
+  Sparkles
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -300,11 +302,31 @@ function checkTopicRequirementsApproved(
   return hasRequirements;
 }
 
+interface SubmissionToast {
+  type: 'worksheet' | 'quiz' | 'completed' | 'info' | 'error';
+  badge: string;
+  statusBadge?: string;
+  title: string;
+  lessonTitle?: string;
+  message: string;
+  subMessage?: string;
+}
+
 export default function CoursePlayerPage({ params }: { params: { courseId: string } }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [course, setCourse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTopic, setActiveTopic] = useState<any>(null);
+  const [submissionToast, setSubmissionToast] = useState<SubmissionToast | null>(null);
+
+  // Auto-dismiss submission toast after 9 seconds
+  useEffect(() => {
+    if (!submissionToast) return;
+    const timer = setTimeout(() => {
+      setSubmissionToast(null);
+    }, 9000);
+    return () => clearTimeout(timer);
+  }, [submissionToast]);
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
   const [selectedMirrorIndex, setSelectedMirrorIndex] = useState<number | null>(null);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
@@ -728,9 +750,25 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           if (!isApproved) {
             const isSubmitted = checkTopicRequirementsSubmitted(topicObj, manualSubmissions, allQuizSubmissions);
             if (isSubmitted) {
-              alert("⏳ This lesson requires teacher approval! Your submission has been received and is waiting for Michael Gad to review and approve it. You will be notified as soon as it is marked complete.");
+              setSubmissionToast({
+                type: 'info',
+                badge: 'Lesson Status',
+                statusBadge: 'Pending Approval ⏳',
+                title: 'Awaiting Teacher Approval',
+                lessonTitle: `${topicObj?.title || 'Lesson'} • ${course?.title || 'Course'}`,
+                message: 'Your submission has been received and is waiting for Michael Gad to review and approve it.',
+                subMessage: '🔔 You will be notified automatically as soon as this lesson is marked complete.'
+              });
             } else {
-              alert("🔒 Please submit your homework and quiz for this lesson. Once reviewed and approved by your teacher, this lesson will automatically be marked complete!");
+              setSubmissionToast({
+                type: 'info',
+                badge: 'Lesson Status',
+                statusBadge: 'Requirements Needed 🔒',
+                title: 'Requirements Incomplete',
+                lessonTitle: `${topicObj?.title || 'Lesson'} • ${course?.title || 'Course'}`,
+                message: 'Please submit your homework and quiz for this lesson first.',
+                subMessage: 'Once reviewed and approved by your teacher, this lesson will automatically be marked complete!'
+              });
             }
             return;
           }
@@ -974,13 +1012,37 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const topicObj = (course?.sections || []).flatMap((s: any) => s.topics || []).find((t: any) => String(t.id) === String(topicId)) || activeTopic;
       const allSubmitted = topicObj && checkTopicRequirementsSubmitted(topicObj, updatedManualSubs, allQuizSubmissions);
       if (allSubmitted) {
-        alert("✅ Homework uploaded successfully! Your submission is now awaiting teacher approval. Once Michael Gad reviews and approves it, this lesson will automatically be marked complete and you will receive a notification!");
+        setSubmissionToast({
+          type: 'worksheet',
+          badge: 'Homework',
+          statusBadge: 'Submitted ✓',
+          title: 'Homework Uploaded Successfully!',
+          lessonTitle: `${topicObj?.title || 'Lesson'} • ${course?.title || 'Course'}`,
+          message: 'Your answers are now awaiting teacher approval. Once Michael Gad reviews and approves them, this lesson will automatically be marked complete.',
+          subMessage: '🎉 All requirements submitted! You will receive a notification as soon as it is approved.'
+        });
       } else {
-        alert("Worksheet answers uploaded successfully! Please ensure all remaining homework and quiz requirements are submitted.");
+        setSubmissionToast({
+          type: 'worksheet',
+          badge: 'Homework',
+          statusBadge: 'Submitted ✓',
+          title: 'Worksheet Uploaded Successfully!',
+          lessonTitle: `${topicObj?.title || 'Lesson'} • ${course?.title || 'Course'}`,
+          message: 'Worksheet answers uploaded successfully! Michael Gad will review and score your work soon.',
+          subMessage: '📌 Please ensure all remaining homework and quiz requirements are submitted.'
+        });
       }
     } catch (err: any) {
       console.error(err);
-      alert("Error uploading worksheet: " + err.message);
+      setSubmissionToast({
+        type: 'error',
+        badge: 'Upload Error',
+        statusBadge: 'Failed ✕',
+        title: 'Worksheet Upload Failed',
+        lessonTitle: `${activeTopic?.title || 'Lesson'}`,
+        message: err.message || 'There was an error uploading your worksheet. Please try again.',
+        subMessage: 'Please make sure your file is a valid PDF.'
+      });
     } finally {
       setIsUploadingWorksheet(null);
     }
@@ -1124,9 +1186,25 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       // Check submission status (completes only after teacher review & approval)
       const allSubmitted = checkTopicRequirementsSubmitted(activeTopic, updatedManualSubs, updatedQuizSubs);
       if (allSubmitted) {
-        alert("✅ Quiz uploaded successfully! Your submission is now awaiting teacher approval. Once Michael Gad reviews and approves it, this lesson will automatically be marked complete and you will receive a notification!");
+        setSubmissionToast({
+          type: 'quiz',
+          badge: 'PDF Quiz',
+          statusBadge: 'Submitted ✓',
+          title: 'Quiz Uploaded Successfully!',
+          lessonTitle: `${activeTopic?.title || 'Lesson'} • ${course?.title || 'Course'}`,
+          message: 'Your quiz submission is now awaiting teacher approval. Once Michael Gad reviews and approves it, this lesson will automatically be marked complete.',
+          subMessage: '🎉 All requirements submitted! You will receive a notification as soon as it is approved.'
+        });
       } else {
-        alert("Quiz answers uploaded successfully! Please ensure all remaining homework and quiz requirements are submitted.");
+        setSubmissionToast({
+          type: 'quiz',
+          badge: 'PDF Quiz',
+          statusBadge: 'Submitted ✓',
+          title: 'PDF Quiz Uploaded Successfully!',
+          lessonTitle: `${activeTopic?.title || 'Lesson'} • ${course?.title || 'Course'}`,
+          message: 'Quiz answers uploaded successfully! Michael Gad will review and score your work soon.',
+          subMessage: '📌 Please ensure all remaining homework and quiz requirements are submitted.'
+        });
       }
 
       // Persist active topic in both localStorage and sessionStorage
@@ -1138,7 +1216,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       }
     } catch (err: any) {
       console.error(err);
-      alert("Error uploading quiz answers: " + err.message);
+      setSubmissionToast({
+        type: 'error',
+        badge: 'Upload Error',
+        statusBadge: 'Failed ✕',
+        title: 'Quiz Upload Failed',
+        lessonTitle: `${activeTopic?.title || 'Lesson'}`,
+        message: err.message || 'There was an error uploading your quiz answers. Please try again.',
+        subMessage: 'Please make sure your file is a valid PDF.'
+      });
     } finally {
       setIsUploadingQuiz(null);
     }
@@ -3356,6 +3442,111 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
           </div>
         );
       })()}
+
+      {/* Real-time Submission Toast Notification (Floating Card, Just like Admin) */}
+      {submissionToast && (
+        <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 max-w-sm sm:max-w-md w-[calc(100%-2.5rem)] sm:w-full pointer-events-auto">
+          <div className={`w-full bg-white rounded-2xl shadow-2xl border-2 p-4 animate-in slide-in-from-top-4 duration-300 ring-4 transition-all ${
+            submissionToast.type === 'error'
+              ? 'border-rose-500/40 ring-rose-500/10'
+              : submissionToast.type === 'info'
+              ? 'border-blue-500/40 ring-blue-500/10'
+              : 'border-emerald-500/40 ring-emerald-500/10'
+          }`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className={`p-2.5 rounded-xl flex-shrink-0 ${
+                submissionToast.type === 'worksheet' 
+                  ? 'bg-blue-50 text-blue-600' 
+                  : submissionToast.type === 'quiz'
+                  ? 'bg-purple-50 text-purple-600'
+                  : submissionToast.type === 'completed'
+                  ? 'bg-emerald-50 text-emerald-600'
+                  : submissionToast.type === 'error'
+                  ? 'bg-rose-50 text-rose-600'
+                  : 'bg-amber-50 text-amber-600'
+              }`}>
+                {submissionToast.type === 'worksheet' ? (
+                  <FileText className="w-5 h-5 animate-pulse" />
+                ) : submissionToast.type === 'quiz' ? (
+                  <ClipboardCheck className="w-5 h-5 animate-pulse" />
+                ) : submissionToast.type === 'completed' ? (
+                  <CheckCircle2 className="w-5 h-5 animate-bounce" />
+                ) : submissionToast.type === 'error' ? (
+                  <X className="w-5 h-5 animate-pulse" />
+                ) : (
+                  <Clock className="w-5 h-5 animate-pulse" />
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                  <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                    submissionToast.type === 'worksheet'
+                      ? 'bg-blue-100 text-blue-700'
+                      : submissionToast.type === 'quiz'
+                      ? 'bg-purple-100 text-purple-700'
+                      : submissionToast.type === 'completed'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : submissionToast.type === 'error'
+                      ? 'bg-rose-100 text-rose-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {submissionToast.badge}
+                  </span>
+                  {submissionToast.statusBadge && (
+                    <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                      submissionToast.type === 'error'
+                        ? 'text-rose-700 bg-rose-50 border-rose-100'
+                        : submissionToast.type === 'info'
+                        ? 'text-blue-700 bg-blue-50 border-blue-100'
+                        : 'text-emerald-700 bg-emerald-50 border-emerald-100'
+                    }`}>
+                      {submissionToast.statusBadge}
+                    </span>
+                  )}
+                </div>
+
+                <h4 className="font-bold text-text text-sm truncate">{submissionToast.title}</h4>
+                {submissionToast.lessonTitle && (
+                  <p className="text-[11px] text-text/50 truncate">{submissionToast.lessonTitle}</p>
+                )}
+
+                <div className="text-xs text-text/80 mt-2 bg-gray-50 p-2.5 rounded-xl border border-gray-100 font-medium space-y-1.5">
+                  <p>{submissionToast.message}</p>
+                  {submissionToast.subMessage && (
+                    <p className="text-[11px] text-text/60 pt-1 border-t border-gray-200/60">
+                      {submissionToast.subMessage}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    onClick={() => setSubmissionToast(null)}
+                    className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                  >
+                    Got it ✓
+                  </button>
+                  <button
+                    onClick={() => setSubmissionToast(null)}
+                    className="text-xs font-semibold text-text/50 hover:text-text px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSubmissionToast(null)}
+                className="text-text/40 hover:text-text p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
