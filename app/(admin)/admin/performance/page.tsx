@@ -101,11 +101,11 @@ export default function PerformancePage() {
           .in('student_id', studentIds),
         supabase
           .from('manual_submissions')
-          .select('id, student_id, topic_id, type, status, score, feedback_text, submitted_at, reviewed_at, topics:topic_id (title)')
+          .select('id, student_id, topic_id, type, status, score, feedback_text, file_url, submitted_at, reviewed_at, topics:topic_id (title)')
           .in('student_id', studentIds),
         supabase
           .from('quiz_submissions')
-          .select('id, student_id, quiz_id, score, submitted_at, quizzes:quiz_id (title, total_marks, passing_score, type, topics:topic_id (title))')
+          .select('id, student_id, quiz_id, score, submitted_at, answers_data, quizzes:quiz_id (id, title, total_marks, passing_score, type, topic_id, topics:topic_id (title))')
           .in('student_id', studentIds),
         supabase
           .from('topic_progress')
@@ -125,7 +125,7 @@ export default function PerformancePage() {
       ] = await Promise.all([
         supabase.from('courses').select('id, title'),
         supabase.from('sections').select('id, title, course_id'),
-        supabase.from('topics').select('id, title, section_id')
+        supabase.from('topics').select('id, title, section_id, content_items')
       ]);
 
       const coursesTitleMap = new Map<string, string>();
@@ -141,12 +141,13 @@ export default function PerformancePage() {
         });
       });
 
-      const topicsMap = new Map<string, { title: string; courseTitle: string | null }>();
+      const topicsMap = new Map<string, { title: string; courseTitle: string | null; content_items: any }>();
       (allAcademyTopics || []).forEach((t: any) => {
         const sec = sectionsInfoMap.get(t.section_id);
         topicsMap.set(t.id, {
           title: t.title || 'Topic Lesson',
-          courseTitle: sec?.courseTitle || (allAcademyCourses && allAcademyCourses[0]?.title) || null
+          courseTitle: sec?.courseTitle || (allAcademyCourses && allAcademyCourses[0]?.title) || null,
+          content_items: t.content_items
         });
       });
 
@@ -158,84 +159,260 @@ export default function PerformancePage() {
         const studentVideos = (videoOpens || []).filter(v => v.student_id === sid);
         const uniqueTopics = new Set(studentVideos.map(v => v.topic_id)).size;
 
-        // Homework: worksheet_submissions + manual_submissions where type = 'worksheet'
-        const wsCount = (worksheetSubs || []).filter(w => w.student_id === sid).length;
-        const manualWsCount = (manualSubs || []).filter(m => m.student_id === sid && m.type === 'worksheet').length;
-        const totalHomework = wsCount + manualWsCount;
+        // Homework: deduplicate worksheets and slot submissions
+        const isPdfQuizSubmission = (s: any) =>
+          s.type === 'pdf_quiz' || (typeof s.type === 'string' && s.type.startsWith('pdf_quiz'));
 
-        // Homework details (combine both sources)
-        const hwDetails = [
-          ...(worksheetSubs || []).filter(w => w.student_id === sid).map(w => ({
+        const studentManualWs = (manualSubs || []).filter(m => m.student_id === sid && !isPdfQuizSubmission(m));
+        const studentDirectWs = (worksheetSubs || []).filter(w => w.student_id === sid);
+
+        const hwMap = new Map<string, any>();
+
+        studentDirectWs.forEach(w => {
+          const topObj = topicsMap.get(w.topic_id);
+          const dedupeKey = `${w.topic_id || 'general'}_slot_0`;
+          hwMap.set(dedupeKey, {
             id: w.id,
-            topicTitle: topicsMap.get(w.topic_id)?.title || (w as any).topics?.title || 'Worksheet',
+            topicTitle: topObj?.title || (w as any).topics?.title || 'Worksheet Assignment',
+            worksheetTitle: 'Homework 1',
             submittedAt: w.submitted_at,
-            status: 'submitted' as string,
-            score: null as number | null,
-            feedback: null as string | null,
+            status: 'submitted',
+            score: null,
+            feedback: null,
+            fileUrl: null,
             source: 'worksheet_submissions'
-          })),
-          ...(manualSubs || []).filter(m => m.student_id === sid && m.type === 'worksheet').map(m => ({
+          });
+        });
+
+        studentManualWs.forEach(m => {
+          const topObj = topicsMap.get(m.topic_id);
+          const contentItems = Array.isArray(topObj?.content_items)
+            ? topObj.content_items
+            : (typeof topObj?.content_items === "string"
+                ? (() => { try { return JSON.parse(topObj.content_items); } catch { return []; } })()
+                : []);
+          const topicWorksheets = contentItems.filter((i: any) => i && i.type === "worksheet");
+
+          let slotIdx = 0;
+          if (m.type === "worksheet" || m.type === "worksheet_0") {
+            slotIdx = 0;
+          } else if (typeof m.type === "string" && m.type.startsWith("worksheet_")) {
+            const suffix = m.type.replace("worksheet_", "");
+            const num = parseInt(suffix, 10);
+            if (!isNaN(num)) {
+              slotIdx = num;
+            } else {
+              const matchIdx = topicWorksheets.findIndex((w: any) => w.id === suffix);
+              if (matchIdx >= 0) slotIdx = matchIdx;
+            }
+          }
+
+          const matchedWs = topicWorksheets[slotIdx] || null;
+          const wsTitle = matchedWs?.title || (topicWorksheets.length > 1 ? `Homework ${slotIdx + 1}` : "Homework");
+          const dedupeKey = `${m.topic_id || 'general'}_slot_${slotIdx}`;
+
+          const item = {
             id: m.id,
-            topicTitle: topicsMap.get(m.topic_id)?.title || (m as any).topics?.title || 'Worksheet',
+            topicTitle: topObj?.title || (m as any).topics?.title || 'Worksheet Assignment',
+            worksheetTitle: wsTitle,
             submittedAt: m.submitted_at,
-            status: m.status,
+            status: m.status || 'submitted',
             score: m.score,
             feedback: m.feedback_text,
+            fileUrl: (m as any).file_url || null,
             source: 'manual_submissions'
-          }))
-        ].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+          };
 
-        // Quizzes: quiz_submissions + manual_submissions where type = 'pdf_quiz'
-        const qsCount = (quizSubs || []).filter(q => q.student_id === sid).length;
-        const manualQzCount = (manualSubs || []).filter(m => m.student_id === sid && m.type === 'pdf_quiz').length;
-        const totalQuizzes = qsCount + manualQzCount;
+          const existing = hwMap.get(dedupeKey);
+          if (!existing) {
+            hwMap.set(dedupeKey, item);
+          } else {
+            const isNewer = new Date(m.submitted_at).getTime() > new Date(existing.submittedAt).getTime();
+            if (m.status === "reviewed" && existing.status !== "reviewed") {
+              hwMap.set(dedupeKey, item);
+            } else if (isNewer && (m.status === existing.status || m.status === "reviewed")) {
+              hwMap.set(dedupeKey, item);
+            }
+          }
+        });
 
-        // Quiz score calculation (from quiz_submissions only, since those have structured scores)
-        const studentQuizSubs = (quizSubs || []).filter(q => q.student_id === sid);
+        const hwDetails = Array.from(hwMap.values()).sort(
+          (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        );
+        const totalHomework = hwDetails.length;
+
+        // Quizzes: group attempts by unique quiz
+        const studentManualQz = (manualSubs || []).filter(m => m.student_id === sid && isPdfQuizSubmission(m));
+        const formattedPdfQuizzes = studentManualQz.map(pq => {
+          const quizIdSuffix = typeof pq.type === "string" && pq.type.startsWith("pdf_quiz_")
+            ? pq.type.replace("pdf_quiz_", "")
+            : null;
+          const topObj = topicsMap.get(pq.topic_id);
+          return {
+            id: pq.id,
+            quizId: quizIdSuffix || pq.id,
+            topicId: pq.topic_id,
+            topicTitle: topObj?.title || (pq as any).topics?.title || 'PDF Quiz Assignment',
+            quizTitle: topObj?.title ? `${topObj.title} (PDF Quiz)` : 'PDF Quiz',
+            submittedAt: pq.submitted_at,
+            score: pq.score !== null && pq.score !== undefined ? Number(pq.score) : null,
+            totalMarks: 100,
+            passingScore: 50,
+            status: pq.status,
+            isPdfQuiz: true,
+            fileUrl: (pq as any).file_url || null,
+            feedback: pq.feedback_text,
+            source: 'manual_submissions'
+          };
+        });
+
+        const studentInteractiveQuizzes = (quizSubs || []).filter(q => q.student_id === sid);
+
+        const trueInteractiveQuizzes = studentInteractiveQuizzes.filter((iq: any) => {
+          const isPdfUploadAnswer = iq.answers_data?.type === "pdf_upload";
+          if (isPdfUploadAnswer) {
+            const hasMatchingManual = formattedPdfQuizzes.some(
+              (pq: any) => (iq.quiz_id && pq.quizId === iq.quiz_id) || (iq.quizzes?.topic_id && pq.topicId === iq.quizzes.topic_id)
+            );
+            if (hasMatchingManual) return false;
+          }
+          return true;
+        });
+
+        const quizGroupsMap = new Map<string, any>();
+
+        // Interactive Quizzes (group attempts)
+        trueInteractiveQuizzes.forEach((qs: any) => {
+          const qId = qs.quiz_id || qs.quizzes?.id || (qs as any).topic_id || `quiz_${qs.id}`;
+          const quizKey = `interactive_${qId}`;
+
+          const topId = qs.quizzes?.topic_id || (qs as any).topic_id;
+          const topObj = topId ? topicsMap.get(topId) : null;
+          const topicTitle = topObj?.title || qs.quizzes?.topics?.title || qs.quizzes?.title || 'Quiz Lesson';
+          const quizTitle = qs.quizzes?.title || 'Interactive Quiz';
+          const totalMarks = qs.quizzes?.total_marks || 10;
+          const passingScore = qs.quizzes?.passing_score || 5;
+          const scoreVal = qs.score !== null && qs.score !== undefined ? Number(qs.score) : 0;
+          const scorePct = totalMarks > 0 ? Math.round((scoreVal / totalMarks) * 100) : 0;
+          const isPassed = scoreVal >= passingScore;
+
+          const attemptObj = {
+            id: qs.id,
+            submittedAt: qs.submitted_at,
+            score: scoreVal,
+            totalMarks,
+            pct: scorePct,
+            passed: isPassed,
+          };
+
+          const existing = quizGroupsMap.get(quizKey);
+          if (!existing) {
+            quizGroupsMap.set(quizKey, {
+              id: qs.id,
+              quizKey,
+              topicTitle,
+              quizTitle,
+              submittedAt: qs.submitted_at,
+              latestSubmittedAt: qs.submitted_at,
+              score: scoreVal,
+              bestScore: scoreVal,
+              totalMarks,
+              passingScore,
+              pct: scorePct,
+              bestPct: scorePct,
+              passed: isPassed,
+              isPdfQuiz: false,
+              attempts: [attemptObj],
+              attemptsCount: 1,
+              source: 'quiz_submissions'
+            });
+          } else {
+            existing.attempts.push(attemptObj);
+            existing.attemptsCount++;
+            if (new Date(qs.submitted_at).getTime() > new Date(existing.latestSubmittedAt).getTime()) {
+              existing.latestSubmittedAt = qs.submitted_at;
+            }
+            if (scoreVal > existing.bestScore) {
+              existing.bestScore = scoreVal;
+              existing.bestPct = scorePct;
+              existing.passed = isPassed;
+              existing.score = scoreVal;
+              existing.pct = scorePct;
+            }
+          }
+        });
+
+        // PDF Quizzes
+        formattedPdfQuizzes.forEach((pq: any) => {
+          const quizKey = `pdf_${pq.quizId || pq.id}`;
+          const scoreVal = pq.score !== null && pq.score !== undefined ? Number(pq.score) : null;
+          const scorePct = scoreVal !== null ? Math.round((scoreVal / (pq.totalMarks || 100)) * 100) : null;
+          const isPassed = scoreVal !== null ? scoreVal >= (pq.passingScore || 50) : false;
+
+          const attemptObj = {
+            id: pq.id,
+            submittedAt: pq.submittedAt,
+            score: scoreVal,
+            totalMarks: pq.totalMarks,
+            pct: scorePct,
+            passed: isPassed,
+            status: pq.status,
+          };
+
+          const existing = quizGroupsMap.get(quizKey);
+          if (!existing) {
+            quizGroupsMap.set(quizKey, {
+              id: pq.id,
+              quizKey,
+              topicTitle: pq.topicTitle,
+              quizTitle: pq.quizTitle,
+              submittedAt: pq.submittedAt,
+              latestSubmittedAt: pq.submittedAt,
+              score: scoreVal,
+              bestScore: scoreVal,
+              totalMarks: pq.totalMarks,
+              passingScore: pq.passingScore,
+              pct: scorePct,
+              bestPct: scorePct,
+              passed: isPassed,
+              isPdfQuiz: true,
+              status: pq.status,
+              attempts: [attemptObj],
+              attemptsCount: 1,
+              source: 'manual_submissions'
+            });
+          } else {
+            existing.attempts.push(attemptObj);
+            existing.attemptsCount++;
+            if (scoreVal !== null && (existing.bestScore === null || scoreVal > existing.bestScore)) {
+              existing.bestScore = scoreVal;
+              existing.bestPct = scorePct;
+              existing.passed = isPassed;
+              existing.score = scoreVal;
+              existing.pct = scorePct;
+            }
+          }
+        });
+
+        const quizDetails = Array.from(quizGroupsMap.values()).map(q => {
+          q.attempts.sort((a: any, b: any) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+          return q;
+        }).sort((a, b) => new Date(b.latestSubmittedAt || b.submittedAt).getTime() - new Date(a.latestSubmittedAt || a.submittedAt).getTime());
+
+        const totalQuizzes = quizDetails.length;
+
+        // Compute Quiz average score and pass rate based on unique quizzes (best score)
         let quizAvg = 0;
         let quizPassRate = 0;
-        if (studentQuizSubs.length > 0) {
-          let totalPct = 0;
-          let passed = 0;
-          studentQuizSubs.forEach(q => {
-            const total = (q as any).quizzes?.total_marks || 1;
-            const passingScore = (q as any).quizzes?.passing_score || 70;
-            const pct = (q.score / total) * 100;
-            totalPct += pct;
-            if (pct >= passingScore) passed++;
-          });
-          quizAvg = Math.round(totalPct / studentQuizSubs.length);
-          quizPassRate = Math.round((passed / studentQuizSubs.length) * 100);
+        if (quizDetails.length > 0) {
+          const scoredQuizzes = quizDetails.filter(q => q.bestPct !== null && q.bestPct !== undefined);
+          if (scoredQuizzes.length > 0) {
+            const totalScorePct = scoredQuizzes.reduce((acc, q) => acc + (q.bestPct || 0), 0);
+            quizAvg = Math.round(totalScorePct / scoredQuizzes.length);
+            const passedQuizzes = scoredQuizzes.filter(q => q.passed);
+            quizPassRate = Math.round((passedQuizzes.length / scoredQuizzes.length) * 100);
+          }
         }
-
-        // Quiz details
-        const quizDetails = [
-          ...studentQuizSubs.map(q => {
-            const topId = (q as any).quizzes?.topic_id || (q as any).topic_id;
-            return {
-              id: q.id,
-              topicTitle: (topId ? topicsMap.get(topId)?.title : null) || (q as any).quizzes?.topics?.title || (q as any).quizzes?.title || 'Quiz Evaluation',
-              quizTitle: (q as any).quizzes?.title || 'Quiz',
-              submittedAt: q.submitted_at,
-              score: q.score,
-              totalMarks: (q as any).quizzes?.total_marks || 0,
-              passingScore: (q as any).quizzes?.passing_score || 70,
-              pct: Math.round((q.score / ((q as any).quizzes?.total_marks || 1)) * 100),
-              source: 'quiz_submissions'
-            };
-          }),
-          ...(manualSubs || []).filter(m => m.student_id === sid && m.type === 'pdf_quiz').map(m => ({
-            id: m.id,
-            topicTitle: topicsMap.get(m.topic_id)?.title || (m as any).topics?.title || 'PDF Quiz',
-            quizTitle: 'PDF Quiz',
-            submittedAt: m.submitted_at,
-            score: m.score,
-            totalMarks: null,
-            passingScore: null,
-            pct: m.score != null ? Math.round(m.score) : null,
-            source: 'manual_submissions'
-          }))
-        ].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
 
         // Topic progress
         const completedTopics = (topicProgress || []).filter(
@@ -632,19 +809,22 @@ export default function PerformancePage() {
                         <p>No homework submitted yet.</p>
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-[45vh] overflow-y-auto">
+                      <div className="space-y-2.5 max-h-[45vh] overflow-y-auto">
                         {selectedStudent.homeworkDetails.map((hw, i) => (
-                          <div key={hw.id || i} className="flex items-center gap-3 p-3 rounded-xl bg-blue-50/30 border border-blue-100/50">
-                            <BookOpen className="w-5 h-5 text-blue-400 flex-shrink-0" />
+                          <div key={hw.id || i} className="flex items-center gap-3 p-3.5 rounded-xl bg-blue-50/40 border border-blue-100 hover:border-blue-200 transition-colors">
+                            <BookOpen className="w-5 h-5 text-blue-500 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-text truncate">{hw.topicTitle}</div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${hw.status === 'reviewed' ? 'bg-green-100 text-green-700' : hw.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
-                                  {hw.status === 'reviewed' ? 'Reviewed' : hw.status === 'pending' ? 'Pending' : 'Submitted'}
+                              <div className="text-sm font-bold text-text truncate">{hw.topicTitle}</div>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-[11px] font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+                                  📄 {hw.worksheetTitle || 'Homework'}
                                 </span>
-                                {hw.score != null && <span className="text-[10px] text-text/50 font-bold">Score: {hw.score}</span>}
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${hw.status === 'reviewed' ? 'bg-green-100 text-green-700' : hw.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {hw.status === 'reviewed' ? 'Reviewed' : hw.status === 'pending' ? 'Pending Review' : 'Submitted'}
+                                </span>
+                                {hw.score != null && <span className="text-[11px] text-text/60 font-bold">Score: {hw.score}</span>}
                               </div>
-                              {hw.feedback && <div className="text-[10px] text-text/40 mt-1 truncate">💬 {hw.feedback}</div>}
+                              {hw.feedback && <div className="text-[11px] text-text/50 mt-1 truncate">💬 {hw.feedback}</div>}
                             </div>
                             <span className="text-[10px] text-text/40 whitespace-nowrap flex-shrink-0">{formatDate(hw.submittedAt)}</span>
                           </div>
@@ -663,29 +843,71 @@ export default function PerformancePage() {
                         <p>No quizzes delivered yet.</p>
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-[45vh] overflow-y-auto">
+                      <div className="space-y-3 max-h-[45vh] overflow-y-auto">
                         {selectedStudent.quizDetails.map((q, i) => {
-                          const passed = q.pct != null && q.passingScore != null && q.pct >= q.passingScore;
+                          const passed = q.passed;
                           return (
-                            <div key={q.id || i} className={`flex items-center gap-3 p-3 rounded-xl border ${passed ? 'bg-green-50/30 border-green-100/50' : 'bg-red-50/30 border-red-100/50'}`}>
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${passed ? 'bg-green-100' : 'bg-red-100'}`}>
-                                {passed ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <XCircle className="w-4 h-4 text-red-500" />}
+                            <div key={q.id || i} className={`p-3.5 rounded-xl border transition-all ${passed ? 'bg-green-50/30 border-green-100/60' : 'bg-red-50/30 border-red-100/60'}`}>
+                              <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${passed ? 'bg-green-100' : 'bg-red-100'}`}>
+                                  {passed ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <XCircle className="w-4 h-4 text-red-500" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-bold text-text truncate">{q.topicTitle}</div>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    <span className="text-[11px] text-text/60 font-medium">{q.quizTitle}</span>
+                                    {q.attemptsCount > 1 && (
+                                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700">
+                                        {q.attemptsCount} attempts
+                                      </span>
+                                    )}
+                                    {q.isPdfQuiz && (
+                                      <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-purple-100 text-purple-700">
+                                        PDF Quiz
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  {q.bestPct != null ? (
+                                    <>
+                                      <div className={`text-lg font-black ${passed ? 'text-green-600' : 'text-red-500'}`}>{q.bestPct}%</div>
+                                      {q.totalMarks != null && (
+                                        <div className="text-[10px] text-text/40 font-medium">
+                                          {q.bestScore ?? q.score}/{q.totalMarks} {q.attemptsCount > 1 ? '(Best)' : ''}
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-xs text-text/40">Submitted</span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-text/40 whitespace-nowrap flex-shrink-0">{formatDate(q.latestSubmittedAt || q.submittedAt)}</span>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-text truncate">{q.topicTitle}</div>
-                                <div className="text-[10px] text-text/40">{q.quizTitle}</div>
-                              </div>
-                              <div className="text-right flex-shrink-0">
-                                {q.pct != null ? (
-                                  <>
-                                    <div className={`text-lg font-black ${passed ? 'text-green-600' : 'text-red-500'}`}>{q.pct}%</div>
-                                    {q.totalMarks != null && <div className="text-[10px] text-text/40">{q.score}/{q.totalMarks}</div>}
-                                  </>
-                                ) : (
-                                  <span className="text-xs text-text/40">Submitted</span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-text/40 whitespace-nowrap flex-shrink-0">{formatDate(q.submittedAt)}</span>
+
+                              {/* Expandable attempt history if multiple attempts */}
+                              {q.attempts && q.attempts.length > 1 && (
+                                <details className="mt-2.5 pt-2 border-t border-gray-100/80 group">
+                                  <summary className="text-[11px] font-bold text-slate-600 hover:text-slate-900 cursor-pointer flex items-center justify-between select-none">
+                                    <span>Attempt History ({q.attempts.length} attempts)</span>
+                                    <span className="text-[10px] text-primary group-open:hidden">Show attempts ↓</span>
+                                    <span className="text-[10px] text-primary hidden group-open:inline">Hide attempts ↑</span>
+                                  </summary>
+                                  <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-slate-200">
+                                    {q.attempts.map((att: any, attIdx: number) => (
+                                      <div key={att.id || attIdx} className="flex items-center justify-between text-[11px] py-1 px-2.5 rounded-lg bg-white/80 border border-gray-100">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-semibold text-slate-700">Attempt {q.attempts.length - attIdx}:</span>
+                                          <span className={`font-bold ${att.passed ? 'text-green-600' : 'text-red-500'}`}>
+                                            {att.pct}% ({att.score}/{att.totalMarks})
+                                          </span>
+                                        </div>
+                                        <span className="text-[10px] text-text/40">{formatDate(att.submittedAt)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
+                              )}
                             </div>
                           );
                         })}
