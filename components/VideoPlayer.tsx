@@ -60,6 +60,16 @@ function HTML5DirectVideo({
     setVideoSrc(url || "");
     setHasFailed(false);
     attemptedFallback.current = false;
+    setIsPlaying(false);
+    setIsBuffering(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setBufferedPercent(0);
+    setShowControls(true);
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
   }, [url]);
 
   const handleVideoError = () => {
@@ -695,6 +705,7 @@ export default function VideoPlayer({
   // Direct HTML5 Video (Uploaded file, VPS video, mp4/webm/mov link)
   return (
     <HTML5DirectVideo
+      key={url || "video"}
       url={url}
       fallbackUrl={fallbackUrl}
       poster={poster}

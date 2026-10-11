@@ -456,6 +456,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   // Remember the student's active lesson across page refreshes and submissions
   useEffect(() => {
     if (activeTopic?.id && typeof window !== 'undefined') {
+      setSelectedVideoIndex(0);
+      setSelectedMirrorIndex(null);
       setSelectedLabIndex(0);
       setIsLabFullscreen(false);
       try {
@@ -2097,7 +2099,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                 {currentVideoUrl ? (
                   <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative">
-                    <VideoPlayer url={currentVideoUrl} fallbackUrl={fallbackVideoUrl} />
+                    <VideoPlayer 
+                      key={`${activeTopic.id}_${selectedVideoIndex}_${currentVideoUrl}`} 
+                      url={currentVideoUrl} 
+                      fallbackUrl={fallbackVideoUrl} 
+                    />
                   </div>
                 ) : null}
 
@@ -2674,7 +2680,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                     </button>
                                   </div>
                                   <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-teal-900/30 relative">
-                                    <VideoPlayer url={ws.answerVideoUrl} />
+                                    <VideoPlayer key={`ws_vid_${ws.id}_${ws.answerVideoUrl}`} url={ws.answerVideoUrl} />
                                   </div>
                                 </div>
                               )}
@@ -2811,7 +2817,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           <div className="space-y-2">
                             <label className="block text-xs font-bold text-teal-800/70">Answer Video Explanation</label>
                             <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
-                              <VideoPlayer url={quizItem.answerVideoUrl} />
+                              <VideoPlayer key={`quiz_ans_${quizItem.id}_${quizItem.answerVideoUrl}`} url={quizItem.answerVideoUrl} />
                             </div>
                           </div>
                         )}
@@ -3206,7 +3212,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                       </button>
                                     </div>
                                     <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-teal-900/30 relative">
-                                      <VideoPlayer url={quiz.answerVideoUrl} />
+                                      <VideoPlayer key={`quiz_ans_${quiz.id}_${quiz.answerVideoUrl}`} url={quiz.answerVideoUrl} />
                                     </div>
                                   </div>
                                 )}
