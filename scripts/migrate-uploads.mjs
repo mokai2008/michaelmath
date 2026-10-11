@@ -326,10 +326,36 @@ async function run() {
       for (const file of remainingLoose) {
         const oldP = path.resolve(uploadsDir, file);
         const newP = path.resolve(targetDir, file);
-        fs.renameSync(oldP, newP);
-        console.log(`  ✓ Moved ${file} -> ${defaultCourseFolder}/${file}`);
+        try {
+          fs.linkSync(oldP, newP);
+        } catch {
+          fs.renameSync(oldP, newP);
+          try { fs.linkSync(newP, oldP); } catch {}
+        }
+        console.log(`  ✓ Organized ${file} -> ${defaultCourseFolder}/${file}`);
       }
     }
+  }
+
+  // 4. Guarantee backwards compatibility: link all subfolder files back to root uploadsDir
+  try {
+    const subdirs = fs.readdirSync(uploadsDir, { withFileTypes: true }).filter((d) => d.isDirectory());
+    for (const d of subdirs) {
+      const subDirPath = path.resolve(uploadsDir, d.name);
+      const subFiles = fs.readdirSync(subDirPath, { withFileTypes: true }).filter((f) => f.isFile() && !f.name.startsWith('.'));
+      for (const f of subFiles) {
+        const subFilePath = path.resolve(subDirPath, f.name);
+        const rootFilePath = path.resolve(uploadsDir, f.name);
+        if (!fs.existsSync(rootFilePath)) {
+          try {
+            fs.linkSync(subFilePath, rootFilePath);
+            console.log(`  ✓ Linked backwards-compatible alias: ${f.name} <-> ${d.name}/${f.name}`);
+          } catch {}
+        }
+      }
+    }
+  } catch (linkErr) {
+    console.debug('Link notice:', linkErr);
   }
 
   console.log('\n================================================================');

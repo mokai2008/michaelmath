@@ -90,3 +90,32 @@ export function toCourseUploadUrl(url: string, courseName: string): string {
   const newPath = `/uploads/${folder}/${relPath}`;
   return origin ? `${origin}${newPath}` : newPath;
 }
+
+/**
+ * Converts a course-nested upload URL into a root upload URL.
+ *
+ * Example:
+ * toRootUploadUrl("/uploads/year-1-pure-math/1791218546326_t347xq.mp4")
+ * -> "/uploads/1791218546326_t347xq.mp4"
+ */
+export function toRootUploadUrl(url?: string | null): string {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  let pathname = trimmed;
+  let origin = "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const parsed = new URL(trimmed);
+      origin = parsed.origin;
+      pathname = parsed.pathname;
+    } catch {
+      return url;
+    }
+  }
+  if (!pathname.startsWith("/uploads/")) return url;
+  const relPath = pathname.replace(/^\/uploads\/?/, "");
+  if (!relPath.includes("/")) return url;
+  const filename = relPath.split("/").pop();
+  const newPath = `/uploads/${filename}`;
+  return origin ? `${origin}${newPath}` : newPath;
+}

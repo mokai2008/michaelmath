@@ -27,6 +27,19 @@ if [ -f "/home/gadmaths/htdocs/scripts/migrate-uploads.mjs" ]; then
   find /home/gadmaths/htdocs/public/uploads -type f -exec chmod 644 {} + 2>/dev/null || true
 fi
 
+# 4. Guarantee 100% Backwards Compatibility:
+# Create hard links in root /public/uploads/ for all files that were organized into course subfolders.
+# Hard links use ZERO extra disk space and ensure Nginx directly finds both:
+# /uploads/video.mp4 AND /uploads/course_name/video.mp4
+echo "🔗 Ensuring backwards-compatible links for all course uploads (0 byte overhead)..."
+find /home/gadmaths/htdocs/public/uploads -mindepth 2 -type f ! -name ".*" | while read -r subfile; do
+  fname=$(basename "$subfile")
+  rootlink="/home/gadmaths/htdocs/public/uploads/$fname"
+  if [ ! -e "$rootlink" ]; then
+    ln -f "$subfile" "$rootlink" 2>/dev/null || cp -l "$subfile" "$rootlink" 2>/dev/null || true
+  fi
+done
+
 # 4. Optimize all existing MP4 videos across all course folders for instant FastStart
 if command -v ffmpeg &> /dev/null; then
   echo "⚡ Optimizing existing MP4 videos for instant 0-second FastStart playback across all course folders..."

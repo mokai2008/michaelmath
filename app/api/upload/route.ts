@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, unlink, stat, rename } from "fs/promises";
+import { writeFile, mkdir, unlink, stat, rename, link } from "fs/promises";
 import { createWriteStream, existsSync } from "fs";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
@@ -95,11 +95,17 @@ async function organizeUploadFile(url: string, courseName: string): Promise<stri
   try {
     await mkdir(targetDir, { recursive: true });
     if (existsSync(oldDiskPath)) {
-      await rename(oldDiskPath, newDiskPath);
-      console.log(`[Upload] Moved loose file ${filename} -> ${cleanFolder}/${filename}`);
+      if (!existsSync(newDiskPath)) {
+        await link(oldDiskPath, newDiskPath).catch(async () => {
+          await rename(oldDiskPath, newDiskPath);
+        });
+      }
+      console.log(`[Upload] Linked loose file ${filename} -> ${cleanFolder}/${filename}`);
+    } else if (existsSync(newDiskPath) && !existsSync(oldDiskPath)) {
+      await link(newDiskPath, oldDiskPath).catch(() => {});
     }
   } catch (err) {
-    console.warn(`[Upload] Failed to move file to ${cleanFolder}:`, err);
+    console.warn(`[Upload] Failed to organize file to ${cleanFolder}:`, err);
   }
 
   const newPath = `/uploads/${cleanFolder}/${filename}`;
@@ -175,6 +181,14 @@ export async function POST(request: NextRequest) {
         }
       } catch (fastStartErr) {
         console.debug("[Upload] FastStart skipped/unavailable:", fastStartErr);
+      }
+    }
+
+    // Ensure backwards compatibility: create root hard link if inside a subfolder
+    if (folderSlug) {
+      const rootDiskPath = path.resolve(uploadsDir, filename);
+      if (!existsSync(rootDiskPath)) {
+        await link(diskPath, rootDiskPath).catch(() => {});
       }
     }
 

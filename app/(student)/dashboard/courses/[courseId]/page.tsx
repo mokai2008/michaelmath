@@ -37,6 +37,7 @@ import MathText from "@/components/MathText";
 import VideoPlayer from "@/components/VideoPlayer";
 import { calculateCourseProgress, getTopicWeight } from "@/lib/progress";
 import { prepareLabSrcDoc } from "@/lib/lab";
+import { toCourseUploadUrl, toRootUploadUrl } from "@/lib/uploads";
 
 function InlinePdfViewer({ 
   url, 
@@ -1853,7 +1854,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               ? (Array.isArray(currentVideoItem.urls) && currentVideoItem.urls.length > 0 ? currentVideoItem.urls : [currentVideoItem.url])
               : (activeTopic.youtube_url ? [activeTopic.youtube_url] : []);
             
-            const activeUrls = rawUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
+            // Normalize any /uploads/ paths to the course folder if course title is known
+            const normalizedUrls = rawUrls.map((u: string) => {
+              if (course?.title && typeof u === 'string' && u.trim().startsWith('/uploads/')) {
+                return toCourseUploadUrl(u, course.title);
+              }
+              return u;
+            });
+
+            const activeUrls = normalizedUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
 
             // Compute student-assigned default mirror link based on sessionUser ID hash for load balancing
             let autoAssignedIndex = 0;
@@ -1872,6 +1881,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               : autoAssignedIndex;
 
             const currentVideoUrl = activeUrls[currentMirrorIndex] || activeUrls[0] || '';
+            const rawUrlAtMirror = rawUrls[currentMirrorIndex] || rawUrls[0] || '';
+            const fallbackVideoUrl = rawUrlAtMirror !== currentVideoUrl ? rawUrlAtMirror : toRootUploadUrl(currentVideoUrl);
 
             // Extract all worksheets and notes (from content_items or legacy topic_pdfs)
             const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
@@ -2086,7 +2097,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
                 {currentVideoUrl ? (
                   <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative">
-                    <VideoPlayer url={currentVideoUrl} />
+                    <VideoPlayer url={currentVideoUrl} fallbackUrl={fallbackVideoUrl} />
                   </div>
                 ) : null}
 

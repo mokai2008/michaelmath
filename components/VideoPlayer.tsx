@@ -13,11 +13,13 @@ import {
   PlayCircle,
   Sliders,
   Check,
-  Loader2
+  Loader2,
+  AlertCircle
 } from "lucide-react";
 
 interface VideoPlayerProps {
   url?: string | null;
+  fallbackUrl?: string | null;
   poster?: string | null;
   className?: string;
   autoPlay?: boolean;
@@ -41,6 +43,7 @@ function formatTime(seconds: number): string {
  */
 function HTML5DirectVideo({
   url,
+  fallbackUrl,
   poster,
   className = "w-full h-full",
   autoPlay = false,
@@ -48,6 +51,39 @@ function HTML5DirectVideo({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+
+  const [videoSrc, setVideoSrc] = useState(url || "");
+  const [hasFailed, setHasFailed] = useState(false);
+  const attemptedFallback = useRef(false);
+
+  useEffect(() => {
+    setVideoSrc(url || "");
+    setHasFailed(false);
+    attemptedFallback.current = false;
+  }, [url]);
+
+  const handleVideoError = () => {
+    if (!attemptedFallback.current) {
+      attemptedFallback.current = true;
+      let alternateUrl = fallbackUrl;
+      if (!alternateUrl && videoSrc) {
+        if (videoSrc.includes("/uploads/")) {
+          const parts = videoSrc.replace(/^.*\/uploads\//, "").split("/");
+          if (parts.length > 1) {
+            // Nested: /uploads/slug/file.mp4 -> fallback to root: /uploads/file.mp4
+            alternateUrl = `/uploads/${parts[parts.length - 1]}`;
+          }
+        }
+      }
+      if (alternateUrl && alternateUrl !== videoSrc) {
+        console.warn(`[VideoPlayer] Primary video source failed: ${videoSrc}. Attempting fallback: ${alternateUrl}`);
+        setVideoSrc(alternateUrl);
+        return;
+      }
+    }
+    setHasFailed(true);
+    setIsBuffering(false);
+  };
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -288,12 +324,13 @@ function HTML5DirectVideo({
       <div className={`relative ${className} bg-black`}>
         <video
           ref={videoRef}
-          src={url || ""}
+          src={videoSrc || ""}
           poster={poster || undefined}
           controls
           playsInline
           controlsList="nodownload"
           autoPlay={autoPlay}
+          onError={handleVideoError}
           className="w-full h-full object-contain bg-black"
         />
         <button
@@ -316,13 +353,14 @@ function HTML5DirectVideo({
     >
       <video
         ref={videoRef}
-        src={url || ""}
+        src={videoSrc || ""}
         poster={poster || undefined}
         playsInline
         webkit-playsinline="true"
         x5-playsinline="true"
         preload="auto"
         autoPlay={autoPlay}
+        onError={handleVideoError}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onWaiting={handleWaiting}
@@ -335,6 +373,30 @@ function HTML5DirectVideo({
         onEnded={() => setIsPlaying(false)}
         className="w-full h-full object-contain pointer-events-none"
       />
+
+      {/* Video Failed Error Overlay with Retry */}
+      {hasFailed && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/95 p-4 text-center">
+          <AlertCircle className="w-10 h-10 text-amber-400 mb-2" />
+          <p className="text-white text-sm font-semibold mb-1">Video failed to load</p>
+          <p className="text-xs text-gray-400 max-w-xs mb-3">The video mirror or file is temporarily unavailable.</p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setHasFailed(false);
+              attemptedFallback.current = false;
+              if (videoRef.current) {
+                videoRef.current.load();
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-bold transition-all shadow-md active:scale-95"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Retry Video</span>
+          </button>
+        </div>
+      )}
 
       {/* Double Tap Visual Animation Feedback */}
       {doubleTapFeedback === 'left' && (
@@ -522,6 +584,7 @@ function HTML5DirectVideo({
 
 export default function VideoPlayer({
   url,
+  fallbackUrl,
   poster,
   className = "w-full h-full",
   autoPlay = false,
@@ -633,6 +696,7 @@ export default function VideoPlayer({
   return (
     <HTML5DirectVideo
       url={url}
+      fallbackUrl={fallbackUrl}
       poster={poster}
       className={className}
       autoPlay={autoPlay}
