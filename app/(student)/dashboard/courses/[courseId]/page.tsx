@@ -645,16 +645,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     const activeUrls = rawUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
     if (activeUrls.length === 0) return;
 
-    let autoAssignedIndex = 0;
-    if (sessionUser?.id && activeUrls.length > 1) {
-      let hash = 0;
-      const uid = sessionUser.id;
-      for (let i = 0; i < uid.length; i++) {
-        hash = (hash << 5) - hash + uid.charCodeAt(i);
-        hash |= 0;
-      }
-      autoAssignedIndex = Math.abs(hash) % activeUrls.length;
-    }
+    // Server 1 is always the Auto (primary default) mirror
+    const autoAssignedIndex = 0;
 
     const currentMirrorIndex = selectedMirrorIndex !== null && selectedMirrorIndex < activeUrls.length
       ? selectedMirrorIndex
@@ -2008,23 +2000,8 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
             const activeUrls = normalizedUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
 
-            // Compute student-assigned default mirror link based on sessionUser ID hash for load balancing
-            let autoAssignedIndex = 0;
-            if (sessionUser?.id && activeUrls.length > 1) {
-              // Always prioritize direct high-speed VPS video uploads over external cloud mirrors
-              const vpsUploadIndex = activeUrls.findIndex((u: string) => typeof u === 'string' && u.includes('/uploads/'));
-              if (vpsUploadIndex !== -1) {
-                autoAssignedIndex = vpsUploadIndex;
-              } else {
-                let hash = 0;
-                const uid = sessionUser.id;
-                for (let i = 0; i < uid.length; i++) {
-                  hash = (hash << 5) - hash + uid.charCodeAt(i);
-                  hash |= 0;
-                }
-                autoAssignedIndex = Math.abs(hash) % activeUrls.length;
-              }
-            }
+            // Server 1 is always the Auto (primary default) mirror
+            const autoAssignedIndex = 0;
 
             const currentMirrorIndex = selectedMirrorIndex !== null && selectedMirrorIndex < activeUrls.length
               ? selectedMirrorIndex
