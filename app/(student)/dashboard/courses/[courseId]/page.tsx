@@ -29,7 +29,9 @@ import {
   ClipboardCheck,
   Sparkles,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Download,
+  RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -42,36 +44,105 @@ import { toCourseUploadUrl, toRootUploadUrl } from "@/lib/uploads";
 function InlinePdfViewer({ 
   url, 
   title, 
+  courseTitle,
   onClose,
 }: { 
   url: string; 
   title: string; 
+  courseTitle?: string;
   onClose?: () => void;
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewerMode, setViewerMode] = useState<'native' | 'google'>('native');
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Normalize and clean URL: remove any Adobe fragment flags (#toolbar=1...) that break Safari
+  const cleanUrl = useMemo(() => {
+    if (!url) return '';
+    let raw = url.trim().split('#')[0];
+    if (courseTitle && raw.startsWith('/uploads/')) {
+      raw = toCourseUploadUrl(raw, courseTitle);
+    }
+    return raw;
+  }, [url, courseTitle]);
+
+  // Generate full absolute URL for cloud web viewers (Google Docs Viewer)
+  const absoluteUrl = useMemo(() => {
+    if (!cleanUrl) return '';
+    if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+      return cleanUrl;
+    }
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
+    }
+    return cleanUrl;
+  }, [cleanUrl]);
+
+  // Google Docs PDF Viewer embed URL
+  const googleViewerUrl = useMemo(() => {
+    if (!absoluteUrl) return '';
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(absoluteUrl)}&embedded=true`;
+  }, [absoluteUrl]);
+
+  // Dismiss loading indicator on mode or URL change after short delay
+  useEffect(() => {
+    setIsLoading(true);
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [viewerMode, cleanUrl]);
+
+  if (!cleanUrl) return null;
 
   return (
     <div className={`w-full rounded-2xl border border-gray-200 overflow-hidden shadow-md bg-white transition-all ${isFullscreen ? 'fixed inset-3 sm:inset-6 z-50 shadow-2xl flex flex-col' : 'my-4'}`}>
       {/* Viewer Header */}
-      <div className="px-4 py-2.5 bg-slate-900 text-white flex items-center justify-between gap-3 shrink-0">
+      <div className="px-3.5 py-2.5 bg-slate-900 text-white flex items-center justify-between gap-3 shrink-0 flex-wrap sm:flex-nowrap">
         <div className="flex items-center gap-2 min-w-0">
           <FileText className="w-4 h-4 text-orange-400 shrink-0" />
-          <span className="text-xs font-bold truncate">{title}</span>
-          <span className="hidden sm:inline-block text-[10px] font-semibold bg-white/10 px-2 py-0.5 rounded text-gray-300">
-            PDF Document
+          <span className="text-xs font-bold truncate max-w-[200px] sm:max-w-[340px]">{title}</span>
+          <span className="hidden md:inline-block text-[10px] font-semibold bg-white/10 px-2 py-0.5 rounded text-gray-300">
+            {viewerMode === 'native' ? 'Standard Viewer' : 'Google Web Viewer'}
           </span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
+          {/* Toggle between Native and Google Docs Viewer */}
+          <button
+            type="button"
+            onClick={() => setViewerMode(prev => prev === 'native' ? 'google' : 'native')}
+            className="text-[11px] font-semibold text-gray-300 hover:text-white px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1.5 transition-colors"
+            title={viewerMode === 'native' ? "Switch to Google Web Viewer (useful on Safari/iOS or if blank)" : "Switch to Native Browser Viewer"}
+          >
+            <RefreshCw className="w-3 h-3 text-amber-400" />
+            <span>{viewerMode === 'native' ? 'Web Viewer' : 'Native View'}</span>
+          </button>
+
+          {/* Download Button */}
           <a
-            href={url}
+            href={cleanUrl}
+            download
+            className="text-[11px] font-semibold text-gray-300 hover:text-white px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg hidden sm:flex items-center gap-1 transition-colors"
+            title="Download PDF File"
+          >
+            <Download className="w-3 h-3" />
+            <span>Download</span>
+          </a>
+
+          {/* Open in Tab */}
+          <a
+            href={cleanUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[11px] font-semibold text-gray-300 hover:text-white px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
-            title="Open in new window / Download"
+            title="Open PDF directly in a new tab"
           >
             <span>Open in Tab</span>
             <ExternalLink className="w-3 h-3" />
           </a>
+
+          {/* Fullscreen Toggle */}
           <button
             type="button"
             onClick={() => setIsFullscreen(prev => !prev)}
@@ -81,11 +152,13 @@ function InlinePdfViewer({
             {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
             <span>{isFullscreen ? "Exit" : "Expand"}</span>
           </button>
+
+          {/* Close Button */}
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="text-[11px] font-bold text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-lg transition-colors"
+              className="text-[11px] font-bold text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-lg transition-colors ml-1"
               title="Close PDF Viewer"
             >
               <X className="w-4 h-4" />
@@ -95,13 +168,82 @@ function InlinePdfViewer({
       </div>
 
       {/* PDF Viewport */}
-      <div className={`w-full bg-slate-100 relative ${isFullscreen ? 'flex-1' : 'h-[550px] sm:h-[680px]'}`}>
-        <iframe
-          src={`${url}#toolbar=1&navpanes=0`}
-          className="w-full h-full border-0 bg-white"
-          title={title}
-          allow="fullscreen"
-        />
+      <div className={`w-full bg-slate-100 relative ${isFullscreen ? 'flex-1 min-h-0' : 'h-[580px] sm:h-[720px]'}`}>
+        {isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/10 backdrop-blur-xs z-10 pointer-events-none transition-opacity">
+            <div className="p-3 bg-white/95 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-200">
+              <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+              <span className="text-xs font-bold text-slate-700">Loading document...</span>
+            </div>
+          </div>
+        )}
+
+        {viewerMode === 'google' ? (
+          <iframe
+            key={`pdf_google_${cleanUrl}`}
+            src={googleViewerUrl}
+            className="w-full h-full border-0 bg-white block"
+            title={title}
+            allow="fullscreen"
+            onLoad={() => setIsLoading(false)}
+          />
+        ) : (
+          <object
+            key={`pdf_object_${cleanUrl}`}
+            data={cleanUrl}
+            type="application/pdf"
+            className="w-full h-full border-0 bg-white block"
+            onLoad={() => setIsLoading(false)}
+          >
+            <embed
+              src={cleanUrl}
+              type="application/pdf"
+              className="w-full h-full border-0 bg-white block"
+            />
+            {/* Fallback container if native embedding is not supported or blocked */}
+            <div className="flex flex-col items-center justify-center p-8 text-center h-full bg-slate-50 space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-inner">
+                <FileText className="w-7 h-7" />
+              </div>
+              <div className="max-w-md space-y-1">
+                <h4 className="text-sm font-bold text-slate-800">Inline Preview Not Supported</h4>
+                <p className="text-xs text-slate-500">
+                  Your browser does not support inline PDF plugins. You can view the document with Google Web Viewer or open it directly.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLoading(true);
+                    setViewerMode('google');
+                  }}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Switch to Google Web Viewer</span>
+                </button>
+                <a
+                  href={cleanUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open in New Tab</span>
+                </a>
+                <a
+                  href={cleanUrl}
+                  download
+                  className="px-4 py-2 bg-white hover:bg-gray-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </a>
+              </div>
+            </div>
+          </object>
+        )}
       </div>
     </div>
   );
@@ -2153,6 +2295,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                       <InlinePdfViewer
                         url={currentVideoItem.worksheetPdfUrl}
                         title={`Handout Worksheet: ${activeTopic.title}`}
+                        courseTitle={course?.title}
                         onClose={() => toggleInlinePdf(`video_ws_${currentVideoItem.id || selectedVideoIndex}`)}
                       />
                     )}
@@ -2424,6 +2567,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                             <InlinePdfViewer
                               url={noteUrl}
                               title={note.title || `Topic Study Notes ${nIdx + 1}`}
+                              courseTitle={course?.title}
                               onClose={() => toggleInlinePdf(noteId)}
                             />
                           </div>

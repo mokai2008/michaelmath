@@ -117,6 +117,7 @@ upload_block = '''
         add_header Cache-Control \"public, max-age=2592000, immutable\";
         add_header Accept-Ranges \"bytes\";
         add_header Access-Control-Allow-Origin *;
+        add_header Content-Disposition \"inline\";
     }
 '''
 
