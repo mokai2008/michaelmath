@@ -66,6 +66,9 @@ function HTML5DirectVideo({
     setDuration(0);
     setBufferedPercent(0);
     setShowControls(true);
+    if (seekDebounceTimer.current) clearTimeout(seekDebounceTimer.current);
+    pendingSeekTarget.current = null;
+    wasPlayingBeforeScrub.current = false;
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
@@ -113,6 +116,9 @@ function HTML5DirectVideo({
 
   const hideControlsTimer = useRef<NodeJS.Timeout | null>(null);
   const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
+  const wasPlayingBeforeScrub = useRef(false);
+  const seekDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const pendingSeekTarget = useRef<number | null>(null);
 
   const resetHideTimer = useCallback(() => {
     setShowControls(true);
@@ -129,6 +135,7 @@ function HTML5DirectVideo({
     resetHideTimer();
     return () => {
       if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+      if (seekDebounceTimer.current) clearTimeout(seekDebounceTimer.current);
     };
   }, [resetHideTimer]);
 
@@ -136,6 +143,10 @@ function HTML5DirectVideo({
   const handleTimeUpdate = () => {
     if (!videoRef.current || isScrubbing) return;
     setCurrentTime(videoRef.current.currentTime);
+    if (!videoRef.current.paused && !isPlaying) {
+      setIsPlaying(true);
+      setIsBuffering(false);
+    }
 
     // Update buffer progress
     if (videoRef.current.buffered.length > 0 && videoRef.current.duration > 0) {
@@ -170,6 +181,10 @@ function HTML5DirectVideo({
 
   const handleSeeked = () => {
     setIsBuffering(false);
+    // Auto-recover if video paused during seek/stall
+    if (isPlaying && videoRef.current && videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
+    }
   };
 
   const togglePlay = () => {
@@ -190,14 +205,49 @@ function HTML5DirectVideo({
     resetHideTimer();
   };
 
-  const seekRelative = (deltaSeconds: number) => {
+  const commitSeek = useCallback((targetTime: number, shouldResumePlaying?: boolean) => {
     if (!videoRef.current) return;
-    const current = videoRef.current.currentTime;
-    const target = Math.max(0, Math.min(duration || current + deltaSeconds, current + deltaSeconds));
-    videoRef.current.currentTime = target;
+    setIsBuffering(true);
+    
+    // Fast keyframe seek if supported (Safari/WebKit/Firefox)
+    if (typeof (videoRef.current as any).fastSeek === "function") {
+      try {
+        (videoRef.current as any).fastSeek(targetTime);
+      } catch {
+        videoRef.current.currentTime = targetTime;
+      }
+    } else {
+      videoRef.current.currentTime = targetTime;
+    }
+    videoRef.current.currentTime = targetTime;
+    setCurrentTime(targetTime);
+    pendingSeekTarget.current = null;
+
+    if (shouldResumePlaying && videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
+    }
+  }, []);
+
+  const seekRelative = useCallback((deltaSeconds: number) => {
+    if (!videoRef.current) return;
+    const currentBase = pendingSeekTarget.current !== null 
+      ? pendingSeekTarget.current 
+      : (videoRef.current.currentTime || 0);
+    const target = Math.max(0, Math.min(duration || (currentBase + deltaSeconds), currentBase + deltaSeconds));
+    
+    // Immediate UI feedback
+    pendingSeekTarget.current = target;
     setCurrentTime(target);
     resetHideTimer();
-  };
+
+    // Debounce actual seek to combine consecutive skip clicks (+10, +20, +30) into 1 clean seek
+    if (seekDebounceTimer.current) {
+      clearTimeout(seekDebounceTimer.current);
+    }
+    seekDebounceTimer.current = setTimeout(() => {
+      commitSeek(target, isPlaying);
+    }, 220);
+  }, [duration, isPlaying, resetHideTimer, commitSeek]);
 
   const changeSpeed = (rate: number) => {
     if (videoRef.current) {
@@ -259,37 +309,37 @@ function HTML5DirectVideo({
   const handlePointerDownTimeline = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     setIsScrubbing(true);
+
+    wasPlayingBeforeScrub.current = !videoRef.current?.paused;
+    if (videoRef.current && !videoRef.current.paused) {
+      videoRef.current.pause();
+    }
+
     const targetTime = calculateTimeFromPointer(e);
     setScrubPreviewTime(targetTime);
-    if (videoRef.current) {
-      videoRef.current.currentTime = targetTime;
-      setCurrentTime(targetTime);
-    }
+    setCurrentTime(targetTime);
 
     const onPointerMove = (moveEvent: PointerEvent) => {
       const moveTime = calculateTimeFromPointer(moveEvent);
+      // Only update visual scrub preview - never trigger network seeks on every pixel!
       setScrubPreviewTime(moveTime);
       setCurrentTime(moveTime);
-      if (videoRef.current) {
-        videoRef.current.currentTime = moveTime;
-      }
     };
 
     const onPointerUp = (upEvent: PointerEvent) => {
       const finalTime = calculateTimeFromPointer(upEvent);
-      if (videoRef.current) {
-        videoRef.current.currentTime = finalTime;
-        setCurrentTime(finalTime);
-      }
+      commitSeek(finalTime, wasPlayingBeforeScrub.current);
       setIsScrubbing(false);
       setScrubPreviewTime(null);
       resetHideTimer();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
     };
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
   };
 
   // Double-tap left/right to skip 10s (YouTube / Netflix style)
@@ -378,6 +428,12 @@ function HTML5DirectVideo({
         onCanPlay={handleCanPlay}
         onSeeking={handleSeeking}
         onSeeked={handleSeeked}
+        onStalled={() => {
+          if (isPlaying) setIsBuffering(true);
+        }}
+        onCanPlayThrough={() => {
+          setIsBuffering(false);
+        }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
@@ -435,8 +491,8 @@ function HTML5DirectVideo({
         </div>
       )}
 
-      {/* Center Big Play Button (shown when paused or controls active, but NOT while buffering) */}
-      {!isBuffering && (!isPlaying || showControls) && (
+      {/* Center Big Play Button (prominently shown when paused for 1-click play) */}
+      {!isBuffering && !isPlaying && (
         <div 
           className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
         >
@@ -447,13 +503,9 @@ function HTML5DirectVideo({
               togglePlay();
             }}
             className="pointer-events-auto p-4 md:p-5 rounded-full bg-black/70 hover:bg-primary text-white shadow-2xl backdrop-blur-xs transition-all hover:scale-110 active:scale-95 border border-white/20"
-            aria-label={isPlaying ? "Pause video" : "Play video"}
+            aria-label="Play video"
           >
-            {isPlaying ? (
-              <Pause className="w-8 h-8 md:w-10 md:h-10 fill-white" />
-            ) : (
-              <Play className="w-8 h-8 md:w-10 md:h-10 fill-white ml-1" />
-            )}
+            <Play className="w-8 h-8 md:w-10 md:h-10 fill-white ml-1" />
           </button>
         </div>
       )}
