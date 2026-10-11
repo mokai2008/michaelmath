@@ -624,6 +624,8 @@ export default function AdminNewCourse() {
             }
             if (nextItem.worksheetPdfUrl) nextItem.worksheetPdfUrl = toCourseUploadUrl(nextItem.worksheetPdfUrl, courseTitle);
             if (nextItem.quizPdfUrl) nextItem.quizPdfUrl = toCourseUploadUrl(nextItem.quizPdfUrl, courseTitle);
+            if (nextItem.answerPdfUrl) nextItem.answerPdfUrl = toCourseUploadUrl(nextItem.answerPdfUrl, courseTitle);
+            if (nextItem.answerVideoUrl) nextItem.answerVideoUrl = toCourseUploadUrl(nextItem.answerVideoUrl, courseTitle);
             return nextItem;
           });
           const itemsWithMeta = [...itemsList, { __topic_meta: true, progress_percentage: rawWeight, price: rawPrice }];
@@ -703,6 +705,31 @@ export default function AdminNewCourse() {
             }
           }
         }
+      }
+
+      // Ensure all course files on VPS disk are organized into /uploads/<course_name>/
+      const allCourseUploads = [
+        coursePayload.thumbnail_url,
+        coursePayload.intro_video_url,
+        ...sections.flatMap(s => (s.topics || []).flatMap((t: any) => (t.items || []).flatMap((i: any) => [
+          i.url,
+          ...(i.urls || []),
+          i.worksheetPdfUrl,
+          i.quizPdfUrl,
+          i.answerPdfUrl,
+          i.answerVideoUrl
+        ]))).filter(Boolean)
+      ];
+      if (allCourseUploads.length > 0) {
+        fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'organize_course',
+            course_name: courseTitle,
+            urls: Array.from(new Set(allCourseUploads))
+          })
+        }).catch(() => {});
       }
 
       alert("Course successfully created and saved!");

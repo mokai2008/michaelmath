@@ -121,7 +121,7 @@ export default function SubmissionsPage() {
         .select(`
           *,
           profiles:student_id (full_name, email),
-          topics:topic_id (id, title, section_id, content_items)
+          topics:topic_id (id, title, section_id, content_items, sections:section_id (id, title, course_id, courses:course_id (id, title)))
         `)
         .order('submitted_at', { ascending: false });
 
@@ -184,7 +184,9 @@ export default function SubmissionsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("folder", "feedback");
+      const courseTitle = (selectedSubmission as any)?.topics?.sections?.courses?.title || '';
+      const folderPath = courseTitle ? `${courseTitle}/feedback` : 'feedback';
+      formData.append("course_name", folderPath);
       if (feedbackFileUrl) {
         formData.append("oldUrl", feedbackFileUrl);
       }

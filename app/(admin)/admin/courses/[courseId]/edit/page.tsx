@@ -280,6 +280,14 @@ export default function AdminCourseEditor() {
                 legacyUploadUrls.push(updated.quizPdfUrl);
                 updated.quizPdfUrl = toCourseUploadUrl(updated.quizPdfUrl, course.title);
               }
+              if (isRootUploadUrl(updated.answerPdfUrl)) {
+                legacyUploadUrls.push(updated.answerPdfUrl);
+                updated.answerPdfUrl = toCourseUploadUrl(updated.answerPdfUrl, course.title);
+              }
+              if (isRootUploadUrl(updated.answerVideoUrl)) {
+                legacyUploadUrls.push(updated.answerVideoUrl);
+                updated.answerVideoUrl = toCourseUploadUrl(updated.answerVideoUrl, course.title);
+              }
               return updated;
             });
             return { ...topic, items: nextItems };
@@ -874,6 +882,8 @@ export default function AdminCourseEditor() {
             }
             if (nextItem.worksheetPdfUrl) nextItem.worksheetPdfUrl = toCourseUploadUrl(nextItem.worksheetPdfUrl, courseTitle);
             if (nextItem.quizPdfUrl) nextItem.quizPdfUrl = toCourseUploadUrl(nextItem.quizPdfUrl, courseTitle);
+            if (nextItem.answerPdfUrl) nextItem.answerPdfUrl = toCourseUploadUrl(nextItem.answerPdfUrl, courseTitle);
+            if (nextItem.answerVideoUrl) nextItem.answerVideoUrl = toCourseUploadUrl(nextItem.answerVideoUrl, courseTitle);
             return nextItem;
           });
           const itemsWithMeta = [...items, { __topic_meta: true, progress_percentage: rawWeight, price: rawPrice }];
@@ -965,7 +975,14 @@ export default function AdminCourseEditor() {
       const allCourseUploads = [
         coursePayload.thumbnail_url,
         coursePayload.intro_video_url,
-        ...sections.flatMap(s => (s.topics || []).flatMap((t: any) => (t.items || []).flatMap((i: any) => [i.url, ...(i.urls || []), i.worksheetPdfUrl, i.quizPdfUrl]))).filter(Boolean)
+        ...sections.flatMap(s => (s.topics || []).flatMap((t: any) => (t.items || []).flatMap((i: any) => [
+          i.url,
+          ...(i.urls || []),
+          i.worksheetPdfUrl,
+          i.quizPdfUrl,
+          i.answerPdfUrl,
+          i.answerVideoUrl
+        ]))).filter(Boolean)
       ];
       fetch('/api/upload', {
         method: 'POST',

@@ -245,6 +245,28 @@ async function run() {
                 nextItem.quizPdfUrl = toCourseUrl(nextItem.quizPdfUrl, course.title);
                 itemsModified = true;
               }
+              if (nextItem.answerPdfUrl && isRootUpload(nextItem.answerPdfUrl)) {
+                const filename = path.basename(nextItem.answerPdfUrl);
+                const oldPath = path.resolve(uploadsDir, filename);
+                const newPath = path.resolve(targetDir, filename);
+                if (fs.existsSync(oldPath)) {
+                  fs.renameSync(oldPath, newPath);
+                  console.log(`  ✓ Moved answer PDF: ${filename} -> ${folder}/${filename}`);
+                }
+                nextItem.answerPdfUrl = toCourseUrl(nextItem.answerPdfUrl, course.title);
+                itemsModified = true;
+              }
+              if (nextItem.answerVideoUrl && isRootUpload(nextItem.answerVideoUrl)) {
+                const filename = path.basename(nextItem.answerVideoUrl);
+                const oldPath = path.resolve(uploadsDir, filename);
+                const newPath = path.resolve(targetDir, filename);
+                if (fs.existsSync(oldPath)) {
+                  fs.renameSync(oldPath, newPath);
+                  console.log(`  ✓ Moved answer video: ${filename} -> ${folder}/${filename}`);
+                }
+                nextItem.answerVideoUrl = toCourseUrl(nextItem.answerVideoUrl, course.title);
+                itemsModified = true;
+              }
               return nextItem;
             });
 
@@ -298,6 +320,54 @@ async function run() {
                 const newUrl = toCourseUrl(q.quiz_pdf_url, course.title);
                 await supabase.from('quizzes').update({ quiz_pdf_url: newUrl }).eq('id', q.id);
                 console.log(`  ✓ Updated quiz ID ${q.id} in DB.`);
+              }
+            }
+          } catch (e) {
+            // Table may not exist or RLS
+          }
+
+          // Migrate manual_submissions for this course
+          try {
+            const { data: subs } = await supabase.from('manual_submissions').select('id, file_url, feedback_file_url').in('topic_id', topicIds);
+            for (const sub of subs || []) {
+              let subUpdates = {};
+              if (sub.file_url && isRootUpload(sub.file_url)) {
+                const filename = path.basename(sub.file_url);
+                const oldPath = path.resolve(uploadsDir, filename);
+                const subTargetDir = path.resolve(targetDir, 'submissions');
+                if (!fs.existsSync(subTargetDir)) fs.mkdirSync(subTargetDir, { recursive: true });
+                const newPath = path.resolve(subTargetDir, filename);
+                if (fs.existsSync(oldPath)) {
+                  try {
+                    fs.linkSync(oldPath, newPath);
+                  } catch {
+                    fs.renameSync(oldPath, newPath);
+                    try { fs.linkSync(newPath, oldPath); } catch {}
+                  }
+                  console.log(`  ✓ Moved submission file: ${filename} -> ${folder}/submissions/${filename}`);
+                }
+                subUpdates.file_url = `/uploads/${folder}/submissions/${filename}`;
+              }
+              if (sub.feedback_file_url && isRootUpload(sub.feedback_file_url)) {
+                const filename = path.basename(sub.feedback_file_url);
+                const oldPath = path.resolve(uploadsDir, filename);
+                const fbTargetDir = path.resolve(targetDir, 'feedback');
+                if (!fs.existsSync(fbTargetDir)) fs.mkdirSync(fbTargetDir, { recursive: true });
+                const newPath = path.resolve(fbTargetDir, filename);
+                if (fs.existsSync(oldPath)) {
+                  try {
+                    fs.linkSync(oldPath, newPath);
+                  } catch {
+                    fs.renameSync(oldPath, newPath);
+                    try { fs.linkSync(newPath, oldPath); } catch {}
+                  }
+                  console.log(`  ✓ Moved feedback file: ${filename} -> ${folder}/feedback/${filename}`);
+                }
+                subUpdates.feedback_file_url = `/uploads/${folder}/feedback/${filename}`;
+              }
+              if (Object.keys(subUpdates).length > 0) {
+                await supabase.from('manual_submissions').update(subUpdates).eq('id', sub.id);
+                console.log(`  ✓ Updated manual_submission ID ${sub.id} in DB.`);
               }
             }
           } catch (e) {
