@@ -1035,6 +1035,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("course_name", `${course?.title || params.courseId}/submissions`);
 
       const existingUrl = manualSubmissions[`${topicId}_${subType}`]?.file_url || manualSubmissions[`${topicId}_worksheet`]?.file_url;
       if (existingUrl) {
@@ -1157,6 +1158,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("course_name", `${course?.title || params.courseId}/submissions`);
 
       const subType = `pdf_quiz_${quizId}`;
       const existingUrl = manualSubmissions[`${activeTopic.id}_${subType}`]?.file_url || manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.file_url;

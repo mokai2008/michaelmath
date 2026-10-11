@@ -184,6 +184,7 @@ export default function SubmissionsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("folder", "feedback");
       if (feedbackFileUrl) {
         formData.append("oldUrl", feedbackFileUrl);
       }

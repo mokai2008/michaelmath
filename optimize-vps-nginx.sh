@@ -10,6 +10,7 @@ echo "🚀 Starting Nginx Video Streaming Optimization..."
 # 1. Ensure directory permissions so Nginx (www-data) can read the uploads directly
 echo "📂 Setting folder permissions for /home/gadmaths/htdocs/public/uploads..."
 chmod 755 /home/gadmaths /home/gadmaths/htdocs /home/gadmaths/htdocs/public /home/gadmaths/htdocs/public/uploads || true
+find /home/gadmaths/htdocs/public/uploads -type d -exec chmod 755 {} + 2>/dev/null || true
 find /home/gadmaths/htdocs/public/uploads -type f -exec chmod 644 {} + 2>/dev/null || true
 
 # 2. Ensure ffmpeg is installed on VPS for instant MP4 video FastStart streaming
@@ -18,10 +19,18 @@ if ! command -v ffmpeg &> /dev/null; then
   DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y ffmpeg || true
 fi
 
-# 3. Optimize all existing MP4 videos in /public/uploads/ to have FastStart (moves moov atom to start in ~0.5s)
+# 3. Organize loose uploads into course folders
+if [ -f "/home/gadmaths/htdocs/scripts/migrate-uploads.mjs" ]; then
+  echo "🚚 Organizing loose uploads into course folders..."
+  node /home/gadmaths/htdocs/scripts/migrate-uploads.mjs || true
+  find /home/gadmaths/htdocs/public/uploads -type d -exec chmod 755 {} + 2>/dev/null || true
+  find /home/gadmaths/htdocs/public/uploads -type f -exec chmod 644 {} + 2>/dev/null || true
+fi
+
+# 4. Optimize all existing MP4 videos across all course folders for instant FastStart
 if command -v ffmpeg &> /dev/null; then
-  echo "⚡ Optimizing existing MP4 videos for instant 0-second FastStart playback..."
-  for vid in /home/gadmaths/htdocs/public/uploads/*.mp4; do
+  echo "⚡ Optimizing existing MP4 videos for instant 0-second FastStart playback across all course folders..."
+  find /home/gadmaths/htdocs/public/uploads -type f -name "*.mp4" | while read -r vid; do
     [ -f "$vid" ] || continue
     ffmpeg -y -i "$vid" -c copy -movflags +faststart "${vid}.tmp.mp4" 2>/dev/null && mv "${vid}.tmp.mp4" "$vid" || rm -f "${vid}.tmp.mp4"
   done

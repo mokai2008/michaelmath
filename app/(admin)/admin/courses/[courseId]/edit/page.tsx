@@ -12,6 +12,7 @@ import Link from "next/link";
 import MathText from "@/components/MathText";
 import { distributeEqualPercentages } from "@/lib/progress";
 import { prepareLabSrcDoc, SAMPLE_MATH_LAB_TEMPLATE, PRESET_LAB_URLS } from "@/lib/lab";
+import { sanitizeCourseFolder, isRootUploadUrl, toCourseUploadUrl } from "@/lib/uploads";
 
 export default function AdminCourseEditor() {
   const { courseId } = useParams();
@@ -40,6 +41,12 @@ export default function AdminCourseEditor() {
       formData.append("file", file);
       if (currentUrl) {
         formData.append("oldUrl", currentUrl);
+      }
+      if (courseTitle) {
+        formData.append("course_name", courseTitle);
+      }
+      if (courseId) {
+        formData.append("course_id", String(courseId));
       }
 
       // Upload directly to VPS disk via /api/upload
@@ -93,8 +100,10 @@ export default function AdminCourseEditor() {
         
         setCourseTitle(course.title);
         setCourseDescription(course.description || "");
-        setCourseThumbnail(course.thumbnail_url || "");
-        setCourseIntroVideo(course.intro_video_url || "");
+        const rawThumbnail = course.thumbnail_url || "";
+        const rawIntroVideo = course.intro_video_url || "";
+        setCourseThumbnail(toCourseUploadUrl(rawThumbnail, course.title));
+        setCourseIntroVideo(toCourseUploadUrl(rawIntroVideo, course.title));
         const rawKeywords: string[] = course.keywords || [];
         const langTag = Array.isArray(rawKeywords)
           ? rawKeywords.find((k: string) => typeof k === 'string' && k.toLowerCase().startsWith('lang:'))
@@ -240,7 +249,57 @@ export default function AdminCourseEditor() {
           };
         }));
 
-        setSections(mappedSections);
+        // Normalize any legacy root upload URLs to the course folder
+        const legacyUploadUrls: string[] = [];
+        if (isRootUploadUrl(rawThumbnail)) legacyUploadUrls.push(rawThumbnail);
+        if (isRootUploadUrl(rawIntroVideo)) legacyUploadUrls.push(rawIntroVideo);
+
+        const normalizedSections = mappedSections.map((sec: any) => ({
+          ...sec,
+          topics: (sec.topics || []).map((topic: any) => {
+            const nextItems = (topic.items || []).map((item: any) => {
+              const updated = { ...item };
+              if (isRootUploadUrl(updated.url)) {
+                legacyUploadUrls.push(updated.url);
+                updated.url = toCourseUploadUrl(updated.url, course.title);
+              }
+              if (Array.isArray(updated.urls)) {
+                updated.urls = updated.urls.map((u: string) => {
+                  if (isRootUploadUrl(u)) {
+                    legacyUploadUrls.push(u);
+                    return toCourseUploadUrl(u, course.title);
+                  }
+                  return u;
+                });
+              }
+              if (isRootUploadUrl(updated.worksheetPdfUrl)) {
+                legacyUploadUrls.push(updated.worksheetPdfUrl);
+                updated.worksheetPdfUrl = toCourseUploadUrl(updated.worksheetPdfUrl, course.title);
+              }
+              if (isRootUploadUrl(updated.quizPdfUrl)) {
+                legacyUploadUrls.push(updated.quizPdfUrl);
+                updated.quizPdfUrl = toCourseUploadUrl(updated.quizPdfUrl, course.title);
+              }
+              return updated;
+            });
+            return { ...topic, items: nextItems };
+          })
+        }));
+
+        setSections(normalizedSections);
+
+        // If there were legacy root upload URLs, request server to move files on disk into course folder
+        if (legacyUploadUrls.length > 0 && course.title) {
+          fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'organize_course',
+              course_name: course.title,
+              urls: Array.from(new Set(legacyUploadUrls))
+            })
+          }).catch((err) => console.debug('Auto-organize notice:', err));
+        }
 
         // Fetch video server opens for this course
         const { data: opensData } = await supabase
@@ -751,11 +810,14 @@ export default function AdminCourseEditor() {
         cleanKeywords.push(`lang:${courseSpokenLanguage.trim()}`);
       }
 
+      const finalThumbnail = toCourseUploadUrl(courseThumbnail, courseTitle);
+      const finalIntroVideo = toCourseUploadUrl(courseIntroVideo, courseTitle);
+
       const coursePayload: any = {
         title: courseTitle,
         description: courseDescription,
-        thumbnail_url: courseThumbnail,
-        intro_video_url: courseIntroVideo,
+        thumbnail_url: finalThumbnail,
+        intro_video_url: finalIntroVideo,
         spoken_language: courseSpokenLanguage.trim(),
         total_price: parseFloat(coursePrice) || 0,
         is_published: finalIsPublished,
@@ -804,7 +866,16 @@ export default function AdminCourseEditor() {
           const topic = section.topics[tIdx];
           const rawWeight = parseFloat(String(topic.progress_percentage || 0)) || 0;
           const rawPrice = parseFloat(String(topic.price || 0)) || 0;
-          const items = (topic.items || []).filter((i: any) => !i?.__topic_meta);
+          const items = (topic.items || []).filter((i: any) => !i?.__topic_meta).map((it: any) => {
+            const nextItem = { ...it };
+            if (nextItem.url) nextItem.url = toCourseUploadUrl(nextItem.url, courseTitle);
+            if (Array.isArray(nextItem.urls)) {
+              nextItem.urls = nextItem.urls.map((u: string) => toCourseUploadUrl(u, courseTitle));
+            }
+            if (nextItem.worksheetPdfUrl) nextItem.worksheetPdfUrl = toCourseUploadUrl(nextItem.worksheetPdfUrl, courseTitle);
+            if (nextItem.quizPdfUrl) nextItem.quizPdfUrl = toCourseUploadUrl(nextItem.quizPdfUrl, courseTitle);
+            return nextItem;
+          });
           const itemsWithMeta = [...items, { __topic_meta: true, progress_percentage: rawWeight, price: rawPrice }];
           const firstVideo = items.find((i: any) => i.type === 'video');
 
@@ -848,7 +919,7 @@ export default function AdminCourseEditor() {
               await supabase.from('topic_pdfs').insert({
                 topic_id: dbTopicId,
                 type: item.type,
-                file_url: item.url
+                file_url: toCourseUploadUrl(item.url, courseTitle)
               });
             }
           }
@@ -867,7 +938,7 @@ export default function AdminCourseEditor() {
                   type: 'topic',
                   questions_data: hasQuestions ? item.quizQuestions : null,
                   embed_code: hasEmbed ? item.quizEmbedCode : null,
-                  quiz_pdf_url: hasPdf ? item.quizPdfUrl : null,
+                  quiz_pdf_url: hasPdf ? toCourseUploadUrl(item.quizPdfUrl, courseTitle) : null,
                   total_marks: hasQuestions ? item.quizQuestions.length : (hasEmbed || hasPdf ? 10 : 0),
                   time_limit_minutes: parseInt(item.quizTimeLimit) || null,
                   passing_score: parseInt(item.quizPassingScore) || null,
@@ -889,6 +960,22 @@ export default function AdminCourseEditor() {
           }
         }
       }
+
+      // Ensure all course files on VPS disk are organized into /uploads/<course_name>/
+      const allCourseUploads = [
+        coursePayload.thumbnail_url,
+        coursePayload.intro_video_url,
+        ...sections.flatMap(s => (s.topics || []).flatMap((t: any) => (t.items || []).flatMap((i: any) => [i.url, ...(i.urls || []), i.worksheetPdfUrl, i.quizPdfUrl]))).filter(Boolean)
+      ];
+      fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'organize_course',
+          course_name: courseTitle,
+          urls: Array.from(new Set(allCourseUploads))
+        })
+      }).catch(() => {});
 
       alert("Course successfully updated!");
       router.push('/admin/courses');

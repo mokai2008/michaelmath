@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
 import { distributeEqualPercentages } from "@/lib/progress";
 import { prepareLabSrcDoc, SAMPLE_MATH_LAB_TEMPLATE, PRESET_LAB_URLS } from "@/lib/lab";
+import { toCourseUploadUrl } from "@/lib/uploads";
 
 export default function AdminNewCourse() {
   const [step, setStep] = useState(1);
@@ -64,6 +65,9 @@ export default function AdminNewCourse() {
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("file", file);
+      if (courseTitle && courseTitle.trim()) {
+        formData.append("course_name", courseTitle.trim());
+      }
       if (currentUrl) {
         formData.append("oldUrl", currentUrl);
       }
@@ -559,11 +563,14 @@ export default function AdminNewCourse() {
         cleanKeywords.push(`lang:${courseSpokenLanguage.trim()}`);
       }
 
+      const finalThumbnail = toCourseUploadUrl(courseThumbnail, courseTitle);
+      const finalIntroVideo = toCourseUploadUrl(courseIntroVideo, courseTitle);
+
       const coursePayload: any = {
         title: courseTitle,
         description: courseDescription,
-        thumbnail_url: courseThumbnail,
-        intro_video_url: courseIntroVideo,
+        thumbnail_url: finalThumbnail,
+        intro_video_url: finalIntroVideo,
         spoken_language: courseSpokenLanguage.trim(),
         total_price: parseFloat(coursePrice) || 0,
         is_published: publish,
@@ -607,10 +614,18 @@ export default function AdminNewCourse() {
 
         for (let tIdx = 0; tIdx < section.topics.length; tIdx++) {
           const topic = section.topics[tIdx];
-          const items = topic.items || [];
           const rawWeight = parseFloat(String(topic.progress_percentage || 0)) || 0;
           const rawPrice = parseFloat(String(topic.price || 0)) || 0;
-          const itemsList = (items || []).filter((i: any) => !i?.__topic_meta);
+          const itemsList = (topic.items || []).filter((i: any) => !i?.__topic_meta).map((it: any) => {
+            const nextItem = { ...it };
+            if (nextItem.url) nextItem.url = toCourseUploadUrl(nextItem.url, courseTitle);
+            if (Array.isArray(nextItem.urls)) {
+              nextItem.urls = nextItem.urls.map((u: string) => toCourseUploadUrl(u, courseTitle));
+            }
+            if (nextItem.worksheetPdfUrl) nextItem.worksheetPdfUrl = toCourseUploadUrl(nextItem.worksheetPdfUrl, courseTitle);
+            if (nextItem.quizPdfUrl) nextItem.quizPdfUrl = toCourseUploadUrl(nextItem.quizPdfUrl, courseTitle);
+            return nextItem;
+          });
           const itemsWithMeta = [...itemsList, { __topic_meta: true, progress_percentage: rawWeight, price: rawPrice }];
           const firstVideo = itemsList.find((i: any) => i.type === 'video');
 
@@ -643,18 +658,18 @@ export default function AdminNewCourse() {
           const topicId = topicData.id;
 
           // Insert PDFs for backwards compatibility & submission tracking
-          for (const item of items as any[]) {
+          for (const item of itemsList as any[]) {
             if ((item.type === 'worksheet' || item.type === 'notes') && item.url) {
               await supabase.from('topic_pdfs').insert({
                 topic_id: topicId,
                 type: item.type,
-                file_url: item.url
+                file_url: toCourseUploadUrl(item.url, courseTitle)
               });
             }
           }
 
           // Insert Quizzes for backwards compatibility & quiz submission tracking
-          for (const item of items as any[]) {
+          for (const item of itemsList as any[]) {
             if (item.type === 'quiz') {
               const hasQuestions = item.quizQuestions && item.quizQuestions.length > 0;
               const hasEmbed = item.quizEmbedCode && item.quizEmbedCode.trim().length > 0;
@@ -667,7 +682,7 @@ export default function AdminNewCourse() {
                   type: 'topic',
                   questions_data: hasQuestions ? item.quizQuestions : [],
                   embed_code: hasEmbed ? item.quizEmbedCode : null,
-                  quiz_pdf_url: hasPdf ? item.quizPdfUrl : null,
+                  quiz_pdf_url: hasPdf ? toCourseUploadUrl(item.quizPdfUrl, courseTitle) : null,
                   total_marks: hasQuestions ? item.quizQuestions.length : (hasEmbed || hasPdf ? 10 : 0),
                   time_limit_minutes: parseInt(item.quizTimeLimit) || null,
                   passing_score: parseInt(item.quizPassingScore) || null,

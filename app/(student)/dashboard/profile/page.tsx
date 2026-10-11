@@ -125,6 +125,7 @@ export default function ProfilePage() {
 
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("folder", "avatars");
       if (profile.avatar_url) {
         formData.append("oldUrl", profile.avatar_url);
       }

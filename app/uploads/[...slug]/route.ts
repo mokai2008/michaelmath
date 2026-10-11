@@ -1,12 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stat, createReadStream } from "fs";
+import { stat, createReadStream, existsSync, readdir } from "fs";
 import { promisify } from "util";
 import path from "path";
 import { Readable } from "stream";
 
 const statAsync = promisify(stat);
+const readdirAsync = promisify(readdir);
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Resolves a requested file path inside public/uploads, with smart fallback:
+ * 1. If requested /uploads/course_name/video.mp4 exists, return it.
+ * 2. If not found in subfolder, check if it still sits at root /uploads/video.mp4.
+ * 3. If requested /uploads/video.mp4 (no folder), search subfolders to find where it was organized.
+ */
+async function resolveUploadFilePath(uploadsDir: string, slug: string[]): Promise<string | null> {
+  const filename = slug.join("/");
+  let candidatePath = path.normalize(path.join(uploadsDir, filename));
+
+  // Security: prevent directory traversal
+  if (!candidatePath.startsWith(uploadsDir)) {
+    return null;
+  }
+
+  // 1. Direct hit
+  if (existsSync(candidatePath)) {
+    return candidatePath;
+  }
+
+  // 2. Fallback: single filename requested (/uploads/video.mp4), search subdirectories
+  if (slug.length === 1) {
+    const targetFilename = slug[0];
+    try {
+      const entries = await readdirAsync(uploadsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subPath = path.join(uploadsDir, entry.name, targetFilename);
+          if (existsSync(subPath)) {
+            return subPath;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Fallback: nested path requested (/uploads/course_name/video.mp4), check root uploads directory
+  if (slug.length > 1) {
+    const targetFilename = slug[slug.length - 1];
+    const rootPath = path.join(uploadsDir, targetFilename);
+    if (existsSync(rootPath)) {
+      return rootPath;
+    }
+  }
+
+  return null;
+}
 
 export async function HEAD(
   request: NextRequest,
@@ -14,12 +63,11 @@ export async function HEAD(
 ) {
   try {
     const slug = params.slug || [];
-    const filename = slug.join("/");
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    const filePath = path.normalize(path.join(uploadsDir, filename));
+    const uploadsDir = path.resolve(process.cwd(), "public", "uploads");
+    const filePath = await resolveUploadFilePath(uploadsDir, slug);
 
-    if (!filePath.startsWith(uploadsDir)) {
-      return new NextResponse(null, { status: 403 });
+    if (!filePath) {
+      return new NextResponse(null, { status: 404 });
     }
 
     const fileStats = await statAsync(filePath);
@@ -38,6 +86,10 @@ export async function HEAD(
       ".png": "image/png",
       ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
+      ".gif": "image/gif",
+      ".svg": "image/svg+xml",
+      ".webp": "image/webp",
+      ".mp3": "audio/mpeg",
     };
     const contentType = mimeTypes[ext] || "application/octet-stream";
 
@@ -62,15 +114,11 @@ export async function GET(
 ) {
   try {
     const slug = params.slug || [];
-    const filename = slug.join("/");
+    const uploadsDir = path.resolve(process.cwd(), "public", "uploads");
+    const filePath = await resolveUploadFilePath(uploadsDir, slug);
 
-    // Target directory: public/uploads on the VPS disk
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    const filePath = path.normalize(path.join(uploadsDir, filename));
-
-    // Security: Prevent path traversal attacks
-    if (!filePath.startsWith(uploadsDir)) {
-      return new NextResponse("Forbidden", { status: 403 });
+    if (!filePath) {
+      return new NextResponse("File Not Found", { status: 404 });
     }
 
     let fileStats;
