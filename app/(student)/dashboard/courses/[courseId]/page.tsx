@@ -2011,13 +2011,19 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             // Compute student-assigned default mirror link based on sessionUser ID hash for load balancing
             let autoAssignedIndex = 0;
             if (sessionUser?.id && activeUrls.length > 1) {
-              let hash = 0;
-              const uid = sessionUser.id;
-              for (let i = 0; i < uid.length; i++) {
-                hash = (hash << 5) - hash + uid.charCodeAt(i);
-                hash |= 0;
+              // Always prioritize direct high-speed VPS video uploads over external cloud mirrors
+              const vpsUploadIndex = activeUrls.findIndex((u: string) => typeof u === 'string' && u.includes('/uploads/'));
+              if (vpsUploadIndex !== -1) {
+                autoAssignedIndex = vpsUploadIndex;
+              } else {
+                let hash = 0;
+                const uid = sessionUser.id;
+                for (let i = 0; i < uid.length; i++) {
+                  hash = (hash << 5) - hash + uid.charCodeAt(i);
+                  hash |= 0;
+                }
+                autoAssignedIndex = Math.abs(hash) % activeUrls.length;
               }
-              autoAssignedIndex = Math.abs(hash) % activeUrls.length;
             }
 
             const currentMirrorIndex = selectedMirrorIndex !== null && selectedMirrorIndex < activeUrls.length

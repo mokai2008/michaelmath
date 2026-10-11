@@ -718,16 +718,28 @@ export default function VideoPlayer({
       : (url.includes('?') ? `${url}&hl=en` : `${url}?hl=en`);
 
     return (
-      <div className={`relative ${className} bg-black overflow-hidden`}>
+      <div className={`relative ${className} bg-black overflow-hidden group`}>
         <iframe
           src={embedUrl}
           className="w-full h-full border-0"
           allowFullScreen
-          allow="autoplay; encrypted-media"
-          sandbox="allow-same-origin allow-scripts"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
         />
         {/* Overlay to block Google Drive pop-out button in top-right */}
         <div className="absolute top-0 right-0 w-12 h-12 bg-black z-10 cursor-default" />
+
+        {/* Direct link helper if Safari cookie blocking restricts playback */}
+        <div className="absolute bottom-2 left-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+          <a
+            href={embedUrl.replace('/preview', '/view')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] font-bold text-gray-300 hover:text-white bg-black/80 hover:bg-black px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1 shadow-md transition-all"
+          >
+            <span>Having trouble playing? Open in Google Drive</span>
+          </a>
+        </div>
       </div>
     );
   }
