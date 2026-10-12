@@ -23,6 +23,7 @@ interface VideoPlayerProps {
   poster?: string | null;
   className?: string;
   autoPlay?: boolean;
+  onFallbackToIframe?: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -47,6 +48,7 @@ function HTML5DirectVideo({
   poster,
   className = "w-full h-full",
   autoPlay = false,
+  onFallbackToIframe,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,6 +95,10 @@ function HTML5DirectVideo({
         setVideoSrc(alternateUrl);
         return;
       }
+    }
+    if (onFallbackToIframe) {
+      onFallbackToIframe();
+      return;
     }
     setHasFailed(true);
     setIsBuffering(false);
@@ -644,6 +650,51 @@ function HTML5DirectVideo({
   );
 }
 
+function GoogleDrivePlayer({
+  fileId,
+  embedUrl,
+  className = "w-full h-full",
+  poster,
+  autoPlay,
+}: {
+  fileId: string;
+  embedUrl: string;
+  className?: string;
+  poster?: string | null;
+  autoPlay?: boolean;
+}) {
+  const [useIframe, setUseIframe] = useState(false);
+  const streamUrl = fileId ? `/api/drive-stream?id=${fileId}` : null;
+
+  if (useIframe || !streamUrl) {
+    return (
+      <div className={`relative ${className} bg-black overflow-hidden`}>
+        <iframe
+          src={embedUrl}
+          className="w-full h-full border-0"
+          allowFullScreen
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+        {/* Overlay to block external pop-out button in top-right */}
+        <div className="absolute top-0 right-0 w-12 h-12 bg-black z-10 cursor-default" />
+      </div>
+    );
+  }
+
+  return (
+    <HTML5DirectVideo
+      key={streamUrl}
+      url={streamUrl}
+      fallbackUrl={embedUrl}
+      poster={poster}
+      className={className}
+      autoPlay={autoPlay}
+      onFallbackToIframe={() => setUseIframe(true)}
+    />
+  );
+}
+
 export default function VideoPlayer({
   url,
   fallbackUrl,
@@ -702,7 +753,7 @@ export default function VideoPlayer({
     );
   }
 
-  // Google Drive embed handler
+  // Cloud file handler
   const isGoogleDrive = url.includes("drive.google.com");
   if (isGoogleDrive) {
     let fileId = "";
@@ -718,29 +769,13 @@ export default function VideoPlayer({
       : (url.includes('?') ? `${url}&hl=en` : `${url}?hl=en`);
 
     return (
-      <div className={`relative ${className} bg-black overflow-hidden group`}>
-        <iframe
-          src={embedUrl}
-          className="w-full h-full border-0"
-          allowFullScreen
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-        {/* Overlay to block Google Drive pop-out button in top-right */}
-        <div className="absolute top-0 right-0 w-12 h-12 bg-black z-10 cursor-default" />
-
-        {/* Direct link helper if Safari cookie blocking restricts playback */}
-        <div className="absolute bottom-2 left-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
-          <a
-            href={embedUrl.replace('/preview', '/view')}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] font-bold text-gray-300 hover:text-white bg-black/80 hover:bg-black px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1 shadow-md transition-all"
-          >
-            <span>Having trouble playing? Open in Google Drive</span>
-          </a>
-        </div>
-      </div>
+      <GoogleDrivePlayer
+        fileId={fileId}
+        embedUrl={embedUrl}
+        className={className}
+        poster={poster}
+        autoPlay={autoPlay}
+      />
     );
   }
 
