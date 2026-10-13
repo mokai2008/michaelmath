@@ -2009,7 +2009,22 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
             const currentVideoUrl = activeUrls[currentMirrorIndex] || activeUrls[0] || '';
             const rawUrlAtMirror = rawUrls[currentMirrorIndex] || rawUrls[0] || '';
-            const fallbackVideoUrl = rawUrlAtMirror !== currentVideoUrl ? rawUrlAtMirror : toRootUploadUrl(currentVideoUrl);
+
+            // Locate primary direct video (e.g. Server 1 on VPS or any direct video file)
+            const primaryDirectVideo = activeUrls.find((u: string) => 
+              typeof u === 'string' && !u.includes('drive.google.com') && (u.startsWith('/uploads/') || u.endsWith('.mp4') || u.endsWith('.webm') || u.endsWith('.mov'))
+            ) || (activeUrls[0] && !activeUrls[0].includes('drive.google.com') ? activeUrls[0] : '');
+
+            // If selected mirror is a Google Drive link and we have a reliable direct video on the server,
+            // play the high-speed server video so Safari users never get blocked by Apple's ITP / Google cookie barriers
+            const isGoogleDriveMirror = typeof currentVideoUrl === 'string' && currentVideoUrl.includes('drive.google.com');
+            const effectiveVideoUrl = (isGoogleDriveMirror && primaryDirectVideo)
+              ? primaryDirectVideo
+              : currentVideoUrl;
+
+            const fallbackVideoUrl = primaryDirectVideo && primaryDirectVideo !== effectiveVideoUrl
+              ? primaryDirectVideo
+              : (rawUrlAtMirror !== currentVideoUrl ? rawUrlAtMirror : toRootUploadUrl(effectiveVideoUrl));
 
             // Extract all worksheets and notes (from content_items or legacy topic_pdfs)
             const contentWorksheets = contentItems.filter((i: any) => i && i.type === 'worksheet' && (i.url || i.file_url || i.title));
@@ -2222,11 +2237,11 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                   </h2>
                 </div>
 
-                {currentVideoUrl ? (
+                {effectiveVideoUrl ? (
                   <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative">
                     <VideoPlayer 
-                      key={`${activeTopic.id}_${selectedVideoIndex}_${currentVideoUrl}`} 
-                      url={currentVideoUrl} 
+                      key={`${activeTopic.id}_${selectedVideoIndex}_${currentMirrorIndex}_${effectiveVideoUrl}`} 
+                      url={effectiveVideoUrl} 
                       fallbackUrl={fallbackVideoUrl} 
                     />
                   </div>

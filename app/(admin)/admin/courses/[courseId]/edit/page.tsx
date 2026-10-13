@@ -1093,9 +1093,9 @@ export default function AdminCourseEditor() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-2">Course Entrance / Intro Video (YouTube, Google Drive, or Upload)</label>
+            <label className="block text-sm font-medium text-text mb-2">Course Entrance / Intro Video (YouTube, Video URL, or Upload)</label>
             <div className="flex flex-col sm:flex-row gap-2">
-              <input type="text" value={courseIntroVideo} onChange={(e) => setCourseIntroVideo(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" placeholder="YouTube, Google Drive link, or upload video" />
+              <input type="text" value={courseIntroVideo} onChange={(e) => setCourseIntroVideo(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" placeholder="YouTube, video link, or upload video" />
               <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center sm:min-w-[120px] text-sm shrink-0">
                 {uploadingField === 'intro_video' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
                 <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, 'intro_video', setCourseIntroVideo, courseIntroVideo)} disabled={uploadingField === 'intro_video'} />
@@ -1562,7 +1562,7 @@ export default function AdminCourseEditor() {
                                     <div className="space-y-3 pt-2 border-t border-gray-100">
                                       <div className="flex items-center justify-between">
                                         <label className="block text-xs font-bold text-text/80">
-                                          Video Links & Bandwidth Load Balancing (Google Drive, OneDrive, YouTube)
+                                          Video Links & Bandwidth Load Balancing (Server Mirrors)
                                         </label>
                                         <button
                                           type="button"
@@ -1609,7 +1609,7 @@ export default function AdminCourseEditor() {
                                                   value={mirrorUrl}
                                                   onChange={(e) => handleUpdateMirrorUrl(section.id, topic.id, item.id, mIdx, e.target.value)}
                                                   className="flex-1 min-w-0 text-xs px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white"
-                                                  placeholder={mIdx === 0 ? "https://drive.google.com/..., OneDrive, or YouTube URL" : `Server ${mIdx + 1} (Google Drive / OneDrive)`}
+                                                  placeholder={mIdx === 0 ? "Video URL, OneDrive, or YouTube URL" : `Server ${mIdx + 1} (Alternative Mirror)`}
                                                 />
                                                 <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center shrink-0">
                                                   {uploadingField === `vid_${item.id}_${mIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
@@ -1644,7 +1644,7 @@ export default function AdminCourseEditor() {
                                         })}
                                       </div>
                                       <p className="text-[11px] text-gray-500 italic">
-                                        💡 Tip: Add multiple Google Drive / OneDrive links. The LMS automatically balances student traffic across these links to prevent bandwidth/quota limits.
+                                        💡 Tip: Add multiple video server links or uploads. The LMS automatically balances student traffic across these links to prevent bandwidth limits.
                                       </p>
 
                                       {/* Optional Worksheet PDF Attached to Video */}
@@ -1781,14 +1781,14 @@ export default function AdminCourseEditor() {
                                             </div>
                                           </div>
                                           <div className="space-y-2">
-                                            <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer Video (Google Drive / YouTube / OneDrive)</label>
+                                            <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer Video (YouTube / Video URL / Upload)</label>
                                             <div className="flex gap-2">
                                               <input 
                                                 type="text" 
                                                 value={item.answerVideoUrl || ''}
                                                 onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', e.target.value)}
                                                 className="w-full text-xs px-3 py-2 border border-teal-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                                                placeholder="https://drive.google.com/... or YouTube URL"
+                                                placeholder="Video URL, YouTube link, or upload..."
                                               />
                                               <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
                                                 {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
@@ -2039,14 +2039,14 @@ export default function AdminCourseEditor() {
                                           </div>
                                         </div>
                                         <div className="space-y-2">
-                                          <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer Video (Google Drive / YouTube / OneDrive)</label>
+                                          <label className="block text-[10px] uppercase font-bold text-teal-800/60">Answer Video (YouTube / Video URL / Upload)</label>
                                           <div className="flex gap-2">
                                             <input 
                                               type="text" 
                                               value={item.answerVideoUrl || ''}
                                               onChange={(e) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', e.target.value)}
                                               className="w-full text-xs px-3 py-2 border border-teal-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                                              placeholder="https://drive.google.com/... or YouTube URL"
+                                              placeholder="Video URL, YouTube link, or upload..."
                                             />
                                             <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
                                               {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}

@@ -37,6 +37,22 @@ function formatTime(seconds: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
+function isValidVideoUrl(u?: string | null): boolean {
+  if (!u || typeof u !== 'string') return false;
+  const trimmed = u.trim();
+  if (trimmed.endsWith('.pdf')) return false;
+  if (trimmed.includes('drive.google.com')) return false;
+  return (
+    trimmed.startsWith('/uploads/') ||
+    trimmed.endsWith('.mp4') ||
+    trimmed.endsWith('.webm') ||
+    trimmed.endsWith('.mov') ||
+    trimmed.endsWith('.m4v') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('data:video')
+  );
+}
+
 /**
  * Mobile-optimized HTML5 video player with generous touch scrubber,
  * 10-second fast-forward/rewind buttons, double-tap seek gestures,
@@ -653,12 +669,14 @@ function HTML5DirectVideo({
 function GoogleDrivePlayer({
   fileId,
   embedUrl,
+  fallbackUrl,
   className = "w-full h-full",
   poster,
   autoPlay,
 }: {
   fileId: string;
   embedUrl: string;
+  fallbackUrl?: string | null;
   className?: string;
   poster?: string | null;
   autoPlay?: boolean;
@@ -667,13 +685,26 @@ function GoogleDrivePlayer({
   const streamUrl = fileId ? `/api/drive-stream?id=${fileId}` : null;
 
   if (useIframe || !streamUrl) {
+    if (fallbackUrl && isValidVideoUrl(fallbackUrl)) {
+      return (
+        <HTML5DirectVideo
+          key={fallbackUrl}
+          url={fallbackUrl}
+          poster={poster}
+          className={className}
+          autoPlay={autoPlay}
+        />
+      );
+    }
+
     return (
-      <div className={`relative ${className} bg-black overflow-hidden`}>
+      <div className={`relative ${className} bg-black overflow-hidden flex items-center justify-center`}>
         <iframe
           src={embedUrl}
           className="w-full h-full border-0"
           allowFullScreen
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
           referrerPolicy="strict-origin-when-cross-origin"
         />
         {/* Overlay to block external pop-out button in top-right */}
@@ -686,7 +717,7 @@ function GoogleDrivePlayer({
     <HTML5DirectVideo
       key={streamUrl}
       url={streamUrl}
-      fallbackUrl={embedUrl}
+      fallbackUrl={fallbackUrl && isValidVideoUrl(fallbackUrl) ? fallbackUrl : embedUrl}
       poster={poster}
       className={className}
       autoPlay={autoPlay}
@@ -756,6 +787,20 @@ export default function VideoPlayer({
   // Cloud file handler
   const isGoogleDrive = url.includes("drive.google.com");
   if (isGoogleDrive) {
+    // If a direct fallback video is available (e.g. Server 1 on VPS), prioritize it so Safari never gets blocked by cross-site cookie restrictions
+    if (fallbackUrl && isValidVideoUrl(fallbackUrl)) {
+      return (
+        <HTML5DirectVideo
+          key={fallbackUrl}
+          url={fallbackUrl}
+          fallbackUrl={fallbackUrl}
+          poster={poster}
+          className={className}
+          autoPlay={autoPlay}
+        />
+      );
+    }
+
     let fileId = "";
     const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
     const openMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
@@ -772,6 +817,7 @@ export default function VideoPlayer({
       <GoogleDrivePlayer
         fileId={fileId}
         embedUrl={embedUrl}
+        fallbackUrl={fallbackUrl}
         className={className}
         poster={poster}
         autoPlay={autoPlay}
