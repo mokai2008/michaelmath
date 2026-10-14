@@ -642,7 +642,17 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       ? (Array.isArray(currentVideoItem.urls) && currentVideoItem.urls.length > 0 ? currentVideoItem.urls : [currentVideoItem.url])
       : (activeTopic.youtube_url ? [activeTopic.youtube_url] : []);
     
-    const activeUrls = rawUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
+    const activeUrls = rawUrls
+      .filter((u: string) => u && typeof u === 'string' && u.trim().length > 0)
+      .filter((u: string, idx: number, arr: string[]) => {
+        const hasDirectVideo = arr.some((item: string) => 
+          item && !item.includes('drive.google.com') && (item.startsWith('/uploads/') || item.endsWith('.mp4') || item.endsWith('.webm') || item.endsWith('.mov'))
+        );
+        if (hasDirectVideo && idx > 0 && u.includes('drive.google.com')) {
+          return false;
+        }
+        return true;
+      });
     if (activeUrls.length === 0) return;
 
     // Server 1 is always the Auto (primary default) mirror
@@ -1998,7 +2008,19 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
               return u;
             });
 
-            const activeUrls = normalizedUrls.filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
+            // Filter out empty URLs and remove any secondary Google Drive links (Server 2) when a direct video exists
+            const activeUrls = normalizedUrls
+              .filter((u: string) => u && typeof u === 'string' && u.trim().length > 0)
+              .filter((u: string, idx: number, arr: string[]) => {
+                // If there is an uploaded VPS video (Server 1), remove broken Google Drive mirror links (Server 2)
+                const hasDirectVideo = arr.some((item: string) => 
+                  item && !item.includes('drive.google.com') && (item.startsWith('/uploads/') || item.endsWith('.mp4') || item.endsWith('.webm') || item.endsWith('.mov'))
+                );
+                if (hasDirectVideo && idx > 0 && u.includes('drive.google.com')) {
+                  return false;
+                }
+                return true;
+              });
 
             // Server 1 is always the Auto (primary default) mirror
             const autoAssignedIndex = 0;

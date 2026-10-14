@@ -878,7 +878,14 @@ export default function AdminCourseEditor() {
             const nextItem = { ...it };
             if (nextItem.url) nextItem.url = toCourseUploadUrl(nextItem.url, courseTitle);
             if (Array.isArray(nextItem.urls)) {
-              nextItem.urls = nextItem.urls.map((u: string) => toCourseUploadUrl(u, courseTitle));
+              const cleaned = nextItem.urls
+                .map((u: string) => toCourseUploadUrl(u, courseTitle))
+                .filter((u: string) => u && typeof u === 'string' && u.trim().length > 0);
+              const hasDirect = cleaned.some((u: string) => u && !u.includes('drive.google.com'));
+              nextItem.urls = hasDirect
+                ? cleaned.filter((u: string, idx: number) => idx === 0 || !u.includes('drive.google.com'))
+                : cleaned;
+              if (nextItem.urls.length === 0) nextItem.urls = [''];
             }
             if (nextItem.worksheetPdfUrl) nextItem.worksheetPdfUrl = toCourseUploadUrl(nextItem.worksheetPdfUrl, courseTitle);
             if (nextItem.quizPdfUrl) nextItem.quizPdfUrl = toCourseUploadUrl(nextItem.quizPdfUrl, courseTitle);
