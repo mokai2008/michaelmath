@@ -9,6 +9,8 @@ import { NotificationDiagnosticModal } from "@/components/NotificationDiagnostic
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'reviewed' | 'rejected'>('pending');
   const [desktopNotificationGranted, setDesktopNotificationGranted] = useState(false);
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
@@ -114,39 +116,147 @@ export default function SubmissionsPage() {
     }
   };
 
-  const fetchSubmissions = async () => {
+  const fetchSubmissions = async (silent = false) => {
+    if (!silent) {
+      if (submissions.length === 0) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+    }
+
     try {
-      const { data, error } = await supabase
+      // 1. Ensure user session is initialized in Supabase client
+      await supabase.auth.getSession();
+
+      // 2. Fetch manual_submissions directly - immune to deep nested relation failures
+      const { data: rawSubs, error } = await supabase
         .from('manual_submissions')
-        .select(`
-          *,
-          profiles:student_id (full_name, email),
-          topics:topic_id (id, title, section_id, content_items, sections:section_id (id, title, course_id, courses:course_id (id, title)))
-        `)
+        .select('*')
         .order('submitted_at', { ascending: false });
 
       if (error) {
         if (error.code === '42P01') {
           console.warn("manual_submissions table not found");
           setSubmissions([]);
+          setFetchError(null);
         } else {
-          throw error;
+          console.error("Error fetching manual_submissions:", error);
+          setFetchError(error.message || "Failed to load submissions from database.");
         }
-      } else {
-        const subs = data || [];
-        setSubmissions(subs);
-        const pendingCount = subs.filter((s: any) => s.status === 'pending').length;
-        window.dispatchEvent(new CustomEvent('submissions_count_updated', { detail: pendingCount }));
+        return;
       }
+
+      setFetchError(null);
+      const subs = rawSubs || [];
+      if (subs.length === 0) {
+        setSubmissions([]);
+        window.dispatchEvent(new CustomEvent('submissions_count_updated', { detail: 0 }));
+        return;
+      }
+
+      // 3. Extract unique student and topic IDs
+      const studentIds = Array.from(new Set(subs.map((s: any) => s.student_id).filter(Boolean)));
+      const topicIds = Array.from(new Set(subs.map((s: any) => s.topic_id).filter(Boolean)));
+
+      // 4. Fetch profiles and topics in parallel
+      const [profilesRes, topicsRes] = await Promise.all([
+        studentIds.length > 0
+          ? supabase.from('profiles').select('id, full_name, email').in('id', studentIds)
+          : Promise.resolve({ data: [] }),
+        topicIds.length > 0
+          ? supabase.from('topics').select('id, title, section_id, content_items').in('id', topicIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const profilesList = profilesRes.data || [];
+      const topicsList = topicsRes.data || [];
+
+      // 5. Fetch sections and courses for topics (so course titles are known for folder feedback)
+      const sectionIds = Array.from(new Set(topicsList.map((t: any) => t.section_id).filter(Boolean)));
+      let sectionsList: any[] = [];
+      let coursesList: any[] = [];
+
+      if (sectionIds.length > 0) {
+        try {
+          const { data: secData } = await supabase
+            .from('sections')
+            .select('id, title, course_id')
+            .in('id', sectionIds);
+          sectionsList = secData || [];
+
+          const courseIds = Array.from(new Set(sectionsList.map((s: any) => s.course_id).filter(Boolean)));
+          if (courseIds.length > 0) {
+            const { data: cData } = await supabase
+              .from('courses')
+              .select('id, title')
+              .in('id', courseIds);
+            coursesList = cData || [];
+          }
+        } catch (joinErr) {
+          console.warn("Optional sections/courses metadata lookup warning:", joinErr);
+        }
+      }
+
+      const coursesMap = new Map((coursesList || []).map((c: any) => [c.id, c]));
+      const sectionsMap = new Map((sectionsList || []).map((s: any) => [
+        s.id,
+        { ...s, courses: coursesMap.get(s.course_id) || null }
+      ]));
+      const topicsMap = new Map((topicsList || []).map((t: any) => [
+        t.id,
+        { ...t, sections: sectionsMap.get(t.section_id) || null }
+      ]));
+      const profilesMap = new Map((profilesList || []).map((p: any) => [p.id, p]));
+
+      // 6. Enrich submissions without ever dropping a record
+      const enriched = subs.map((sub: any) => {
+        const topicObj = topicsMap.get(sub.topic_id) || null;
+        const profileObj = profilesMap.get(sub.student_id) || null;
+        return {
+          ...sub,
+          profiles: profileObj || { full_name: 'Student', email: '' },
+          topics: topicObj || { title: 'Topic Lesson', content_items: [] }
+        };
+      });
+
+      setSubmissions(enriched);
+
+      // Keep selectedSubmission up to date if user has an item open
+      setSelectedSubmission((prev: any) => {
+        if (!prev) return null;
+        const updated = enriched.find((s: any) => s.id === prev.id);
+        return updated || prev;
+      });
+
+      const pendingCount = enriched.filter((s: any) => s.status === 'pending').length;
+      window.dispatchEvent(new CustomEvent('submissions_count_updated', { detail: pendingCount }));
     } catch (err: any) {
-      console.error(err);
+      console.error("Critical error in fetchSubmissions:", err);
+      setFetchError(err.message || "Failed to load submissions.");
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchSubmissions();
+    let isMounted = true;
+
+    const init = async () => {
+      await supabase.auth.getSession();
+      if (isMounted) {
+        await fetchSubmissions();
+      }
+    };
+    init();
+
+    // Re-fetch whenever auth state changes
+    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+        fetchSubmissions(true);
+      }
+    });
 
     // Subscribe to realtime changes on manual_submissions
     const channel = supabase
@@ -155,7 +265,7 @@ export default function SubmissionsPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'manual_submissions' },
         (payload: any) => {
-          fetchSubmissions();
+          fetchSubmissions(true);
           if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
             playNotificationSound();
             showDesktopNotification(
@@ -171,6 +281,8 @@ export default function SubmissionsPage() {
       .subscribe();
 
     return () => {
+      isMounted = false;
+      authListener?.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -615,8 +727,39 @@ export default function SubmissionsPage() {
             <HelpCircle className="w-3.5 h-3.5 text-text/60" />
             <span className="hidden sm:inline">Mac Alert Guide</span>
           </button>
+
+          <button
+            onClick={() => fetchSubmissions()}
+            disabled={isRefreshing || isLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-text/70 bg-white hover:bg-gray-50 border border-gray-200 transition-colors shadow-2xs disabled:opacity-50"
+            title="Refresh submissions list from database"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-text/60 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
         </div>
       </div>
+
+      {/* Fetch Error Banner */}
+      {fetchError && (
+        <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-900 p-4 rounded-2xl shadow-xs flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="p-2 bg-rose-100 rounded-xl text-rose-700 shrink-0">
+              <AlertCircle className="w-5 h-5" />
+            </span>
+            <div className="text-xs">
+              <p className="font-bold text-sm text-rose-950">Could not load student submissions</p>
+              <p className="text-rose-800/80 mt-0.5">{fetchError}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => fetchSubmissions()}
+            className="text-xs font-bold bg-rose-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-rose-700 transition-colors shadow-2xs shrink-0"
+          >
+            Retry Now
+          </button>
+        </div>
+      )}
 
       {/* Test Alert Feedback Banner */}
       {testAlertBanner && (
