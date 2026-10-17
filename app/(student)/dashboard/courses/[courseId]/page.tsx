@@ -40,6 +40,7 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { calculateCourseProgress, getTopicWeight } from "@/lib/progress";
 import { prepareLabSrcDoc } from "@/lib/lab";
 import { toCourseUploadUrl, toRootUploadUrl } from "@/lib/uploads";
+import { uploadWithProgress, humanizeUploadError, formatBytes } from "@/lib/client-upload";
 
 function InlinePdfViewer({ 
   url, 
@@ -560,6 +561,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [sessionUser, setSessionUser] = useState<any>(null);
   const [isUploadingWorksheet, setIsUploadingWorksheet] = useState<string | null>(null);
   const [isUploadingQuiz, setIsUploadingQuiz] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ id: string; percent: number; loaded: string; total: string } | null>(null);
 
   const [interactiveAnswers, setInteractiveAnswers] = useState<Record<number, number>>({});
   const [takingQuiz, setTakingQuiz] = useState<any>(null);
@@ -1177,31 +1179,32 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     const file = e.target.files?.[0];
     if (!file || !sessionUser) return;
     
+    // Reset input value so selecting the same file again triggers onChange
+    if (e.target) e.target.value = '';
+
     setIsUploadingWorksheet(subType);
+    setUploadProgress({ id: subType, percent: 0, loaded: '0 B', total: formatBytes(file.size) });
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("course_name", `${course?.title || params.courseId}/submissions`);
-
+      const courseFolder = `${course?.title || params.courseId}/submissions`;
       const existingUrl = manualSubmissions[`${topicId}_${subType}`]?.file_url || manualSubmissions[`${topicId}_worksheet`]?.file_url;
-      if (existingUrl) {
-        formData.append("oldUrl", existingUrl);
-      }
 
-      // Upload directly to VPS disk via /api/upload
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: session?.access_token ? {
-          Authorization: `Bearer ${session.access_token}`
-        } : {},
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error || !data.url) {
-        throw new Error(data.error || "Upload to VPS failed.");
-      }
+      // Upload directly via XHR with 10-minute timeout, progress events & auto image compression
+      const data = await uploadWithProgress(
+        file,
+        courseFolder,
+        existingUrl,
+        session?.access_token,
+        (prog) => {
+          setUploadProgress({
+            id: subType,
+            percent: prog.percent,
+            loaded: prog.loadedFormatted,
+            total: prog.totalFormatted,
+          });
+        }
+      );
 
       const finalUrl = data.url;
       
@@ -1282,17 +1285,19 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       }
     } catch (err: any) {
       console.error(err);
+      const friendlyMsg = humanizeUploadError(err, file.size);
       setSubmissionToast({
         type: 'error',
         badge: 'Upload Error',
         statusBadge: 'Failed ✕',
         title: 'Worksheet Upload Failed',
         lessonTitle: `${activeTopic?.title || 'Lesson'}`,
-        message: err.message || 'There was an error uploading your worksheet. Please try again.',
-        subMessage: 'Please make sure your file is a valid PDF.'
+        message: friendlyMsg,
+        subMessage: 'Accepted formats: PDF or images (.pdf, .jpg, .png). Try keeping file size under 20 MB for faster upload.'
       });
     } finally {
       setIsUploadingWorksheet(null);
+      setUploadProgress(null);
     }
   };
 
@@ -1300,32 +1305,32 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     const file = e.target.files?.[0];
     if (!file || !sessionUser || !activeTopic) return;
     
+    if (e.target) e.target.value = '';
+
     setIsUploadingQuiz(quizId);
+    setUploadProgress({ id: `quiz_${quizId}`, percent: 0, loaded: '0 B', total: formatBytes(file.size) });
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("course_name", `${course?.title || params.courseId}/submissions`);
-
+      const courseFolder = `${course?.title || params.courseId}/submissions`;
       const subType = `pdf_quiz_${quizId}`;
       const existingUrl = manualSubmissions[`${activeTopic.id}_${subType}`]?.file_url || manualSubmissions[`${activeTopic.id}_pdf_quiz`]?.file_url;
-      if (existingUrl) {
-        formData.append("oldUrl", existingUrl);
-      }
 
-      // Upload directly to VPS disk via /api/upload
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: session?.access_token ? {
-          Authorization: `Bearer ${session.access_token}`
-        } : {},
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error || !data.url) {
-        throw new Error(data.error || "Upload to VPS failed.");
-      }
+      // Upload directly via XHR with 10-minute timeout, progress events & auto image compression
+      const data = await uploadWithProgress(
+        file,
+        courseFolder,
+        existingUrl,
+        session?.access_token,
+        (prog) => {
+          setUploadProgress({
+            id: `quiz_${quizId}`,
+            percent: prog.percent,
+            loaded: prog.loadedFormatted,
+            total: prog.totalFormatted,
+          });
+        }
+      );
 
       const finalUrl = data.url;
 
@@ -1465,17 +1470,19 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
       }
     } catch (err: any) {
       console.error(err);
+      const friendlyMsg = humanizeUploadError(err, file.size);
       setSubmissionToast({
         type: 'error',
         badge: 'Upload Error',
         statusBadge: 'Failed ✕',
         title: 'Quiz Upload Failed',
         lessonTitle: `${activeTopic?.title || 'Lesson'}`,
-        message: err.message || 'There was an error uploading your quiz answers. Please try again.',
-        subMessage: 'Please make sure your file is a valid PDF.'
+        message: friendlyMsg,
+        subMessage: 'Accepted formats: PDF or images (.pdf, .jpg, .png). Try keeping file size under 20 MB for faster upload.'
       });
     } finally {
       setIsUploadingQuiz(null);
+      setUploadProgress(null);
     }
   };
 
@@ -2692,21 +2699,54 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                         }`}>
                                           {isUploadingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (sub.status === 'rejected' ? <Upload className="w-3.5 h-3.5" /> : null)}
                                           <span>{isUploadingThis ? 'Uploading...' : (sub.status === 'rejected' ? 'Re-upload Answers' : 'Update')}</span>
-                                          <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
+                                          <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
                                         </label>
                                       )}
                                     </div>
+                                    {isUploadingThis && (
+                                      <div className="mt-3 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                                        <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 mb-1">
+                                          <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin text-orange-500" /> Uploading answers...</span>
+                                          <span>{uploadProgress?.id === subType ? `${uploadProgress.percent}%` : ''}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                          <div 
+                                            className="bg-orange-500 h-full rounded-full transition-all duration-200"
+                                            style={{ width: `${uploadProgress?.id === subType ? uploadProgress.percent : 15}%` }}
+                                          />
+                                        </div>
+                                        {uploadProgress?.id === subType && uploadProgress.loaded && (
+                                          <p className="text-[10px] text-text/40 mt-1">{uploadProgress.loaded} of {uploadProgress.total} transferred</p>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
                                   <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-orange-400/50 transition-colors">
                                     <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
-                                    <div className="text-xs font-bold text-text">Upload Your {wsTitle} Answer PDF</div>
-                                    <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution to be reviewed</p>
+                                    <div className="text-xs font-bold text-text">Upload Your {wsTitle} Answers</div>
+                                    <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten PDF or photo to be reviewed</p>
                                     <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold hover:bg-orange-600 transition-all shadow-sm">
-                                      <Upload className="w-3.5 h-3.5" /> Select PDF File
-                                      <input type="file" className="hidden" accept=".pdf" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
+                                      <Upload className="w-3.5 h-3.5" /> Select PDF or Photo
+                                      <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleWorksheetUpload(e, activeTopic.id, subType, wsTitle)} disabled={isUploadingThis} />
                                     </label>
-                                    {isUploadingThis && <span className="text-xs text-text/50 flex items-center justify-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
+                                    {isUploadingThis && (
+                                      <div className="mt-3 max-w-xs mx-auto">
+                                        <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 mb-1">
+                                          <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin text-orange-500" /> Uploading answers...</span>
+                                          <span>{uploadProgress?.id === subType ? `${uploadProgress.percent}%` : ''}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                          <div 
+                                            className="bg-orange-500 h-full rounded-full transition-all duration-200"
+                                            style={{ width: `${uploadProgress?.id === subType ? uploadProgress.percent : 15}%` }}
+                                          />
+                                        </div>
+                                        {uploadProgress?.id === subType && uploadProgress.loaded && (
+                                          <p className="text-[10px] text-text/50 mt-1">{uploadProgress.loaded} of {uploadProgress.total} transferred — please keep page open</p>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -3214,21 +3254,54 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                                               }`}>
                                                 {isUploadingQuiz === quiz.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (quizManualSub?.status === 'rejected' ? <Upload className="w-3.5 h-3.5" /> : null)}
                                                 <span>{isUploadingQuiz === quiz.id ? 'Uploading...' : (quizManualSub?.status === 'rejected' ? 'Re-upload Answers' : 'Update')}</span>
-                                                <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
+                                                <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
                                               </label>
                                             )}
                                           </div>
+                                          {isUploadingQuiz === quiz.id && (
+                                            <div className="mt-3 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                                              <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 mb-1">
+                                                <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" /> Uploading answers...</span>
+                                                <span>{uploadProgress?.id === `quiz_${quiz.id}` ? `${uploadProgress.percent}%` : ''}</span>
+                                              </div>
+                                              <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                                <div 
+                                                  className="bg-purple-600 h-full rounded-full transition-all duration-200"
+                                                  style={{ width: `${uploadProgress?.id === `quiz_${quiz.id}` ? uploadProgress.percent : 15}%` }}
+                                                />
+                                              </div>
+                                              {uploadProgress?.id === `quiz_${quiz.id}` && uploadProgress.loaded && (
+                                                <p className="text-[10px] text-text/40 mt-1">{uploadProgress.loaded} of {uploadProgress.total} transferred</p>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
                                       ) : (
                                         <div className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-white hover:border-purple-400/50 transition-colors">
                                           <Upload className="w-6 h-6 text-text/40 mx-auto mb-2" />
-                                          <div className="text-xs font-bold text-text">Upload Your {quizTitle} Answer PDF</div>
-                                          <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten solution to be reviewed</p>
+                                          <div className="text-xs font-bold text-text">Upload Your {quizTitle} Answers</div>
+                                          <p className="text-[10px] text-text/50 mt-0.5 mb-3">Upload your completed handwritten PDF or photo to be reviewed</p>
                                           <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-all shadow-sm">
-                                            <Upload className="w-3.5 h-3.5" /> Select PDF File
-                                            <input type="file" className="hidden" accept=".pdf" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
+                                            <Upload className="w-3.5 h-3.5" /> Select PDF or Photo
+                                            <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handlePdfQuizUpload(e, quiz.id, quizTitle)} disabled={isUploadingQuiz === quiz.id} />
                                           </label>
-                                          {isUploadingQuiz === quiz.id && <span className="text-xs text-text/50 flex items-center justify-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</span>}
+                                          {isUploadingQuiz === quiz.id && (
+                                            <div className="mt-3 max-w-xs mx-auto">
+                                              <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 mb-1">
+                                                <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" /> Uploading answers...</span>
+                                                <span>{uploadProgress?.id === `quiz_${quiz.id}` ? `${uploadProgress.percent}%` : ''}</span>
+                                              </div>
+                                              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                                <div 
+                                                  className="bg-purple-600 h-full rounded-full transition-all duration-200"
+                                                  style={{ width: `${uploadProgress?.id === `quiz_${quiz.id}` ? uploadProgress.percent : 15}%` }}
+                                                />
+                                              </div>
+                                              {uploadProgress?.id === `quiz_${quiz.id}` && uploadProgress.loaded && (
+                                                <p className="text-[10px] text-text/50 mt-1">{uploadProgress.loaded} of {uploadProgress.total} transferred — please keep page open</p>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
                                       )}
                                     </div>
