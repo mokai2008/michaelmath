@@ -54,6 +54,59 @@ function isValidVideoUrl(u?: string | null): boolean {
 }
 
 /**
+ * Stops/pauses all HTML5 audio/video elements and embedded iframes across the page,
+ * optionally excluding a specific media element.
+ */
+export function stopAllVideosExcept(activeMedia?: HTMLMediaElement | null) {
+  if (typeof document === 'undefined') return;
+  try {
+    const allMedia = document.querySelectorAll<HTMLMediaElement>('video, audio');
+    allMedia.forEach((media) => {
+      if (media !== activeMedia && !media.paused) {
+        try {
+          media.pause();
+        } catch (e) {}
+      }
+    });
+
+    const allIframes = document.querySelectorAll<HTMLIFrameElement>('iframe');
+    allIframes.forEach((iframe) => {
+      try {
+        iframe.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }),
+          '*'
+        );
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+
+/**
+ * Universal helper to pause any currently playing video on the website.
+ */
+export function stopAllVideos() {
+  stopAllVideosExcept(null);
+}
+
+// Global document listener (capture phase): whenever ANY media element starts playing,
+// automatically pause every other video or audio element on the entire page.
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  if (!(window as any).__video_coordinator_installed) {
+    (window as any).__video_coordinator_installed = true;
+    document.addEventListener(
+      'play',
+      (e) => {
+        const target = e.target;
+        if (target && target instanceof HTMLMediaElement) {
+          stopAllVideosExcept(target);
+        }
+      },
+      true // capture phase: catches all play events even though they don't bubble
+    );
+  }
+}
+
+/**
  * Mobile-optimized HTML5 video player with generous touch scrubber,
  * 10-second fast-forward/rewind buttons, double-tap seek gestures,
  * speed adjustments, and playsinline support.
@@ -74,7 +127,29 @@ function HTML5DirectVideo({
   const [hasFailed, setHasFailed] = useState(false);
   const attemptedFallback = useRef(false);
 
+  // Unmount cleanup: explicitly pause, clear src, and call load() so the browser's
+  // media engine (AVFoundation / WebKit / Blink) immediately terminates audio decoding
   useEffect(() => {
+    const el = videoRef.current;
+    return () => {
+      if (el) {
+        try {
+          el.pause();
+          el.removeAttribute('src');
+          el.load();
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el) {
+      try {
+        el.pause();
+        el.currentTime = 0;
+      } catch (e) {}
+    }
     setVideoSrc(url || "");
     setHasFailed(false);
     attemptedFallback.current = false;
@@ -87,10 +162,14 @@ function HTML5DirectVideo({
     if (seekDebounceTimer.current) clearTimeout(seekDebounceTimer.current);
     pendingSeekTarget.current = null;
     wasPlayingBeforeScrub.current = false;
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.currentTime = 0;
-    }
+
+    return () => {
+      if (el) {
+        try {
+          el.pause();
+        } catch (e) {}
+      }
+    };
   }, [url]);
 
   const handleVideoError = () => {
@@ -212,6 +291,8 @@ function HTML5DirectVideo({
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
+      // Pause any other playing video/audio on the page before playing this one
+      stopAllVideosExcept(videoRef.current);
       setIsBuffering(true);
       videoRef.current.play().then(() => {
         setIsPlaying(true);
@@ -413,6 +494,12 @@ function HTML5DirectVideo({
           controlsList="nodownload"
           autoPlay={autoPlay}
           onError={handleVideoError}
+          onPlay={() => {
+            setIsPlaying(true);
+            stopAllVideosExcept(videoRef.current);
+          }}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
           className="w-full h-full object-contain bg-black"
         />
         <button
@@ -456,7 +543,10 @@ function HTML5DirectVideo({
         onCanPlayThrough={() => {
           setIsBuffering(false);
         }}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          stopAllVideosExcept(videoRef.current);
+        }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
         className="w-full h-full object-contain pointer-events-none"
@@ -666,6 +756,53 @@ function HTML5DirectVideo({
   );
 }
 
+function YouTubeEmbedPlayer({
+  videoId,
+  autoPlay,
+  className = "w-full h-full",
+}: {
+  videoId: string;
+  autoPlay?: boolean;
+  className?: string;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Unmount cleanup: send pause command to YouTube iframe before unmounting
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    return () => {
+      if (iframe) {
+        try {
+          iframe.contentWindow?.postMessage(
+            JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }),
+            '*'
+          );
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?hl=en&cc_lang_pref=en&modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=0&iv_load_policy=3&cc_load_policy=0&enablejsapi=1&autoplay=${
+    autoPlay ? 1 : 0
+  }`;
+
+  return (
+    <div className={`relative ${className} bg-black overflow-hidden`}>
+      <iframe
+        ref={iframeRef}
+        src={embedUrl}
+        className="w-full h-full border-0"
+        allowFullScreen
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        referrerPolicy="strict-origin-when-cross-origin"
+      />
+      {/* Transparent overlays to block YouTube logo & watch-on-youtube link */}
+      <div className="absolute bottom-0 right-0 w-40 h-10 bg-transparent z-10 cursor-default" />
+      <div className="absolute top-0 left-0 w-16 h-10 bg-transparent z-10 cursor-default" />
+    </div>
+  );
+}
+
 function GoogleDrivePlayer({
   fileId,
   embedUrl,
@@ -764,23 +901,14 @@ export default function VideoPlayer({
     } else {
       videoId = url;
     }
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?hl=en&cc_lang_pref=en&modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=0&iv_load_policy=3&cc_load_policy=0&autoplay=${
-      autoPlay ? 1 : 0
-    }`;
 
     return (
-      <div className={`relative ${className} bg-black overflow-hidden`}>
-        <iframe
-          src={embedUrl}
-          className="w-full h-full border-0"
-          allowFullScreen
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-        {/* Transparent overlays to block YouTube logo & watch-on-youtube link */}
-        <div className="absolute bottom-0 right-0 w-40 h-10 bg-transparent z-10 cursor-default" />
-        <div className="absolute top-0 left-0 w-16 h-10 bg-transparent z-10 cursor-default" />
-      </div>
+      <YouTubeEmbedPlayer
+        key={videoId}
+        videoId={videoId}
+        autoPlay={autoPlay}
+        className={className}
+      />
     );
   }
 

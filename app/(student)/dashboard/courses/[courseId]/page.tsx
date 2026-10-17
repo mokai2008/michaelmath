@@ -36,7 +36,7 @@ import {
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MathText from "@/components/MathText";
-import VideoPlayer from "@/components/VideoPlayer";
+import VideoPlayer, { stopAllVideos } from "@/components/VideoPlayer";
 import { calculateCourseProgress, getTopicWeight } from "@/lib/progress";
 import { prepareLabSrcDoc } from "@/lib/lab";
 import { toCourseUploadUrl, toRootUploadUrl } from "@/lib/uploads";
@@ -584,6 +584,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [labReloadKey, setLabReloadKey] = useState(0);
 
   const toggleSolutionVideo = (id: string) => {
+    stopAllVideos();
     setExpandedSolutionVideos(prev => ({
       ...prev,
       [id]: !prev[id]
@@ -600,6 +601,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   // Remember the student's active lesson across page refreshes and submissions
   useEffect(() => {
     if (activeTopic?.id && typeof window !== 'undefined') {
+      stopAllVideos();
       setSelectedVideoIndex(0);
       setSelectedMirrorIndex(null);
       setSelectedLabIndex(0);
@@ -1487,12 +1489,15 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   };
 
   const moveToNextTopic = () => {
+    stopAllVideos();
     if (!course || !activeTopic) return;
     let foundCurrent = false;
     for (const section of course.sections) {
       for (const topic of section.topics) {
         if (foundCurrent) {
           setActiveTopic(topic);
+          setSelectedVideoIndex(0);
+          setSelectedMirrorIndex(null);
           if (typeof window !== 'undefined') {
             try {
               localStorage.setItem(`active_topic_${params.courseId}`, String(topic.id));
@@ -1771,7 +1776,10 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           <div 
                             key={topic.id}
                             onClick={() => {
+                              stopAllVideos();
                               setActiveTopic(topic);
+                              setSelectedVideoIndex(0);
+                              setSelectedMirrorIndex(null);
                               if (typeof window !== 'undefined') {
                                 try {
                                   localStorage.setItem(`active_topic_${params.courseId}`, String(topic.id));
@@ -2205,6 +2213,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                     return (
                       <button 
                         onClick={() => {
+                          stopAllVideos();
                           handleMarkComplete(activeTopic.id, true);
                           moveToNextTopic();
                         }}
@@ -2345,6 +2354,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
                           <button
                             key={vid.id || idx}
                             onClick={() => {
+                              stopAllVideos();
                               setSelectedVideoIndex(idx);
                               setSelectedMirrorIndex(null);
                             }}
