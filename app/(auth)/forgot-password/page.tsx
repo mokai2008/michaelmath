@@ -52,7 +52,7 @@ function ForgotPasswordForm() {
       if (error) throw error;
 
       setIsSuccess(true);
-      setCountdown(60);
+      setCountdown(120); // 2 minutes wait time
     } catch (err: any) {
       console.error("Password reset error:", err);
       setErrorMsg(err.message || "Failed to send reset link. Please try again.");
@@ -93,7 +93,7 @@ function ForgotPasswordForm() {
             className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-gray-200 rounded-xl text-text font-semibold hover:bg-gray-50 focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-            {isLoading ? "Sending..." : countdown > 0 ? `Resend link in ${countdown}s` : "Resend reset link"}
+            {isLoading ? "Sending..." : countdown > 0 ? `Resend link in ${Math.floor(countdown / 60)}:${(countdown % 60).toString().padStart(2, "0")}` : "Resend reset link"}
           </button>
 
           <Link
