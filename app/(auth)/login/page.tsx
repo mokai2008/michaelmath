@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, Suspense } from "react";
-import { Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, ArrowRight, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -10,11 +10,23 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
+  const messageParam = searchParams.get("message");
+  const urlError = searchParams.get("error");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState(
+    urlError === "verification_failed" ? "Verification link was invalid or has expired." : ""
+  );
+  const [successMsg, setSuccessMsg] = useState(
+    messageParam === "password_updated"
+      ? "Password updated successfully! Please sign in with your new password."
+      : messageParam === "verified"
+      ? "Email verified successfully! You can now sign in."
+      : ""
+  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,7 +91,12 @@ function LoginForm() {
         <div>
           <div className="flex justify-between items-center mb-1">
             <label className="block text-sm font-medium text-text">Password</label>
-            <a href="#" className="text-sm font-medium text-primary hover:text-primary/80">Forgot password?</a>
+            <Link
+              href={email ? `/forgot-password?email=${encodeURIComponent(email)}` : "/forgot-password"}
+              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              Forgot password?
+            </Link>
           </div>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -103,6 +120,13 @@ function LoginForm() {
           </div>
         </div>
       </div>
+
+      {successMsg && (
+        <div className="p-3.5 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-xl border border-emerald-200 flex items-center gap-2.5">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
 
       {errorMsg && (
         <div className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg text-center">
