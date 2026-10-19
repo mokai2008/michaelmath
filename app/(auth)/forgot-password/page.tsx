@@ -40,7 +40,11 @@ function ForgotPasswordForm() {
     setErrorMsg("");
 
     try {
-      const redirectTo = `${window.location.origin}/reset-password`;
+      // Ensure canonical domain with www is used so it matches Supabase allowlist and avoids 301 stripping hash
+      const origin = window.location.origin.includes("gadmaths.com") && !window.location.origin.includes("www.gadmaths.com")
+        ? window.location.origin.replace("gadmaths.com", "www.gadmaths.com")
+        : window.location.origin;
+      const redirectTo = `${origin}/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
       });
