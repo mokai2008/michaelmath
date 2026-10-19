@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { User, Mail, Phone, Camera, Save, Loader2, CheckCircle2, Hash, FileText } from "lucide-react";
+import { User, Mail, Phone, Camera, Save, Loader2, CheckCircle2, Hash, FileText, Lock, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DownloadReportButton } from "@/components/reports/DownloadReportButton";
 
@@ -22,6 +22,51 @@ export default function ProfilePage() {
     student_code: "",
     wallet_balance: 0,
   });
+
+  // Security / Password update state
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess(false);
+
+    if (newPassword.length < 6) {
+      setPasswordError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      setPasswordSuccess(true);
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPasswordSuccess(false), 5000);
+    } catch (err: any) {
+      console.error("Password update error:", err);
+      setPasswordError(err.message || "Failed to update password.");
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -340,6 +385,94 @@ export default function ProfilePage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Security & Password Card */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden mt-8">
+        <div className="p-6 md:p-8 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-text">Security & Password</h2>
+              <p className="text-text/60 text-sm">Update your account password</p>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleUpdatePassword} className="p-6 md:p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-text mb-2">New Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full pl-12 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-text"
+                  placeholder="••••••••"
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              <p className="text-xs text-text/40 mt-1">Must be at least 6 characters</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-text mb-2">Confirm New Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-12 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-text"
+                  placeholder="••••••••"
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {passwordError && (
+            <div className="p-3.5 bg-red-50 text-red-600 text-sm font-medium rounded-xl border border-red-100">
+              {passwordError}
+            </div>
+          )}
+
+          {passwordSuccess && (
+            <div className="p-3.5 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-xl border border-emerald-200 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>Password updated successfully!</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end">
+            <button
+              type="submit"
+              disabled={isUpdatingPassword || !newPassword || !confirmPassword}
+              className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-xl font-bold transition-all hover:-translate-y-0.5 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUpdatingPassword ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              {isUpdatingPassword ? "Updating..." : "Update Password"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
