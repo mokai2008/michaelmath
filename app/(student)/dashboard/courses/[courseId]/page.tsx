@@ -561,7 +561,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
   const [sessionUser, setSessionUser] = useState<any>(null);
   const [isUploadingWorksheet, setIsUploadingWorksheet] = useState<string | null>(null);
   const [isUploadingQuiz, setIsUploadingQuiz] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<{ id: string; percent: number; loaded: string; total: string } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ id: string; percent: number; loaded: string; total: string; fileName?: string } | null>(null);
 
   const [interactiveAnswers, setInteractiveAnswers] = useState<Record<number, number>>({});
   const [takingQuiz, setTakingQuiz] = useState<any>(null);
@@ -1185,7 +1185,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     if (e.target) e.target.value = '';
 
     setIsUploadingWorksheet(subType);
-    setUploadProgress({ id: subType, percent: 0, loaded: '0 B', total: formatBytes(file.size) });
+    setUploadProgress({ id: subType, percent: 0, loaded: '0 B', total: formatBytes(file.size), fileName: file.name });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -1204,6 +1204,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             percent: prog.percent,
             loaded: prog.loadedFormatted,
             total: prog.totalFormatted,
+            fileName: file.name,
           });
         }
       );
@@ -1310,7 +1311,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
     if (e.target) e.target.value = '';
 
     setIsUploadingQuiz(quizId);
-    setUploadProgress({ id: `quiz_${quizId}`, percent: 0, loaded: '0 B', total: formatBytes(file.size) });
+    setUploadProgress({ id: `quiz_${quizId}`, percent: 0, loaded: '0 B', total: formatBytes(file.size), fileName: file.name });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -1330,6 +1331,7 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
             percent: prog.percent,
             loaded: prog.loadedFormatted,
             total: prog.totalFormatted,
+            fileName: file.name,
           });
         }
       );
@@ -1674,6 +1676,27 @@ export default function CoursePlayerPage({ params }: { params: { courseId: strin
 
   return (
     <div className="flex h-full min-h-[calc(100vh-3.5rem)] md:min-h-screen relative overflow-hidden bg-background-alt">
+      {/* Floating Upload Progress Bar for Students */}
+      {uploadProgress && (
+        <div className="fixed bottom-6 right-6 z-50 w-[90vw] max-w-sm bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-4 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Loader2 className="w-4 h-4 animate-spin text-orange-500 shrink-0" />
+              <span className="text-xs font-bold truncate">
+                {uploadProgress.fileName ? `Uploading: ${uploadProgress.fileName}` : 'Uploading your answers...'}
+              </span>
+            </div>
+            <span className="text-xs font-black text-orange-400 ml-2 shrink-0">{uploadProgress.percent}%</span>
+          </div>
+          <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-orange-500 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${uploadProgress.percent}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1.5">{uploadProgress.loaded} of {uploadProgress.total} transferred — please keep page open</p>
+        </div>
+      )}
       {/* Mobile/Tablet Backdrop for Syllabus Sidebar */}
       {sidebarOpen && (
         <div 

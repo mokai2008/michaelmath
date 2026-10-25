@@ -41,6 +41,8 @@ keys_to_update = {
     'GOTRUE_SITE_URL': site_url,
     'ADDITIONAL_REDIRECT_URLS': redirects,
     'GOTRUE_URI_ALLOW_LIST': redirects,
+    'GOTRUE_SMTP_MAX_FREQUENCY': '120s',
+    'SMTP_MAX_FREQUENCY': '120s',
 }
 
 handled_keys = set()

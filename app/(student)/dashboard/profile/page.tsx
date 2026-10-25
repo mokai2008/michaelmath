@@ -4,12 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import { User, Mail, Phone, Camera, Save, Loader2, CheckCircle2, Hash, FileText, Lock, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DownloadReportButton } from "@/components/reports/DownloadReportButton";
+import { uploadWithProgress, humanizeUploadError, formatBytes } from "@/lib/client-upload";
 
 export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUploadProgress, setAvatarUploadProgress] = useState<{ percent: number; loaded: string; total: string } | null>(null);
   const [fullStudentData, setFullStudentData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,31 +165,25 @@ export default function ProfilePage() {
     if (!file) return;
 
     setUploadingAvatar(true);
+    setAvatarUploadProgress({ percent: 0, loaded: '0 B', total: formatBytes(file.size) });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", "avatars");
-      if (profile.avatar_url) {
-        formData.append("oldUrl", profile.avatar_url);
-      }
-
-      // Upload directly to VPS disk via /api/upload
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: session?.access_token ? {
-          Authorization: `Bearer ${session.access_token}`
-        } : {},
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error || !data.url) {
-        throw new Error(data.error || "Upload to VPS failed.");
-      }
+      const data = await uploadWithProgress(
+        file,
+        "avatars",
+        profile.avatar_url || undefined,
+        session?.access_token || undefined,
+        (progress) => {
+          setAvatarUploadProgress({
+            percent: progress.percent,
+            loaded: progress.loadedFormatted,
+            total: progress.totalFormatted,
+          });
+        }
+      );
 
       setProfile(prev => ({ ...prev, avatar_url: data.url }));
     } catch (err: any) {
@@ -200,6 +196,10 @@ export default function ProfilePage() {
       reader.readAsDataURL(file);
     } finally {
       setUploadingAvatar(false);
+      setAvatarUploadProgress(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -232,7 +232,7 @@ export default function ProfilePage() {
         {/* Avatar Section */}
         <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-8 flex items-center gap-6">
           <div className="relative group">
-            <div className="w-24 h-24 rounded-full bg-white shadow-md overflow-hidden flex items-center justify-center">
+            <div className="w-24 h-24 rounded-full bg-white shadow-md overflow-hidden flex items-center justify-center relative">
               {profile.avatar_url ? (
                 <img
                   src={profile.avatar_url}
@@ -241,6 +241,12 @@ export default function ProfilePage() {
                 />
               ) : (
                 <User className="w-10 h-10 text-gray-300" />
+              )}
+              {uploadingAvatar && avatarUploadProgress && (
+                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white p-1">
+                  <Loader2 className="w-5 h-5 animate-spin text-white mb-1" />
+                  <span className="text-[11px] font-black">{avatarUploadProgress.percent}%</span>
+                </div>
               )}
             </div>
             <button
@@ -262,7 +268,7 @@ export default function ProfilePage() {
               onChange={handleAvatarUpload}
             />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold text-text">
               {profile.full_name || "Student"}
             </h2>
@@ -272,6 +278,23 @@ export default function ProfilePage() {
                 <Hash className="w-3.5 h-3.5 text-primary" />
                 <span className="text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">{profile.student_code}</span>
                 <span className="text-[10px] text-text/40">Your student code</span>
+              </div>
+            )}
+            {uploadingAvatar && avatarUploadProgress && (
+              <div className="mt-2.5 max-w-xs">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
+                  <span>Uploading profile photo...</span>
+                  <span className="text-primary">{avatarUploadProgress.percent}%</span>
+                </div>
+                <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden border border-primary/20">
+                  <div
+                    className="bg-primary h-full rounded-full transition-all duration-300"
+                    style={{ width: `${avatarUploadProgress.percent}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-text/50 mt-0.5">
+                  {avatarUploadProgress.loaded} of {avatarUploadProgress.total} transferred
+                </p>
               </div>
             )}
           </div>

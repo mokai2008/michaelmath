@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { CheckCircle2, Clock, FileText, Loader2, Upload, Download, Eye, Bell, BellRing, Sparkles, ArrowLeft, HelpCircle, X, ExternalLink, RefreshCw, XCircle, AlertCircle } from "lucide-react";
 import { playNotificationSound, requestDesktopNotificationPermission, showDesktopNotification } from "@/lib/sound";
 import { NotificationDiagnosticModal } from "@/components/NotificationDiagnosticModal";
+import { uploadWithProgress, humanizeUploadError, formatBytes } from "@/lib/client-upload";
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<any[]>([]);
@@ -22,6 +23,7 @@ export default function SubmissionsPage() {
   const [feedbackFileUrl, setFeedbackFileUrl] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isUploadingFeedbackFile, setIsUploadingFeedbackFile] = useState(false);
+  const [feedbackUploadProgress, setFeedbackUploadProgress] = useState<{ percent: number; loaded: string; total: string; fileName: string } | null>(null);
   const [isUpdatingType, setIsUpdatingType] = useState(false);
 
   useEffect(() => {
@@ -292,37 +294,37 @@ export default function SubmissionsPage() {
     if (!file || !selectedSubmission) return;
 
     setIsUploadingFeedbackFile(true);
+    setFeedbackUploadProgress({ percent: 0, loaded: '0 B', total: formatBytes(file.size), fileName: file.name });
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const formData = new FormData();
-      formData.append("file", file);
       const courseTitle = (selectedSubmission as any)?.topics?.sections?.courses?.title || '';
       const folderPath = courseTitle ? `${courseTitle}/feedback` : 'feedback';
-      formData.append("course_name", folderPath);
-      if (feedbackFileUrl) {
-        formData.append("oldUrl", feedbackFileUrl);
-      }
 
-      // Upload directly to VPS disk via /api/upload
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: session?.access_token ? {
-          Authorization: `Bearer ${session.access_token}`
-        } : {},
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error || !data.url) {
-        throw new Error(data.error || "Upload to VPS failed.");
-      }
+      const data = await uploadWithProgress(
+        file,
+        folderPath,
+        feedbackFileUrl || undefined,
+        session?.access_token || undefined,
+        (progress) => {
+          setFeedbackUploadProgress({
+            percent: progress.percent,
+            loaded: progress.loadedFormatted,
+            total: progress.totalFormatted,
+            fileName: file.name,
+          });
+        }
+      );
 
       setFeedbackFileUrl(data.url);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to upload feedback file to VPS: " + err.message);
+      alert(humanizeUploadError(err, file.size));
     } finally {
       setIsUploadingFeedbackFile(false);
+      setFeedbackUploadProgress(null);
+      if (e.target) {
+        e.target.value = '';
+      }
     }
   };
 
@@ -1026,12 +1028,12 @@ export default function SubmissionsPage() {
                     
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       <label className="cursor-pointer flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-text rounded-lg text-sm font-bold transition-colors shadow-sm border border-gray-200">
-                        {isUploadingFeedbackFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                        {isUploadingFeedbackFile ? 'Uploading...' : (feedbackFileUrl ? 'Replace File' : 'Choose File')}
+                        {isUploadingFeedbackFile ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Upload className="w-4 h-4" />}
+                        {isUploadingFeedbackFile ? (feedbackUploadProgress ? `Uploading (${feedbackUploadProgress.percent}%)` : 'Uploading...') : (feedbackFileUrl ? 'Replace File' : 'Choose File')}
                         <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFeedbackFileUpload} disabled={isUploadingFeedbackFile} />
                       </label>
 
-                      {feedbackFileUrl && (
+                      {feedbackFileUrl && !isUploadingFeedbackFile && (
                         <a 
                           href={feedbackFileUrl} 
                           target="_blank" 
@@ -1042,6 +1044,27 @@ export default function SubmissionsPage() {
                         </a>
                       )}
                     </div>
+
+                    {isUploadingFeedbackFile && feedbackUploadProgress && (
+                      <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5">
+                          <span className="flex items-center gap-1.5 truncate max-w-[200px]">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+                            {feedbackUploadProgress.fileName}
+                          </span>
+                          <span className="text-primary font-black ml-2">{feedbackUploadProgress.percent}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-primary h-full rounded-full transition-all duration-300"
+                            style={{ width: `${feedbackUploadProgress.percent}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          {feedbackUploadProgress.loaded} of {feedbackUploadProgress.total} transferred — please keep page open
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Submit / Action Buttons */}

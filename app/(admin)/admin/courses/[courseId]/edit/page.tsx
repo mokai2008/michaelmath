@@ -13,6 +13,7 @@ import MathText from "@/components/MathText";
 import { distributeEqualPercentages } from "@/lib/progress";
 import { prepareLabSrcDoc, SAMPLE_MATH_LAB_TEMPLATE, PRESET_LAB_URLS } from "@/lib/lab";
 import { sanitizeCourseFolder, isRootUploadUrl, toCourseUploadUrl } from "@/lib/uploads";
+import { uploadWithProgress, humanizeUploadError, formatBytes } from "@/lib/client-upload";
 
 export default function AdminCourseEditor() {
   const { courseId } = useParams();
@@ -24,6 +25,7 @@ export default function AdminCourseEditor() {
   const [openSectionMenuId, setOpenSectionMenuId] = useState<string | number | null>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [adminUploadProgress, setAdminUploadProgress] = useState<{ fieldId: string; percent: number; loaded: string; total: string; fileName: string } | null>(null);
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -35,44 +37,50 @@ export default function AdminCourseEditor() {
     if (!file) return;
 
     setUploadingField(fieldId);
+    setAdminUploadProgress({ fieldId, percent: 0, loaded: '0 B', total: formatBytes(file.size), fileName: file.name });
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const formData = new FormData();
-      formData.append("file", file);
-      if (currentUrl) {
-        formData.append("oldUrl", currentUrl);
-      }
-      if (courseTitle) {
-        formData.append("course_name", courseTitle);
-      }
-      if (courseId) {
-        formData.append("course_id", String(courseId));
-      }
 
-      // Upload directly to VPS disk via /api/upload
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: session?.access_token ? {
-          Authorization: `Bearer ${session.access_token}`
-        } : {},
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error || !data.url) {
-        throw new Error(data.error || "Upload to VPS failed.");
-      }
+      const data = await uploadWithProgress(
+        file,
+        courseTitle || '',
+        currentUrl,
+        session?.access_token || undefined,
+        (progress) => {
+          setAdminUploadProgress({
+            fieldId,
+            percent: progress.percent,
+            loaded: progress.loadedFormatted,
+            total: progress.totalFormatted,
+            fileName: file.name,
+          });
+        }
+      );
 
       callback(data.url);
     } catch (err: any) {
       console.error("Upload error:", err);
-      alert("Failed to upload to VPS: " + err.message);
+      alert(humanizeUploadError(err, file.size));
     } finally {
       setUploadingField(null);
+      setAdminUploadProgress(null);
       if (e.target) {
         e.target.value = '';
       }
     }
+  };
+
+  const renderUploadContent = (fieldId: string, label: string) => {
+    if (uploadingField === fieldId) {
+      const pct = adminUploadProgress?.fieldId === fieldId ? `${adminUploadProgress.percent}%` : '';
+      return (
+        <span className="flex items-center gap-1.5 font-bold text-primary">
+          <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+          <span>{pct || '...'}</span>
+        </span>
+      );
+    }
+    return label;
   };
 
   const [courseTitle, setCourseTitle] = useState("");
@@ -1026,6 +1034,25 @@ export default function AdminCourseEditor() {
 
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-5xl mx-auto space-y-6 sm:space-y-8">
+      {/* Floating Upload Progress Bar */}
+      {adminUploadProgress && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90vw] max-w-md bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-4 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+              <span className="text-xs font-bold truncate">{adminUploadProgress.fileName}</span>
+            </div>
+            <span className="text-xs font-black text-primary ml-2 shrink-0">{adminUploadProgress.percent}%</span>
+          </div>
+          <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${adminUploadProgress.percent}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1.5">{adminUploadProgress.loaded} of {adminUploadProgress.total} transferred — please keep page open</p>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3 sm:gap-4">
@@ -1089,7 +1116,7 @@ export default function AdminCourseEditor() {
               <div className="flex flex-col sm:flex-row gap-2">
                 <input type="text" value={courseThumbnail} onChange={(e) => setCourseThumbnail(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" placeholder="https://..." />
                 <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center sm:min-w-[100px] text-sm shrink-0">
-                  {uploadingField === 'thumbnail' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                  {renderUploadContent('thumbnail', 'Upload')}
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'thumbnail', setCourseThumbnail, courseThumbnail)} disabled={uploadingField === 'thumbnail'} />
                 </label>
               </div>
@@ -1104,7 +1131,7 @@ export default function AdminCourseEditor() {
             <div className="flex flex-col sm:flex-row gap-2">
               <input type="text" value={courseIntroVideo} onChange={(e) => setCourseIntroVideo(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" placeholder="YouTube, video link, or upload video" />
               <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center sm:min-w-[120px] text-sm shrink-0">
-                {uploadingField === 'intro_video' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload Video'}
+                {renderUploadContent('intro_video', 'Upload Video')}
                 <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, 'intro_video', setCourseIntroVideo, courseIntroVideo)} disabled={uploadingField === 'intro_video'} />
               </label>
             </div>
@@ -1619,7 +1646,7 @@ export default function AdminCourseEditor() {
                                                   placeholder={mIdx === 0 ? "Video URL, OneDrive, or YouTube URL" : `Server ${mIdx + 1} (Alternative Mirror)`}
                                                 />
                                                 <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center shrink-0">
-                                                  {uploadingField === `vid_${item.id}_${mIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                                  {renderUploadContent(`vid_${item.id}_${mIdx}`, 'Upload')}
                                                   <input 
                                                     type="file" 
                                                     accept="video/*" 
@@ -1701,14 +1728,7 @@ export default function AdminCourseEditor() {
                                                   placeholder="Paste Worksheet PDF link or upload ->"
                                                 />
                                                 <label className="cursor-pointer bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[110px] shrink-0">
-                                                  {uploadingField === `video_worksheet_${item.id}` ? (
-                                                    <span className="flex items-center gap-1.5 text-amber-800">
-                                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                      <span>Uploading...</span>
-                                                    </span>
-                                                  ) : (
-                                                    'Upload PDF'
-                                                  )}
+                                                  {renderUploadContent(`video_worksheet_${item.id}`, 'Upload PDF')}
                                                   <input
                                                     type="file"
                                                     accept="application/pdf"
@@ -1759,7 +1779,7 @@ export default function AdminCourseEditor() {
                                             placeholder="https://..."
                                           />
                                           <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-text px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
-                                            {uploadingField === `pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                            {renderUploadContent(`pdf_${item.id}`, 'Upload PDF')}
                                             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'url', url), item.url)} disabled={uploadingField === `pdf_${item.id}`} />
                                           </label>
                                         </div>
@@ -1782,7 +1802,7 @@ export default function AdminCourseEditor() {
                                                 placeholder="Answer PDF link or upload..."
                                               />
                                               <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
-                                                {uploadingField === `ans_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                                {renderUploadContent(`ans_pdf_${item.id}`, 'Upload PDF')}
                                                 <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url), item.answerPdfUrl)} disabled={uploadingField === `ans_pdf_${item.id}`} />
                                               </label>
                                             </div>
@@ -1798,7 +1818,7 @@ export default function AdminCourseEditor() {
                                                 placeholder="Video URL, YouTube link, or upload..."
                                               />
                                               <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
-                                                {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                                {renderUploadContent(`ans_vid_${item.id}`, 'Upload')}
                                                 <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url), item.answerVideoUrl)} disabled={uploadingField === `ans_vid_${item.id}`} />
                                               </label>
                                             </div>
@@ -1927,7 +1947,7 @@ export default function AdminCourseEditor() {
                                               placeholder="Quiz PDF link or upload..."
                                             />
                                             <label className="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
-                                              {uploadingField === `quiz_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                              {renderUploadContent(`quiz_pdf_${item.id}`, 'Upload PDF')}
                                               <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `quiz_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'quizPdfUrl', url), item.quizPdfUrl)} disabled={uploadingField === `quiz_pdf_${item.id}`} />
                                             </label>
                                           </div>
@@ -2040,7 +2060,7 @@ export default function AdminCourseEditor() {
                                               placeholder="Mark scheme PDF link or upload..."
                                             />
                                             <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[100px] shrink-0">
-                                              {uploadingField === `ans_pdf_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload PDF'}
+                                              {renderUploadContent(`ans_pdf_${item.id}`, 'Upload PDF')}
                                               <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, `ans_pdf_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerPdfUrl', url), item.answerPdfUrl)} disabled={uploadingField === `ans_pdf_${item.id}`} />
                                             </label>
                                           </div>
@@ -2056,7 +2076,7 @@ export default function AdminCourseEditor() {
                                               placeholder="Video URL, YouTube link, or upload..."
                                             />
                                             <label className="cursor-pointer bg-teal-100 hover:bg-teal-200 text-teal-800 px-2.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center min-w-[90px] shrink-0">
-                                              {uploadingField === `ans_vid_${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                                              {renderUploadContent(`ans_vid_${item.id}`, 'Upload')}
                                               <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, `ans_vid_${item.id}`, (url) => handleUpdateItemField(section.id, topic.id, item.id, 'answerVideoUrl', url), item.answerVideoUrl)} disabled={uploadingField === `ans_vid_${item.id}`} />
                                             </label>
                                           </div>
